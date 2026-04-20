@@ -3,12 +3,14 @@ import { useTranslation } from 'react-i18next';
 import { authFilesApi } from '@/services/api';
 import { apiClient } from '@/services/api/client';
 import { useNotificationStore } from '@/stores';
-import type { AuthFileItem } from '@/types';
+import type { AuthFileItem, AuthFileStatusHistoryTrigger } from '@/types';
 import { formatFileSize } from '@/utils/format';
 import { MAX_AUTH_FILE_SIZE } from '@/utils/constants';
 import { downloadBlob } from '@/utils/download';
 import {
+  getAuthFileStatusMessage,
   getTypeLabel,
+  hasAuthFileStatusWarning,
   hasAuthFileStatusMessage,
   isRuntimeOnlyAuthFile,
 } from '@/features/authFiles/constants';
@@ -30,6 +32,7 @@ export type UseAuthFilesDataResult = {
   deleting: string | null;
   deletingAll: boolean;
   statusUpdating: Record<string, boolean>;
+  statusRefreshing: Record<string, boolean>;
   batchStatusUpdating: boolean;
   fileInputRef: RefObject<HTMLInputElement | null>;
   loadFiles: () => Promise<void>;
@@ -39,6 +42,10 @@ export type UseAuthFilesDataResult = {
   handleDeleteAll: (options: DeleteAllOptions) => void;
   handleDownload: (name: string) => Promise<void>;
   handleStatusToggle: (item: AuthFileItem, enabled: boolean) => Promise<void>;
+  handleStatusRefresh: (
+    item: AuthFileItem,
+    options?: HandleStatusRefreshOptions
+  ) => Promise<void>;
   toggleSelect: (name: string) => void;
   selectAllVisible: (visibleFiles: AuthFileItem[]) => void;
   invertVisibleSelection: (visibleFiles: AuthFileItem[]) => void;
@@ -50,10 +57,16 @@ export type UseAuthFilesDataResult = {
 
 export type UseAuthFilesDataOptions = {
   refreshKeyStats: () => Promise<void>;
+  onStatusHistoryChanged?: () => void;
+};
+
+export type HandleStatusRefreshOptions = {
+  silent?: boolean;
+  trigger?: AuthFileStatusHistoryTrigger;
 };
 
 export function useAuthFilesData(options: UseAuthFilesDataOptions): UseAuthFilesDataResult {
-  const { refreshKeyStats } = options;
+  const { refreshKeyStats, onStatusHistoryChanged } = options;
   const { t } = useTranslation();
   const { showNotification, showConfirmation } = useNotificationStore();
 
@@ -64,6 +77,7 @@ export function useAuthFilesData(options: UseAuthFilesDataOptions): UseAuthFiles
   const [deleting, setDeleting] = useState<string | null>(null);
   const [deletingAll, setDeletingAll] = useState(false);
   const [statusUpdating, setStatusUpdating] = useState<Record<string, boolean>>({});
+  const [statusRefreshing, setStatusRefreshing] = useState<Record<string, boolean>>({});
   const [batchStatusUpdating, setBatchStatusUpdating] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
 
@@ -435,6 +449,62 @@ export function useAuthFilesData(options: UseAuthFilesDataOptions): UseAuthFiles
     [showNotification, t]
   );
 
+  const handleStatusRefresh = useCallback(
+    async (item: AuthFileItem, options: HandleStatusRefreshOptions = {}) => {
+      const name = item.name;
+      if (!name) return;
+      if (statusRefreshing[name] === true) return;
+
+      const { silent = false, trigger = 'manual' } = options;
+
+      setStatusRefreshing((prev) => ({ ...prev, [name]: true }));
+      try {
+        const result = await authFilesApi.refreshStatus(name, { trigger });
+        if (result.file) {
+          setFiles((prev) =>
+            prev.map((file) => (file.name === name ? { ...file, ...result.file } : file))
+          );
+        }
+        onStatusHistoryChanged?.();
+
+        if (silent) {
+          return;
+        }
+
+        const warningMessage =
+          result.status === 'ok' && result.file && hasAuthFileStatusWarning(result.file)
+            ? getAuthFileStatusMessage(result.file)
+            : '';
+
+        if (warningMessage) {
+          showNotification(warningMessage, 'warning');
+        } else if (result.status === 'ok') {
+          showNotification(t('auth_files.status_refresh_success', { name }), 'success');
+        } else {
+          const message = result.error || t('auth_files.status_refresh_failed', { name });
+          showNotification(message, 'warning');
+        }
+      } catch (err: unknown) {
+        if (silent) {
+          return;
+        }
+        const errorMessage = err instanceof Error ? err.message : '';
+        showNotification(
+          `${t('auth_files.status_refresh_failed', { name })}: ${errorMessage}`,
+          'error'
+        );
+      } finally {
+        setStatusRefreshing((prev) => {
+          if (!prev[name]) return prev;
+          const next = { ...prev };
+          delete next[name];
+          return next;
+        });
+      }
+    },
+    [onStatusHistoryChanged, showNotification, statusRefreshing, t]
+  );
+
   const batchSetStatus = useCallback(
     async (names: string[], enabled: boolean) => {
       if (batchStatusPendingRef.current) return;
@@ -614,6 +684,7 @@ export function useAuthFilesData(options: UseAuthFilesDataOptions): UseAuthFiles
     deleting,
     deletingAll,
     statusUpdating,
+    statusRefreshing,
     batchStatusUpdating,
     fileInputRef,
     loadFiles,
@@ -623,6 +694,7 @@ export function useAuthFilesData(options: UseAuthFilesDataOptions): UseAuthFiles
     handleDeleteAll,
     handleDownload,
     handleStatusToggle,
+    handleStatusRefresh,
     toggleSelect,
     selectAllVisible,
     invertVisibleSelection,

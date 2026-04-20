@@ -32,6 +32,7 @@ import {
   getAuthFileIcon,
   getTypeColor,
   getTypeLabel,
+  hasAuthFileStatusWarning,
   hasAuthFileStatusMessage,
   isRuntimeOnlyAuthFile,
   normalizeProviderKey,
@@ -48,6 +49,10 @@ import { useAuthFilesData } from '@/features/authFiles/hooks/useAuthFilesData';
 import { useAuthFilesModels } from '@/features/authFiles/hooks/useAuthFilesModels';
 import { useAuthFilesOauth } from '@/features/authFiles/hooks/useAuthFilesOauth';
 import { useAuthFilesPrefixProxyEditor } from '@/features/authFiles/hooks/useAuthFilesPrefixProxyEditor';
+import {
+  resolveAuthFileOAuthProvider,
+  useAuthFilesReauth,
+} from '@/features/authFiles/hooks/useAuthFilesReauth';
 import { useAuthFilesStats } from '@/features/authFiles/hooks/useAuthFilesStats';
 import { useAuthFilesStatusBarCache } from '@/features/authFiles/hooks/useAuthFilesStatusBarCache';
 import {
@@ -67,6 +72,8 @@ const BATCH_BAR_BASE_TRANSFORM = 'translateX(-50%)';
 const BATCH_BAR_HIDDEN_TRANSFORM = 'translateX(-50%) translateY(56px)';
 const DEFAULT_REGULAR_PAGE_SIZE = 9;
 const DEFAULT_COMPACT_PAGE_SIZE = 12;
+const WARNING_AUTO_REFRESH_INTERVAL_MS = 240_000;
+const WARNING_AUTO_REFRESH_REENTRY_COOLDOWN_MS = 15_000;
 
 const escapeWildcardSearchSegment = (value: string) =>
   value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -100,10 +107,19 @@ export function AuthFilesPage() {
   const [sortMode, setSortMode] = useState<AuthFilesSortMode>('default');
   const [batchActionBarVisible, setBatchActionBarVisible] = useState(false);
   const [uiStateHydrated, setUiStateHydrated] = useState(false);
+  const [reauthHistoryReloadKey, setReauthHistoryReloadKey] = useState(0);
+  const [statusHistoryReloadKey, setStatusHistoryReloadKey] = useState(0);
   const floatingBatchActionsRef = useRef<HTMLDivElement>(null);
   const batchActionAnimationRef = useRef<AnimationPlaybackControlsWithThen | null>(null);
   const previousSelectionCountRef = useRef(0);
   const selectionCountRef = useRef(0);
+  const warningAutoRefreshAtRef = useRef<Record<string, number>>({});
+  const bumpReauthHistoryReloadKey = useCallback(() => {
+    setReauthHistoryReloadKey((value) => value + 1);
+  }, []);
+  const bumpStatusHistoryReloadKey = useCallback(() => {
+    setStatusHistoryReloadKey((value) => value + 1);
+  }, []);
 
   const { keyStats, usageDetails, loadKeyStats, refreshKeyStats } = useAuthFilesStats();
   const {
@@ -116,6 +132,7 @@ export function AuthFilesPage() {
     deleting,
     deletingAll,
     statusUpdating,
+    statusRefreshing,
     batchStatusUpdating,
     fileInputRef,
     loadFiles,
@@ -125,6 +142,7 @@ export function AuthFilesPage() {
     handleDeleteAll,
     handleDownload,
     handleStatusToggle,
+    handleStatusRefresh,
     toggleSelect,
     selectAllVisible,
     invertVisibleSelection,
@@ -132,7 +150,23 @@ export function AuthFilesPage() {
     batchDownload,
     batchSetStatus,
     batchDelete,
-  } = useAuthFilesData({ refreshKeyStats });
+  } = useAuthFilesData({
+    refreshKeyStats,
+    onStatusHistoryChanged: bumpStatusHistoryReloadKey,
+  });
+  const {
+    reauthStates,
+    startReauth,
+    openReauthLink,
+    copyReauthLink,
+    cancelReauth,
+    updateReauthCallbackUrl,
+    submitReauthCallback,
+  } = useAuthFilesReauth({
+    loadFiles,
+    refreshKeyStats,
+    onHistoryChanged: bumpReauthHistoryReloadKey,
+  });
 
   const statusBarCache = useAuthFilesStatusBarCache(files, usageDetails);
 
@@ -341,7 +375,98 @@ export function AuthFilesPage() {
     () => {
       void refreshKeyStats().catch(() => {});
     },
-    isCurrentLayer ? 240_000 : null
+    isCurrentLayer ? WARNING_AUTO_REFRESH_INTERVAL_MS : null
+  );
+
+  const warningFilesForAutoRefresh = useMemo(
+    () =>
+      files.filter((file) => {
+        if (isRuntimeOnlyAuthFile(file) || file.disabled) return false;
+        if (!resolveAuthFileOAuthProvider(file)) return false;
+        if (!hasAuthFileStatusWarning(file)) return false;
+        if (statusRefreshing[file.name] === true) return false;
+        const reauthState = reauthStates[file.name];
+        return reauthState?.status !== 'starting' && reauthState?.status !== 'polling';
+      }),
+    [files, reauthStates, statusRefreshing]
+  );
+
+  const refreshWarningFilesSilently = useCallback(
+    (reason: 'interval' | 'layer' | 'visible' | 'focus' = 'interval') => {
+      if (warningFilesForAutoRefresh.length === 0) return;
+
+      const now = Date.now();
+      const minimumElapsed =
+        reason === 'interval'
+          ? WARNING_AUTO_REFRESH_INTERVAL_MS
+          : WARNING_AUTO_REFRESH_REENTRY_COOLDOWN_MS;
+
+      const candidates = warningFilesForAutoRefresh.filter((file) => {
+        const lastRefreshedAt = warningAutoRefreshAtRef.current[file.name] ?? 0;
+        return now - lastRefreshedAt >= minimumElapsed;
+      });
+
+      if (candidates.length === 0) return;
+
+      candidates.forEach((file) => {
+        warningAutoRefreshAtRef.current[file.name] = now;
+        void handleStatusRefresh(file, { silent: true, trigger: 'auto' });
+      });
+    },
+    [handleStatusRefresh, warningFilesForAutoRefresh]
+  );
+
+  useEffect(() => {
+    if (!isCurrentLayer || loading) return;
+    refreshWarningFilesSilently('layer');
+  }, [isCurrentLayer, loading, refreshWarningFilesSilently]);
+
+  useEffect(() => {
+    if (!isCurrentLayer) return;
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') return;
+      refreshWarningFilesSilently('visible');
+    };
+
+    const handleWindowFocus = () => {
+      refreshWarningFilesSilently('focus');
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleWindowFocus);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleWindowFocus);
+    };
+  }, [isCurrentLayer, refreshWarningFilesSilently]);
+
+  useEffect(() => {
+    // 仅在账号真正脱离 warning 候选集时清理 cooldown。
+    // 不要因为“当前正在刷新中”就把 cooldown 删掉，否则会在 finally 后立刻再次触发 auto refresh。
+    const retainedWarningNames = new Set(
+      files
+        .filter((file) => {
+          if (isRuntimeOnlyAuthFile(file) || file.disabled) return false;
+          if (!resolveAuthFileOAuthProvider(file)) return false;
+          return hasAuthFileStatusWarning(file);
+        })
+        .map((file) => file.name)
+    );
+
+    Object.keys(warningAutoRefreshAtRef.current).forEach((name) => {
+      if (!retainedWarningNames.has(name)) {
+        delete warningAutoRefreshAtRef.current[name];
+      }
+    });
+  }, [files]);
+
+  useInterval(
+    () => {
+      refreshWarningFilesSilently('interval');
+    },
+    isCurrentLayer ? WARNING_AUTO_REFRESH_INTERVAL_MS : null
   );
 
   const existingTypes = useMemo(() => {
@@ -782,31 +907,44 @@ export function AuthFilesPage() {
                 description={t('auth_files.search_empty_desc')}
               />
             ) : (
-              <div
-                className={`${styles.fileGrid} ${quotaFilterType ? styles.fileGridQuotaManaged : ''} ${compactMode ? styles.fileGridCompact : ''}`}
-              >
-                {pageItems.map((file) => (
-                  <AuthFileCard
-                    key={file.name}
-                    file={file}
-                    compact={compactMode}
-                    selected={selectedFiles.has(file.name)}
-                    resolvedTheme={resolvedTheme}
-                    disableControls={disableControls}
-                    deleting={deleting}
-                    statusUpdating={statusUpdating}
-                    quotaFilterType={quotaFilterType}
-                    keyStats={keyStats}
-                    statusBarCache={statusBarCache}
-                    onShowModels={showModels}
-                    onDownload={handleDownload}
-                    onOpenPrefixProxyEditor={openPrefixProxyEditor}
-                    onDelete={handleDelete}
-                    onToggleStatus={handleStatusToggle}
-                    onToggleSelect={toggleSelect}
-                  />
-                ))}
-              </div>
+              <>
+                <div
+                  className={`${styles.fileGrid} ${quotaFilterType ? styles.fileGridQuotaManaged : ''} ${compactMode ? styles.fileGridCompact : ''}`}
+                >
+                  {pageItems.map((file) => (
+                    <AuthFileCard
+                      key={file.name}
+                      file={file}
+                      compact={compactMode}
+                      selected={selectedFiles.has(file.name)}
+                      resolvedTheme={resolvedTheme}
+                      disableControls={disableControls}
+                      deleting={deleting}
+                      statusUpdating={statusUpdating}
+                      statusRefreshing={statusRefreshing}
+                      quotaFilterType={quotaFilterType}
+                      reauthHistoryReloadKey={reauthHistoryReloadKey}
+                      statusHistoryReloadKey={statusHistoryReloadKey}
+                      keyStats={keyStats}
+                      statusBarCache={statusBarCache}
+                      onShowModels={showModels}
+                      onDownload={handleDownload}
+                      onOpenPrefixProxyEditor={openPrefixProxyEditor}
+                      onDelete={handleDelete}
+                      reauthState={reauthStates[file.name]}
+                      onReauthenticate={startReauth}
+                      onOpenReauthLink={openReauthLink}
+                      onCopyReauthLink={copyReauthLink}
+                      onCancelReauth={cancelReauth}
+                      onChangeReauthCallbackUrl={updateReauthCallbackUrl}
+                      onSubmitReauthCallback={submitReauthCallback}
+                      onToggleStatus={handleStatusToggle}
+                      onRefreshStatus={handleStatusRefresh}
+                      onToggleSelect={toggleSelect}
+                    />
+                  ))}
+                </div>
+              </>
             )}
 
             {!loading && sorted.length > pageSize && (

@@ -22,6 +22,58 @@ export interface UsageImportResponse {
   [key: string]: unknown;
 }
 
+export interface PricingSourceSnapshot {
+  id?: string;
+  label?: string;
+  url?: string;
+  status?: string;
+  message?: string;
+  last_refreshed_at?: string;
+  model_count?: number;
+}
+
+export interface PricingCatalogModel {
+  model?: string;
+  display_name?: string;
+  input_usd_per_mtok?: number;
+  cached_input_usd_per_mtok?: number;
+  output_usd_per_mtok?: number;
+  cache_write_usd_per_mtok?: number;
+  source?: string;
+}
+
+export interface PricingDetectedModel extends PricingCatalogModel {
+  observed_model?: string;
+  canonical_model?: string;
+  pricing_status?: string;
+}
+
+export interface PricingOfficialSnapshot {
+  last_refreshed_at?: string;
+  persisted_at?: string;
+  sources?: PricingSourceSnapshot[];
+}
+
+export interface UsagePricingSnapshot {
+  official?: PricingOfficialSnapshot;
+  models?: Record<string, PricingCatalogModel>;
+  overrides?: Record<string, PricingCatalogModel>;
+  detected_models?: PricingDetectedModel[];
+}
+
+export interface UsagePricingResponse {
+  pricing?: UsagePricingSnapshot;
+}
+
+export interface PricingOverridePayload {
+  model?: string;
+  display_name?: string;
+  input_usd_per_mtok: number;
+  cached_input_usd_per_mtok: number;
+  output_usd_per_mtok: number;
+  cache_write_usd_per_mtok: number;
+}
+
 export const usageApi = {
   /**
    * 获取使用统计原始数据
@@ -38,6 +90,39 @@ export const usageApi = {
    */
   importUsage: (payload: unknown) =>
     apiClient.post<UsageImportResponse>('/usage/import', payload, { timeout: USAGE_TIMEOUT_MS }),
+
+  /**
+   * 获取 pricing snapshot
+   */
+  getPricing: () =>
+    apiClient.get<UsagePricingResponse>('/usage/pricing', { timeout: USAGE_TIMEOUT_MS }),
+
+  /**
+   * 手动刷新官方 pricing
+   */
+  refreshPricing: () =>
+    apiClient.post<UsagePricingResponse>('/usage/pricing/refresh', undefined, {
+      timeout: USAGE_TIMEOUT_MS
+    }),
+
+  /**
+   * 设置模型 override
+   */
+  upsertPricingOverride: (model: string, payload: PricingOverridePayload) =>
+    apiClient.put<UsagePricingResponse>(
+      `/usage/pricing/overrides/${encodeURIComponent(model)}`,
+      payload,
+      { timeout: USAGE_TIMEOUT_MS }
+    ),
+
+  /**
+   * 删除模型 override
+   */
+  deletePricingOverride: (model: string) =>
+    apiClient.delete<UsagePricingResponse>(
+      `/usage/pricing/overrides/${encodeURIComponent(model)}`,
+      { timeout: USAGE_TIMEOUT_MS }
+    ),
 
   /**
    * 计算密钥成功/失败统计，必要时会先获取 usage 数据

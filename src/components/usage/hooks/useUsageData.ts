@@ -1,9 +1,13 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { USAGE_STATS_STALE_TIME_MS, useNotificationStore, useUsageStatsStore } from '@/stores';
-import { usageApi } from '@/services/api/usage';
+import {
+  usageApi,
+  type PricingOverridePayload,
+  type UsagePricingSnapshot
+} from '@/services/api/usage';
 import { downloadBlob } from '@/utils/download';
-import { loadModelPrices, saveModelPrices, type ModelPrice } from '@/utils/usage';
+import type { ModelPrice } from '@/utils/usage';
 
 export interface UsagePayload {
   total_requests?: number;
@@ -20,8 +24,15 @@ export interface UseUsageDataReturn {
   error: string;
   lastRefreshedAt: Date | null;
   modelPrices: Record<string, ModelPrice>;
-  setModelPrices: (prices: Record<string, ModelPrice>) => void;
+  pricing: UsagePricingSnapshot | null;
+  pricingLoading: boolean;
+  pricingRefreshing: boolean;
+  pricingError: string;
   loadUsage: () => Promise<void>;
+  loadPricing: () => Promise<void>;
+  refreshPricing: () => Promise<void>;
+  savePricingOverride: (model: string, payload: PricingOverridePayload) => Promise<void>;
+  deletePricingOverride: (model: string) => Promise<void>;
   handleExport: () => Promise<void>;
   handleImport: () => void;
   handleImportChange: (event: React.ChangeEvent<HTMLInputElement>) => Promise<void>;
@@ -39,7 +50,10 @@ export function useUsageData(): UseUsageDataReturn {
   const lastRefreshedAtTs = useUsageStatsStore((state) => state.lastRefreshedAt);
   const loadUsageStats = useUsageStatsStore((state) => state.loadUsageStats);
 
-  const [modelPrices, setModelPrices] = useState<Record<string, ModelPrice>>({});
+  const [pricing, setPricing] = useState<UsagePricingSnapshot | null>(null);
+  const [pricingLoading, setPricingLoading] = useState(false);
+  const [pricingRefreshing, setPricingRefreshing] = useState(false);
+  const [pricingError, setPricingError] = useState('');
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
   const importInputRef = useRef<HTMLInputElement | null>(null);
@@ -48,10 +62,24 @@ export function useUsageData(): UseUsageDataReturn {
     await loadUsageStats({ force: true, staleTimeMs: USAGE_STATS_STALE_TIME_MS });
   }, [loadUsageStats]);
 
+  const loadPricing = useCallback(async () => {
+    setPricingLoading(true);
+    setPricingError('');
+    try {
+      const response = await usageApi.getPricing();
+      setPricing(response?.pricing ?? null);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : '';
+      setPricingError(message || t('usage_stats.pricing_load_failed'));
+    } finally {
+      setPricingLoading(false);
+    }
+  }, [t]);
+
   useEffect(() => {
     void loadUsageStats({ staleTimeMs: USAGE_STATS_STALE_TIME_MS }).catch(() => {});
-    setModelPrices(loadModelPrices());
-  }, [loadUsageStats]);
+    void loadPricing().catch(() => {});
+  }, [loadPricing, loadUsageStats]);
 
   const handleExport = async () => {
     setExporting(true);
@@ -129,10 +157,64 @@ export function useUsageData(): UseUsageDataReturn {
     }
   };
 
-  const handleSetModelPrices = useCallback((prices: Record<string, ModelPrice>) => {
-    setModelPrices(prices);
-    saveModelPrices(prices);
-  }, []);
+  const refreshPricing = useCallback(async () => {
+    setPricingRefreshing(true);
+    setPricingError('');
+    try {
+      const response = await usageApi.refreshPricing();
+      setPricing(response?.pricing ?? null);
+      showNotification(t('usage_stats.pricing_refresh_success'), 'success');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : '';
+      const text = message || t('usage_stats.pricing_refresh_failed');
+      setPricingError(text);
+      showNotification(text, 'error');
+    } finally {
+      setPricingRefreshing(false);
+    }
+  }, [showNotification, t]);
+
+  const savePricingOverride = useCallback(
+    async (model: string, payload: PricingOverridePayload) => {
+      const response = await usageApi.upsertPricingOverride(model, payload);
+      setPricing(response?.pricing ?? null);
+      showNotification(t('usage_stats.pricing_override_saved'), 'success');
+    },
+    [showNotification, t]
+  );
+
+  const deletePricingOverride = useCallback(
+    async (model: string) => {
+      const response = await usageApi.deletePricingOverride(model);
+      setPricing(response?.pricing ?? null);
+      showNotification(t('usage_stats.pricing_override_deleted'), 'success');
+    },
+    [showNotification, t]
+  );
+
+  const modelPrices = useMemo<Record<string, ModelPrice>>(() => {
+    const detected = Array.isArray(pricing?.detected_models) ? pricing?.detected_models : [];
+    const next: Record<string, ModelPrice> = {};
+
+    detected.forEach((entry) => {
+      const key = entry.observed_model?.trim();
+      if (!key) {
+        return;
+      }
+      const prompt = Number(entry.input_usd_per_mtok);
+      const completion = Number(entry.output_usd_per_mtok);
+      const cache =
+        entry.cached_input_usd_per_mtok === undefined
+          ? prompt
+          : Number(entry.cached_input_usd_per_mtok);
+      if (!Number.isFinite(prompt) || !Number.isFinite(completion) || !Number.isFinite(cache)) {
+        return;
+      }
+      next[key] = { prompt, completion, cache };
+    });
+
+    return next;
+  }, [pricing]);
 
   const usage = usageSnapshot as UsagePayload | null;
   const error = storeError || '';
@@ -144,8 +226,15 @@ export function useUsageData(): UseUsageDataReturn {
     error,
     lastRefreshedAt,
     modelPrices,
-    setModelPrices: handleSetModelPrices,
+    pricing,
+    pricingLoading,
+    pricingRefreshing,
+    pricingError,
     loadUsage,
+    loadPricing,
+    refreshPricing,
+    savePricingOverride,
+    deletePricingOverride,
     handleExport,
     handleImport,
     handleImportChange,

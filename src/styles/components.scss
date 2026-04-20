@@ -350,7 +350,14 @@ textarea {
   border-radius: 50%;
   width: 16px;
   height: 16px;
+  flex: 0 0 auto;
   animation: spin 0.8s linear infinite;
+}
+
+.btn.btn-sm .loading-spinner {
+  width: 14px;
+  height: 14px;
+  border-width: 2px;
 }
 
 @supports (color: color-mix(in srgb, currentColor 22%, transparent)) {

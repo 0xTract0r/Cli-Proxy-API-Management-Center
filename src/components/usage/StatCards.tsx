@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/icons';
 import {
   LATENCY_SOURCE_FIELD,
+  calculateCacheMetricsFromDetails,
   calculateLatencyStatsFromDetails,
   calculateCost,
   formatCompactNumber,
@@ -41,6 +42,7 @@ export interface StatCardsProps {
   usage: UsagePayload | null;
   loading: boolean;
   modelPrices: Record<string, ModelPrice>;
+  hasCostData: boolean;
   nowMs: number;
   sparklines: {
     requests: SparklineBundle | null;
@@ -51,18 +53,32 @@ export interface StatCardsProps {
   };
 }
 
-export function StatCards({ usage, loading, modelPrices, nowMs, sparklines }: StatCardsProps) {
+export function StatCards({
+  usage,
+  loading,
+  modelPrices,
+  hasCostData,
+  nowMs,
+  sparklines
+}: StatCardsProps) {
   const { t } = useTranslation();
   const latencyHint = t('usage_stats.latency_unit_hint', {
     field: LATENCY_SOURCE_FIELD,
     unit: t('usage_stats.duration_unit_ms'),
   });
-
-  const hasPrices = Object.keys(modelPrices).length > 0;
+  const cacheHitHint = t('usage_stats.cache_hit_request_rate_hint');
 
   const { tokenBreakdown, rateStats, totalCost, latencyStats } = useMemo(() => {
     const empty = {
-      tokenBreakdown: { cachedTokens: 0, reasoningTokens: 0 },
+      tokenBreakdown: {
+        cachedTokens: 0,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        hitRequests: 0,
+        totalRequests: 0,
+        hitRate: 0,
+        reasoningTokens: 0
+      },
       rateStats: { rpm: 0, tpm: 0, windowMinutes: 30, requestCount: 0, tokenCount: 0 },
       totalCost: 0,
       latencyStats: {
@@ -77,8 +93,8 @@ export function StatCards({ usage, loading, modelPrices, nowMs, sparklines }: St
     if (!details.length) return empty;
 
     const latencyStats = calculateLatencyStatsFromDetails(details);
+    const cacheMetrics = calculateCacheMetricsFromDetails(details);
 
-    let cachedTokens = 0;
     let reasoningTokens = 0;
     let totalCost = 0;
 
@@ -91,10 +107,6 @@ export function StatCards({ usage, loading, modelPrices, nowMs, sparklines }: St
 
     details.forEach((detail) => {
       const tokens = detail.tokens;
-      cachedTokens += Math.max(
-        typeof tokens.cached_tokens === 'number' ? Math.max(tokens.cached_tokens, 0) : 0,
-        typeof tokens.cache_tokens === 'number' ? Math.max(tokens.cache_tokens, 0) : 0
-      );
       if (typeof tokens.reasoning_tokens === 'number') {
         reasoningTokens += tokens.reasoning_tokens;
       }
@@ -110,14 +122,20 @@ export function StatCards({ usage, loading, modelPrices, nowMs, sparklines }: St
         tokenCount += extractTotalTokens(detail);
       }
 
-      if (hasPrices) {
-        totalCost += calculateCost(detail, modelPrices);
-      }
+      totalCost += calculateCost(detail, modelPrices);
     });
 
     const denominator = windowMinutes > 0 ? windowMinutes : 1;
     return {
-      tokenBreakdown: { cachedTokens, reasoningTokens },
+      tokenBreakdown: {
+        cachedTokens: cacheMetrics.cacheReadTokens,
+        cacheReadTokens: cacheMetrics.cacheReadTokens,
+        cacheWriteTokens: cacheMetrics.cacheWriteTokens,
+        hitRequests: cacheMetrics.hitRequests,
+        totalRequests: cacheMetrics.totalRequests,
+        hitRate: cacheMetrics.hitRate,
+        reasoningTokens
+      },
       rateStats: {
         rpm: requestCount / denominator,
         tpm: tokenCount / denominator,
@@ -128,7 +146,7 @@ export function StatCards({ usage, loading, modelPrices, nowMs, sparklines }: St
       totalCost,
       latencyStats,
     };
-  }, [hasPrices, modelPrices, nowMs, usage]);
+  }, [modelPrices, nowMs, usage]);
 
   const statsCards: StatCardData[] = [
     {
@@ -170,12 +188,20 @@ export function StatCards({ usage, loading, modelPrices, nowMs, sparklines }: St
       meta: (
         <>
           <span className={styles.statMetaItem}>
-            {t('usage_stats.cached_tokens')}:{' '}
-            {loading ? '-' : formatCompactNumber(tokenBreakdown.cachedTokens)}
+            {t('usage_stats.cache_read_tokens')}:{' '}
+            {loading ? '-' : formatCompactNumber(tokenBreakdown.cacheReadTokens)}
+          </span>
+          <span className={styles.statMetaItem}>
+            {t('usage_stats.cache_write_tokens')}:{' '}
+            {loading ? '-' : formatCompactNumber(tokenBreakdown.cacheWriteTokens)}
           </span>
           <span className={styles.statMetaItem}>
             {t('usage_stats.reasoning_tokens')}:{' '}
             {loading ? '-' : formatCompactNumber(tokenBreakdown.reasoningTokens)}
+          </span>
+          <span className={styles.statMetaItem} title={cacheHitHint}>
+            {t('usage_stats.cache_hit_request_rate')}:{' '}
+            {loading ? '-' : `${(tokenBreakdown.hitRate * 100).toFixed(1)}%`}
           </span>
         </>
       ),
@@ -220,21 +246,21 @@ export function StatCards({ usage, loading, modelPrices, nowMs, sparklines }: St
       accent: '#f59e0b',
       accentSoft: 'rgba(245, 158, 11, 0.18)',
       accentBorder: 'rgba(245, 158, 11, 0.32)',
-      value: loading ? '-' : hasPrices ? formatUsd(totalCost) : '--',
+      value: loading ? '-' : hasCostData ? formatUsd(totalCost) : '--',
       meta: (
         <>
           <span className={styles.statMetaItem}>
             {t('usage_stats.total_tokens')}:{' '}
             {loading ? '-' : formatCompactNumber(usage?.total_tokens ?? 0)}
           </span>
-          {!hasPrices && (
+          {!hasCostData && (
             <span className={`${styles.statMetaItem} ${styles.statSubtle}`}>
               {t('usage_stats.cost_need_price')}
             </span>
           )}
         </>
       ),
-      trend: hasPrices ? sparklines.cost : null,
+      trend: hasCostData ? sparklines.cost : null,
     },
   ];
 

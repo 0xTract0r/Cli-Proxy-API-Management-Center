@@ -620,119 +620,217 @@
   gap: 16px;
 }
 
-.priceForm {
-  padding: 10px;
-  background-color: var(--bg-secondary);
-  border-radius: $radius-sm;
-  border: 1px solid var(--border-color);
+.pricingHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
-.formRow {
+.pricingSummaryGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+
+  @include mobile {
+    grid-template-columns: 1fr;
+  }
+}
+
+.pricingSummaryCard {
+  padding: 14px;
+  border-radius: $radius-md;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
   display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pricingSummaryLabel {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.pricingSummaryValue {
+  font-size: 14px;
+  color: var(--text-primary);
+  font-weight: 700;
+  word-break: break-word;
+}
+
+.pricingSectionTitle {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.pricingSourcesSection,
+.pricingUsageSection {
+  display: flex;
+  flex-direction: column;
   gap: 10px;
-  align-items: flex-end;
-  flex-wrap: wrap;
+}
+
+.pricingSourcesList,
+.pricingRows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pricingSourceCard,
+.pricingRowCard {
+  border: 1px solid var(--border-color);
+  border-radius: $radius-md;
+  background: var(--bg-secondary);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pricingSourceHeader,
+.pricingRowHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
 
   @include mobile {
     flex-direction: column;
-    align-items: stretch;
   }
+}
+
+.pricingSourceTitle,
+.pricingRowTitle {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+.pricingRowTitleBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pricingRowSubtitle,
+.pricingSourceLink,
+.pricingSourceMeta,
+.pricingRowMeta {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.pricingSourceLink {
+  word-break: break-all;
+}
+
+.pricingSourceMeta,
+.pricingRowMeta,
+.pricingRowBadges,
+.pricingRowActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.pricingSourceMessage {
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.pricingBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: $radius-full;
+  border: 1px solid var(--border-color);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: lowercase;
+}
+
+.pricingBadgeOfficial {
+  color: var(--success-color);
+  background: rgba($success-color, 0.12);
+  border-color: rgba($success-color, 0.28);
+}
+
+.pricingBadgeOverride {
+  color: var(--primary-color);
+  background: rgba($primary-color, 0.12);
+  border-color: rgba($primary-color, 0.28);
+}
+
+.pricingBadgePending {
+  color: #b26b00;
+  background: rgba(255, 184, 77, 0.18);
+  border-color: rgba(255, 184, 77, 0.32);
+}
+
+.pricingBadgeMuted,
+.pricingBadgeNeutral {
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+}
+
+.pricingOverrideNote {
+  color: var(--primary-color);
+  font-weight: 600;
+}
+
+.pricingValueGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+
+  @include mobile {
+    grid-template-columns: 1fr;
+  }
+}
+
+.pricingValueItem {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: $radius-sm;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+
+  strong {
+    font-size: 13px;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.pricingValueLabel {
+  font-size: 11px;
+  color: var(--text-secondary);
 }
 
 .formField {
   display: flex;
   flex-direction: column;
   gap: 3px;
-  flex: 1;
-  min-width: 120px;
 
   label {
     font-size: 10px;
     color: var(--text-secondary);
     font-weight: 500;
   }
-
-  // 确保 Input 组件的 form-group 包装器不影响布局
-  :global(.form-group) {
-    margin: 0;
-
-    > label {
-      display: none; // 隐藏 Input 自带的 label，使用外层的
-    }
-  }
-
-  :global(.input) {
-    height: 40px;
-    box-sizing: border-box;
-  }
-}
-
-.pricesList {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.pricesTitle {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin: 0;
-}
-
-.pricesGrid {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.priceItem {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px;
-  background-color: var(--bg-secondary);
-  border-radius: $radius-sm;
-  border: 1px solid var(--border-color);
-  gap: 10px;
-
-  @include mobile {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-}
-
-.priceInfo {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  min-width: 0;
-  flex: 1;
-}
-
-.priceModel {
-  font-weight: 600;
-  color: var(--text-primary);
-  font-size: 11px;
-  word-break: break-all;
-}
-
-.priceMeta {
-  display: flex;
-  gap: 10px;
-  font-size: 10px;
-  color: var(--text-secondary);
-
-  @include mobile {
-    flex-direction: column;
-    gap: 3px;
-  }
 }
 
 .priceActions {
   display: flex;
-  gap: 3px;
-  flex-shrink: 0;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .editModalBody {
@@ -924,6 +1022,28 @@
   color: var(--text-tertiary);
 }
 
+.requestEventsSummary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px 10px;
+  flex-wrap: wrap;
+}
+
+.requestEventsSummaryItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: $radius-full;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  white-space: nowrap;
+}
+
+.requestEventsHint {
+  color: var(--text-tertiary);
+}
+
 .requestEventsTableWrapper {
   overflow: auto;
   max-height: 460px;
@@ -967,6 +1087,29 @@
   font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
+}
+
+.requestEventsCacheHit,
+.requestEventsCacheMiss {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: $radius-full;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.requestEventsCacheHit {
+  color: var(--success-badge-text, #065f46);
+  background: var(--success-badge-bg, #d1fae5);
+  border: 1px solid var(--success-badge-border, #6ee7b7);
+}
+
+.requestEventsCacheMiss {
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
 }
 
 .chartLineHeader {

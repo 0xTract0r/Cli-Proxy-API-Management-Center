@@ -1,12 +1,14 @@
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { SelectionCheckbox } from '@/components/ui/SelectionCheckbox';
 import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
 import {
   IconDownload,
-  IconInfo,
+  IconKey,
   IconModelCluster,
+  IconRefreshCw,
   IconSettings,
   IconTrash2,
 } from '@/components/ui/icons';
@@ -16,23 +18,29 @@ import { resolveAuthProvider } from '@/utils/quota';
 import { calculateStatusBarData, normalizeAuthIndex, type KeyStats } from '@/utils/usage';
 import { formatFileSize } from '@/utils/format';
 import {
-  QUOTA_PROVIDER_TYPES,
   formatModified,
-  getAuthFileIcon,
   getAuthFileStatusMessage,
   getTypeColor,
   getTypeLabel,
+  hasAuthFileStatusWarning,
   isRuntimeOnlyAuthFile,
   parsePriorityValue,
+  QUOTA_PROVIDER_TYPES,
   resolveAuthFileStats,
+  getAuthFileIcon,
   type QuotaProviderType,
   type ResolvedTheme,
 } from '@/features/authFiles/constants';
+import {
+  resolveAuthFileOAuthProvider,
+  supportsAuthFileReauthCallback,
+  type AuthFileReauthState,
+} from '@/features/authFiles/hooks/useAuthFilesReauth';
 import type { AuthFileStatusBarData } from '@/features/authFiles/hooks/useAuthFilesStatusBarCache';
+import { AuthFilesReauthHistoryPanel } from '@/features/authFiles/components/AuthFilesReauthHistoryPanel';
+import { AuthFilesStatusHistoryPanel } from '@/features/authFiles/components/AuthFilesStatusHistoryPanel';
 import { AuthFileQuotaSection } from '@/features/authFiles/components/AuthFileQuotaSection';
 import styles from '@/pages/AuthFilesPage.module.scss';
-
-const HEALTHY_STATUS_MESSAGES = new Set(['ok', 'healthy', 'ready', 'success', 'available']);
 
 export type AuthFileCardProps = {
   file: AuthFileItem;
@@ -42,6 +50,10 @@ export type AuthFileCardProps = {
   disableControls: boolean;
   deleting: string | null;
   statusUpdating: Record<string, boolean>;
+  statusRefreshing: Record<string, boolean>;
+  reauthState?: AuthFileReauthState;
+  reauthHistoryReloadKey?: number;
+  statusHistoryReloadKey?: number;
   quotaFilterType: QuotaProviderType | null;
   keyStats: KeyStats;
   statusBarCache: Map<string, AuthFileStatusBarData>;
@@ -49,7 +61,14 @@ export type AuthFileCardProps = {
   onDownload: (name: string) => void;
   onOpenPrefixProxyEditor: (file: AuthFileItem) => void;
   onDelete: (name: string) => void;
+  onReauthenticate: (file: AuthFileItem) => void;
+  onOpenReauthLink: (fileName: string) => void;
+  onCopyReauthLink: (fileName: string) => void;
+  onCancelReauth: (fileName: string) => void;
+  onChangeReauthCallbackUrl: (fileName: string, callbackUrl: string) => void;
+  onSubmitReauthCallback: (fileName: string) => void;
   onToggleStatus: (file: AuthFileItem, enabled: boolean) => void;
+  onRefreshStatus: (file: AuthFileItem) => void;
   onToggleSelect: (name: string) => void;
 };
 
@@ -58,6 +77,41 @@ const resolveQuotaType = (file: AuthFileItem): QuotaProviderType | null => {
   if (!QUOTA_PROVIDER_TYPES.has(provider as QuotaProviderType)) return null;
   return provider as QuotaProviderType;
 };
+
+type StatusMarkerVariant = 'warning' | 'pending' | 'error';
+
+function StatusMarker({
+  variant,
+  tooltip,
+}: {
+  variant: StatusMarkerVariant;
+  tooltip: string;
+}) {
+  const variantClass =
+    variant === 'warning'
+      ? styles.statusMarkerWarning
+      : variant === 'pending'
+        ? styles.statusMarkerPending
+        : styles.statusMarkerError;
+
+  return (
+    <span
+      className={`${styles.statusMarker} ${variantClass}`}
+      aria-label={tooltip}
+      tabIndex={0}
+      data-testid={`auth-file-status-marker-${variant}`}
+    >
+      <span className={styles.statusMarkerDot} />
+      <span
+        className={styles.statusMarkerTooltip}
+        role="tooltip"
+        data-testid={`auth-file-status-tooltip-${variant}`}
+      >
+        {tooltip}
+      </span>
+    </span>
+  );
+}
 
 export function AuthFileCard(props: AuthFileCardProps) {
   const { t } = useTranslation();
@@ -69,6 +123,10 @@ export function AuthFileCard(props: AuthFileCardProps) {
     disableControls,
     deleting,
     statusUpdating,
+    statusRefreshing,
+    reauthState,
+    reauthHistoryReloadKey = 0,
+    statusHistoryReloadKey = 0,
     quotaFilterType,
     keyStats,
     statusBarCache,
@@ -76,7 +134,14 @@ export function AuthFileCard(props: AuthFileCardProps) {
     onDownload,
     onOpenPrefixProxyEditor,
     onDelete,
+    onReauthenticate,
+    onOpenReauthLink,
+    onCopyReauthLink,
+    onCancelReauth,
+    onChangeReauthCallbackUrl,
+    onSubmitReauthCallback,
     onToggleStatus,
+    onRefreshStatus,
     onToggleSelect,
   } = props;
 
@@ -87,6 +152,12 @@ export function AuthFileCard(props: AuthFileCardProps) {
   const typeColor = getTypeColor(file.type || 'unknown', resolvedTheme);
   const typeLabel = getTypeLabel(t, file.type || 'unknown');
   const providerIcon = getAuthFileIcon(file.type || 'unknown', resolvedTheme);
+  const oauthProvider = resolveAuthFileOAuthProvider(file);
+  const canReauthenticate = Boolean(oauthProvider) && !isRuntimeOnly;
+  const reauthInProgress =
+    reauthState?.status === 'starting' || reauthState?.status === 'polling';
+  const supportsReauthCallback =
+    reauthState?.status === 'polling' && supportsAuthFileReauthCallback(reauthState.provider);
 
   const quotaType =
     quotaFilterType && resolveQuotaType(file) === quotaFilterType ? quotaFilterType : null;
@@ -111,8 +182,22 @@ export function AuthFileCard(props: AuthFileCardProps) {
   const statusData =
     (authIndexKey && statusBarCache.get(authIndexKey)) || calculateStatusBarData([]);
   const rawStatusMessage = getAuthFileStatusMessage(file);
-  const hasStatusWarning =
-    Boolean(rawStatusMessage) && !HEALTHY_STATUS_MESSAGES.has(rawStatusMessage.toLowerCase());
+  const hasStatusWarning = hasAuthFileStatusWarning(file);
+  const canRefreshStatus = canReauthenticate && hasStatusWarning && !file.disabled;
+  const canViewStatusHistory = canReauthenticate;
+  const waitingStatusTitle = t('auth_files.reauth_waiting', {
+    defaultValue: 'Waiting for re-authentication to complete',
+  });
+  const fileStatusMarkerTitle =
+    rawStatusMessage && hasStatusWarning
+      ? `${t('auth_files.health_status_warning')}: ${rawStatusMessage}`
+      : '';
+  const reauthPollingTitle = reauthState?.error
+    ? `${waitingStatusTitle}\n${reauthState.error}`
+    : waitingStatusTitle;
+  const reauthErrorTitle = reauthState?.error
+    ? `${t('auth_files.reauth_failed_badge', { defaultValue: 'Re-authentication failed' })}: ${reauthState.error}`
+    : '';
 
   const priorityValue = parsePriorityValue(file.priority ?? file['priority']);
   const noteValue = typeof file.note === 'string' ? file.note.trim() : '';
@@ -132,10 +217,20 @@ export function AuthFileCard(props: AuthFileCardProps) {
       : hasStatusWarning
         ? styles.stateBadgeWarning
         : styles.stateBadgeActive;
+  const modelsButtonTitle = t('auth_files.models_button', { defaultValue: '模型' });
+  const refreshStatusButtonTitle = t('auth_files.status_refresh_button', {
+    defaultValue: 'Refresh status',
+  });
+  const reauthButtonTitle = reauthInProgress
+    ? t('auth_files.reauth_waiting', {
+        defaultValue: 'Waiting for re-authentication to complete',
+      })
+    : t('auth_files.reauth_button', { defaultValue: 'Re-authenticate' });
 
   return (
     <div
       className={`${styles.fileCard} ${compact ? styles.fileCardCompact : ''} ${providerCardClass} ${selected ? styles.fileCardSelected : ''} ${file.disabled ? styles.fileCardDisabled : ''}`}
+      data-testid="auth-file-card"
     >
       <div className={styles.fileCardLayout}>
         <div className={styles.fileCardMain}>
@@ -179,17 +274,37 @@ export function AuthFileCard(props: AuthFileCardProps) {
                 >
                   {typeLabel}
                 </span>
-                <span className={`${styles.stateBadge} ${stateBadgeClass}`}>{stateLabel}</span>
+                <span
+                  className={`${styles.stateBadge} ${stateBadgeClass}`}
+                  title={fileStatusMarkerTitle || undefined}
+                >
+                  {stateLabel}
+                </span>
+                {(fileStatusMarkerTitle ||
+                  reauthState?.status === 'polling' ||
+                  (reauthState?.status === 'error' && reauthErrorTitle)) && (
+                  <span className={styles.cardStatusMarkers}>
+                    {fileStatusMarkerTitle && (
+                      <StatusMarker variant="warning" tooltip={fileStatusMarkerTitle} />
+                    )}
+                    {reauthState?.status === 'polling' && (
+                      <StatusMarker variant="pending" tooltip={reauthPollingTitle} />
+                    )}
+                    {reauthState?.status === 'error' && reauthErrorTitle && (
+                      <StatusMarker variant="error" tooltip={reauthErrorTitle} />
+                    )}
+                  </span>
+                )}
+                {noteValue && (
+                  <span className={styles.noteBadge} title={noteValue}>
+                    <span className={styles.noteBadgeLabel}>{t('auth_files.note_display')}</span>
+                    <span className={styles.noteBadgeValue}>{noteValue}</span>
+                  </span>
+                )}
               </div>
               <span className={styles.fileName} title={file.name}>
                 {file.name}
               </span>
-              {!compact && noteValue && (
-                <div className={styles.noteText} title={noteValue}>
-                  <span className={styles.noteLabel}>{t('auth_files.note_display')}</span>
-                  <span className={styles.noteValue}>{noteValue}</span>
-                </div>
-              )}
             </div>
           </div>
 
@@ -212,12 +327,92 @@ export function AuthFileCard(props: AuthFileCardProps) {
                 </span>
               </div>
             )}
+            {canReauthenticate && (
+              <div className={styles.cardMetaAction}>
+                <div className={styles.cardMetaActionList}>
+                  <AuthFilesReauthHistoryPanel
+                    file={file}
+                    reloadKey={reauthHistoryReloadKey}
+                  />
+                  {canViewStatusHistory && (
+                    <AuthFilesStatusHistoryPanel
+                      file={file}
+                      reloadKey={statusHistoryReloadKey}
+                    />
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
-          {rawStatusMessage && hasStatusWarning && (
-            <div className={styles.healthStatusMessage} title={rawStatusMessage}>
-              <IconInfo className={styles.messageIcon} size={14} />
-              <span>{rawStatusMessage}</span>
+          {reauthState?.status === 'polling' && (
+            <>
+              <div className={styles.reauthActionRow}>
+                {reauthState.url && (
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className={styles.reauthActionButton}
+                      onClick={() => onCopyReauthLink(file.name)}
+                      disabled={disableControls}
+                    >
+                      {t('auth_files.reauth_copy_link', { defaultValue: 'Copy link' })}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className={styles.reauthActionButton}
+                      onClick={() => onOpenReauthLink(file.name)}
+                      disabled={disableControls}
+                    >
+                      {t('auth_files.reauth_open_link', { defaultValue: 'Open auth page' })}
+                    </Button>
+                  </>
+                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={styles.reauthActionButton}
+                  onClick={() => onCancelReauth(file.name)}
+                  disabled={disableControls}
+                >
+                  {t('auth_files.reauth_cancel', { defaultValue: 'Cancel' })}
+                </Button>
+              </div>
+            </>
+          )}
+
+          {supportsReauthCallback && (
+            <div className={styles.reauthCallbackSection}>
+              <Input
+                label={t('auth_login.oauth_callback_label')}
+                hint={t('auth_login.oauth_callback_hint')}
+                value={reauthState.callbackUrl || ''}
+                onChange={(e) => onChangeReauthCallbackUrl(file.name, e.target.value)}
+                placeholder={t('auth_login.oauth_callback_placeholder')}
+                disabled={disableControls || Boolean(reauthState.callbackSubmitting)}
+                error={
+                  reauthState.callbackStatus === 'error' ? reauthState.callbackError : undefined
+                }
+              />
+              <div className={styles.reauthCallbackActions}>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className={styles.reauthActionButton}
+                  onClick={() => onSubmitReauthCallback(file.name)}
+                  loading={Boolean(reauthState.callbackSubmitting)}
+                  disabled={disableControls}
+                >
+                  {t('auth_login.oauth_callback_button')}
+                </Button>
+                {reauthState.callbackStatus === 'success' && (
+                  <span className={styles.reauthCallbackSuccess}>
+                    {t('auth_login.oauth_callback_status_success')}
+                  </span>
+                )}
+              </div>
             </div>
           )}
 
@@ -251,25 +446,76 @@ export function AuthFileCard(props: AuthFileCardProps) {
 
           <div className={styles.cardActions}>
             <div className={styles.cardActionsMain}>
-              {showModelsButton && (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => onShowModels(file)}
-                  className={`${styles.primaryActionButton} ${styles.modelsActionButton}`}
-                  title={t('auth_files.models_button', { defaultValue: '模型' })}
-                  disabled={disableControls}
-                >
-                  <>
-                    <span className={styles.modelsActionIconWrap}>
+              <div className={styles.cardPrimaryActions}>
+                {showModelsButton && (
+                  <div className={styles.primaryActionSlot}>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => onShowModels(file)}
+                      className={`${styles.iconButton} ${styles.compactPrimaryActionButton} ${styles.modelsCompactActionButton}`}
+                      title={modelsButtonTitle}
+                      aria-label={modelsButtonTitle}
+                      data-testid="auth-file-action-models"
+                      disabled={disableControls}
+                    >
                       <IconModelCluster className={styles.actionIcon} size={16} />
+                    </Button>
+                    <span className={styles.primaryActionCaption} aria-hidden="true">
+                      {modelsButtonTitle}
                     </span>
-                    <span className={styles.actionButtonLabel}>
-                      {t('auth_files.models_button', { defaultValue: '模型' })}
+                  </div>
+                )}
+                {canRefreshStatus && (
+                  <div className={styles.primaryActionSlot}>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => onRefreshStatus(file)}
+                      className={`${styles.iconButton} ${styles.compactPrimaryActionButton} ${styles.refreshCompactActionButton}`}
+                      title={refreshStatusButtonTitle}
+                      aria-label={refreshStatusButtonTitle}
+                      data-testid="auth-file-action-refresh"
+                      disabled={
+                        disableControls || reauthInProgress || statusRefreshing[file.name] === true
+                      }
+                    >
+                      <IconRefreshCw className={styles.actionIcon} size={16} />
+                    </Button>
+                    <span className={styles.primaryActionCaption} aria-hidden="true">
+                      {refreshStatusButtonTitle}
                     </span>
-                  </>
-                </Button>
-              )}
+                  </div>
+                )}
+                {canReauthenticate && (
+                  <div className={styles.primaryActionSlot}>
+                    <Button
+                      variant={hasStatusWarning ? 'primary' : 'secondary'}
+                      size="sm"
+                      onClick={() => onReauthenticate(file)}
+                      className={`${styles.iconButton} ${styles.compactPrimaryActionButton} ${styles.reauthCompactActionButton}`}
+                      title={reauthButtonTitle}
+                      aria-label={reauthButtonTitle}
+                      data-testid="auth-file-action-reauth"
+                      disabled={disableControls || reauthInProgress}
+                    >
+                      <IconKey className={styles.actionIcon} size={16} />
+                    </Button>
+                    <span className={styles.primaryActionCaption} aria-hidden="true">
+                      {reauthButtonTitle}
+                    </span>
+                  </div>
+                )}
+              </div>
+              <div className={styles.cardPrimaryActionsHint} aria-hidden="true">
+                {[
+                  modelsButtonTitle,
+                  canRefreshStatus ? refreshStatusButtonTitle : null,
+                  canReauthenticate ? reauthButtonTitle : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </div>
               {!isRuntimeOnly && (
                 <div className={styles.cardUtilityActions}>
                   <Button

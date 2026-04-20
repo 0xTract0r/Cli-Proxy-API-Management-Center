@@ -3,11 +3,24 @@
  */
 
 import { apiClient } from './client';
-import type { AuthFilesResponse } from '@/types/authFile';
+import type {
+  AuthFilesResponse,
+  AuthFileReauthHistoryEntry,
+  AuthFileStatusHistoryEntry,
+  AuthFileStatusHistoryTrigger,
+} from '@/types/authFile';
 import type { OAuthModelAliasEntry } from '@/types';
 
 type StatusError = { status?: number };
 type AuthFileStatusResponse = { status: string; disabled: boolean };
+type AuthFileStatusRefreshResponse = {
+  status?: string;
+  error?: string;
+  file?: AuthFileEntry;
+};
+type AuthFileStatusRefreshOptions = {
+  trigger?: AuthFileStatusHistoryTrigger;
+};
 type AuthFileEntry = AuthFilesResponse['files'][number];
 type AuthFileBatchFailure = { name: string; error: string };
 type AuthFileBatchUploadResponse = {
@@ -33,6 +46,16 @@ type AuthFileBatchDeleteResult = {
   deleted: number;
   files: string[];
   failed: AuthFileBatchFailure[];
+};
+type OAuthReauthHistoryResponse = {
+  events?: AuthFileReauthHistoryEntry[];
+  limit?: number;
+  auth_name?: string;
+};
+type AuthStatusHistoryResponse = {
+  events?: AuthFileStatusHistoryEntry[];
+  limit?: number;
+  auth_name?: string;
 };
 
 export const AUTH_FILE_INVALID_JSON_OBJECT_ERROR = 'AUTH_FILE_INVALID_JSON_OBJECT';
@@ -282,6 +305,12 @@ const dedupeAuthFilesResponse = (payload: AuthFilesResponse): AuthFilesResponse 
   };
 };
 
+const normalizeSingleAuthFileEntry = (entry: unknown): AuthFileEntry | null => {
+  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return null;
+  const normalized = dedupeAuthFilesResponse({ files: [entry as AuthFileEntry] }).files;
+  return normalized[0] ?? null;
+};
+
 const parseAuthFileJsonObject = (rawText: string): Record<string, unknown> => {
   const trimmed = rawText.trim();
 
@@ -400,6 +429,28 @@ export const authFilesApi = {
   setStatus: (name: string, disabled: boolean) =>
     apiClient.patch<AuthFileStatusResponse>('/auth-files/status', { name, disabled }),
 
+  refreshStatus: async (name: string, options: AuthFileStatusRefreshOptions = {}) => {
+    const payload = await apiClient.post<AuthFileStatusRefreshResponse>('/auth-files/refresh-status', {
+      name,
+      trigger: options.trigger ?? 'manual',
+    });
+    return {
+      status: String(payload?.status ?? '').trim().toLowerCase(),
+      error: typeof payload?.error === 'string' ? payload.error.trim() : '',
+      file: normalizeSingleAuthFileEntry(payload?.file),
+    };
+  },
+
+  async getAuthStatusHistory(name: string, limit = 20): Promise<AuthFileStatusHistoryEntry[]> {
+    const params = new URLSearchParams();
+    params.set('auth_name', name);
+    params.set('limit', String(limit));
+    const payload = await apiClient.get<AuthStatusHistoryResponse>(
+      `/auth-status-history?${params.toString()}`
+    );
+    return Array.isArray(payload?.events) ? payload.events : [];
+  },
+
   uploadFiles: async (files: File[]): Promise<AuthFileBatchUploadResult> => {
     const requestedNames = files.map((file) => file.name);
     if (requestedNames.length === 0) {
@@ -515,5 +566,19 @@ export const authFilesApi = {
     return Array.isArray(models)
       ? (models as { id: string; display_name?: string; type?: string; owned_by?: string }[])
       : [];
+  },
+
+  async getOAuthReauthHistory(name: string, limit = 3): Promise<AuthFileReauthHistoryEntry[]> {
+    const normalizedName = String(name ?? '').trim();
+    if (!normalizedName) return [];
+
+    const data = await apiClient.get<OAuthReauthHistoryResponse>('/oauth-reauth-history', {
+      params: {
+        auth_name: normalizedName,
+        limit,
+      },
+    });
+
+    return Array.isArray(data?.events) ? data.events : [];
   }
 };

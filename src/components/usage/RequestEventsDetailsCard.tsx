@@ -10,9 +10,13 @@ import type { AuthFileItem } from '@/types/authFile';
 import type { CredentialInfo } from '@/types/sourceInfo';
 import { buildSourceInfoMap, resolveSourceDisplay } from '@/utils/sourceResolver';
 import {
+  calculateCacheMetricsFromDetails,
   collectUsageDetails,
+  extractCacheReadTokens,
+  extractCacheWriteTokens,
   extractLatencyMs,
   extractTotalTokens,
+  formatCompactNumber,
   formatDurationMs,
   LATENCY_SOURCE_FIELD,
   normalizeAuthIndex,
@@ -38,7 +42,9 @@ type RequestEventRow = {
   inputTokens: number;
   outputTokens: number;
   reasoningTokens: number;
-  cachedTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  cacheHit: boolean;
   totalTokens: number;
 };
 
@@ -79,6 +85,7 @@ export function RequestEventsDetailsCard({
     field: LATENCY_SOURCE_FIELD,
     unit: t('usage_stats.duration_unit_ms'),
   });
+  const cacheHitHint = t('usage_stats.cache_hit_request_rate_hint');
 
   const [modelFilter, setModelFilter] = useState(ALL_FILTER);
   const [sourceFilter, setSourceFilter] = useState(ALL_FILTER);
@@ -151,10 +158,8 @@ export function RequestEventsDetailsCard({
         const inputTokens = Math.max(toNumber(detail.tokens?.input_tokens), 0);
         const outputTokens = Math.max(toNumber(detail.tokens?.output_tokens), 0);
         const reasoningTokens = Math.max(toNumber(detail.tokens?.reasoning_tokens), 0);
-        const cachedTokens = Math.max(
-          Math.max(toNumber(detail.tokens?.cached_tokens), 0),
-          Math.max(toNumber(detail.tokens?.cache_tokens), 0)
-        );
+        const cacheReadTokens = extractCacheReadTokens(detail);
+        const cacheWriteTokens = extractCacheWriteTokens(detail);
         const totalTokens = Math.max(
           toNumber(detail.tokens?.total_tokens),
           extractTotalTokens(detail)
@@ -176,7 +181,9 @@ export function RequestEventsDetailsCard({
           inputTokens,
           outputTokens,
           reasoningTokens,
-          cachedTokens,
+          cacheReadTokens,
+          cacheWriteTokens,
+          cacheHit: cacheReadTokens > 0,
           totalTokens,
         };
       })
@@ -251,6 +258,28 @@ export function RequestEventsDetailsCard({
     [effectiveAuthIndexFilter, effectiveModelFilter, effectiveSourceFilter, rows]
   );
 
+  const cacheMetrics = useMemo(
+    () =>
+      calculateCacheMetricsFromDetails(
+        filteredRows.map((row) => ({
+          timestamp: row.timestamp,
+          source: row.sourceRaw,
+          auth_index: Number.NaN,
+          failed: row.failed,
+          tokens: {
+            input_tokens: row.inputTokens,
+            output_tokens: row.outputTokens,
+            reasoning_tokens: row.reasoningTokens,
+            cached_tokens: row.cacheReadTokens,
+            cache_read_input_tokens: row.cacheReadTokens,
+            cache_write_input_tokens: row.cacheWriteTokens,
+            total_tokens: row.totalTokens,
+          },
+        }))
+      ),
+    [filteredRows]
+  );
+
   const renderedRows = useMemo(() => filteredRows.slice(0, MAX_RENDERED_EVENTS), [filteredRows]);
 
   const hasActiveFilters =
@@ -274,11 +303,15 @@ export function RequestEventsDetailsCard({
       'source_raw',
       'auth_index',
       'result',
+      'cache_hit',
+      'cache_read_tokens',
+      'cache_write_tokens',
       ...(hasLatencyData ? ['latency_ms'] : []),
       'input_tokens',
       'output_tokens',
       'reasoning_tokens',
-      'cached_tokens',
+      'cache_read_input_tokens',
+      'cache_write_input_tokens',
       'total_tokens',
     ];
 
@@ -290,11 +323,15 @@ export function RequestEventsDetailsCard({
         row.sourceRaw,
         row.authIndex,
         row.failed ? 'failed' : 'success',
+        row.cacheHit ? 'hit' : 'miss',
+        row.cacheReadTokens,
+        row.cacheWriteTokens,
         ...(hasLatencyData ? [row.latencyMs ?? ''] : []),
         row.inputTokens,
         row.outputTokens,
         row.reasoningTokens,
-        row.cachedTokens,
+        row.cacheReadTokens,
+        row.cacheWriteTokens,
         row.totalTokens,
       ]
         .map((value) => encodeCsv(value))
@@ -319,12 +356,17 @@ export function RequestEventsDetailsCard({
       source_raw: row.sourceRaw,
       auth_index: row.authIndex,
       failed: row.failed,
+      cache_hit: row.cacheHit,
+      cache_read_tokens: row.cacheReadTokens,
+      cache_write_tokens: row.cacheWriteTokens,
       ...(hasLatencyData && row.latencyMs !== null ? { latency_ms: row.latencyMs } : {}),
       tokens: {
         input_tokens: row.inputTokens,
         output_tokens: row.outputTokens,
         reasoning_tokens: row.reasoningTokens,
-        cached_tokens: row.cachedTokens,
+        cached_tokens: row.cacheReadTokens,
+        cache_read_input_tokens: row.cacheReadTokens,
+        cache_write_input_tokens: row.cacheWriteTokens,
         total_tokens: row.totalTokens,
       },
     }));
@@ -427,6 +469,26 @@ export function RequestEventsDetailsCard({
         <>
           <div className={styles.requestEventsMeta}>
             <span>{t('usage_stats.request_events_count', { count: filteredRows.length })}</span>
+            <div className={styles.requestEventsSummary}>
+              <span
+                className={styles.requestEventsSummaryItem}
+                title={cacheHitHint}
+              >
+                {t('usage_stats.cache_hit_request_rate')}:{' '}
+                {(cacheMetrics.hitRate * 100).toFixed(1)}%
+              </span>
+              <span className={styles.requestEventsSummaryItem}>
+                {t('usage_stats.cache_read_tokens')}:{' '}
+                {formatCompactNumber(cacheMetrics.cacheReadTokens)}
+              </span>
+              <span className={styles.requestEventsSummaryItem}>
+                {t('usage_stats.cache_write_tokens')}:{' '}
+                {formatCompactNumber(cacheMetrics.cacheWriteTokens)}
+              </span>
+            </div>
+            <span className={styles.requestEventsHint} title={cacheHitHint}>
+              {t('usage_stats.cache_hit_request_rate_note')}
+            </span>
             {hasLatencyData && <span className={styles.requestEventsLimitHint}>{latencyHint}</span>}
             {filteredRows.length > MAX_RENDERED_EVENTS && (
               <span className={styles.requestEventsLimitHint}>
@@ -447,11 +509,15 @@ export function RequestEventsDetailsCard({
                   <th>{t('usage_stats.request_events_source')}</th>
                   <th>{t('usage_stats.request_events_auth_index')}</th>
                   <th>{t('usage_stats.request_events_result')}</th>
+                  <th title={cacheHitHint}>
+                    {t('usage_stats.request_events_cache_hit')}
+                  </th>
                   {hasLatencyData && <th title={latencyHint}>{t('usage_stats.time')}</th>}
                   <th>{t('usage_stats.input_tokens')}</th>
                   <th>{t('usage_stats.output_tokens')}</th>
                   <th>{t('usage_stats.reasoning_tokens')}</th>
-                  <th>{t('usage_stats.cached_tokens')}</th>
+                  <th>{t('usage_stats.cache_read_tokens')}</th>
+                  <th>{t('usage_stats.cache_write_tokens')}</th>
                   <th>{t('usage_stats.total_tokens')}</th>
                 </tr>
               </thead>
@@ -482,13 +548,27 @@ export function RequestEventsDetailsCard({
                         {row.failed ? t('stats.failure') : t('stats.success')}
                       </span>
                     </td>
+                    <td>
+                      <span
+                        className={
+                          row.cacheHit
+                            ? styles.requestEventsCacheHit
+                            : styles.requestEventsCacheMiss
+                        }
+                      >
+                        {row.cacheHit
+                          ? t('usage_stats.request_events_cache_hit_yes')
+                          : t('usage_stats.request_events_cache_hit_no')}
+                      </span>
+                    </td>
                     {hasLatencyData && (
                       <td className={styles.durationCell}>{formatDurationMs(row.latencyMs)}</td>
                     )}
                     <td>{row.inputTokens.toLocaleString()}</td>
                     <td>{row.outputTokens.toLocaleString()}</td>
                     <td>{row.reasoningTokens.toLocaleString()}</td>
-                    <td>{row.cachedTokens.toLocaleString()}</td>
+                    <td>{row.cacheReadTokens.toLocaleString()}</td>
+                    <td>{row.cacheWriteTokens.toLocaleString()}</td>
                     <td>{row.totalTokens.toLocaleString()}</td>
                   </tr>
                 ))}

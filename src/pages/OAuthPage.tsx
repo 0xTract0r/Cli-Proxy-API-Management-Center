@@ -4,7 +4,11 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { useNotificationStore, useThemeStore } from '@/stores';
-import { oauthApi, type OAuthProvider, type IFlowCookieAuthResponse } from '@/services/api/oauth';
+import {
+  oauthApi,
+  type OAuthProvider,
+  type IFlowCookieAuthResponse,
+} from '@/services/api/oauth';
 import { vertexApi, type VertexImportResponse } from '@/services/api/vertex';
 import { copyToClipboard } from '@/utils/clipboard';
 import styles from './OAuthPage.module.scss';
@@ -21,7 +25,7 @@ import iconVertex from '@/assets/icons/vertex.svg';
 interface ProviderState {
   url?: string;
   state?: string;
-  status?: 'idle' | 'waiting' | 'success' | 'error';
+  status?: 'idle' | 'waiting' | 'success' | 'cancelled' | 'error';
   error?: string;
   polling?: boolean;
   projectId?: string;
@@ -131,6 +135,22 @@ export function OAuthPage() {
         if (res.status === 'ok') {
           updateProviderState(provider, { status: 'success', polling: false });
           showNotification(t(getAuthKey(provider, 'oauth_status_success')), 'success');
+          window.clearInterval(timer);
+          delete timers.current[provider];
+        } else if (res.status === 'cancelled') {
+          const cancelledMessage =
+            res.error?.trim() ||
+            t('auth_login.oauth_status_cancelled', {
+              defaultValue: 'Authentication cancelled. Start again if needed.'
+            });
+          updateProviderState(provider, {
+            status: 'cancelled',
+            error: cancelledMessage,
+            polling: false,
+            url: undefined,
+            state: undefined
+          });
+          showNotification(cancelledMessage, 'info');
           window.clearInterval(timer);
           delete timers.current[provider];
         } else if (res.status === 'error') {
@@ -343,7 +363,10 @@ export function OAuthPage() {
       <div className={styles.content}>
         {PROVIDERS.map((provider) => {
           const state = states[provider.id] || {};
-          const canSubmitCallback = CALLBACK_SUPPORTED.includes(provider.id) && Boolean(state.url);
+          const canSubmitCallback =
+            CALLBACK_SUPPORTED.includes(provider.id) &&
+            Boolean(state.url) &&
+            state.status !== 'cancelled';
           return (
             <div key={provider.id}>
               <Card
@@ -442,6 +465,11 @@ export function OAuthPage() {
                     <div className="status-badge">
                       {state.status === 'success'
                         ? t(getAuthKey(provider.id, 'oauth_status_success'))
+                        : state.status === 'cancelled'
+                          ? state.error ||
+                            t('auth_login.oauth_status_cancelled', {
+                              defaultValue: 'Authentication cancelled. Start again if needed.'
+                            })
                         : state.status === 'error'
                           ? `${t(getAuthKey(provider.id, 'oauth_status_error'))} ${state.error || ''}`
                           : t(getAuthKey(provider.id, 'oauth_status_waiting'))}

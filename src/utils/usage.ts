@@ -35,6 +35,11 @@ export interface KeyStats {
 
 export interface TokenBreakdown {
   cachedTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  hitRequests: number;
+  totalRequests: number;
+  hitRate: number;
   reasoningTokens: number;
 }
 
@@ -57,12 +62,17 @@ export interface UsageDetail {
   source: string;
   auth_index: number;
   latency_ms?: number;
+  cost_usd?: number;
+  pricing_status?: string;
   tokens: {
     input_tokens: number;
     output_tokens: number;
     reasoning_tokens: number;
     cached_tokens: number;
     cache_tokens?: number;
+    cache_read_input_tokens?: number;
+    cache_write_input_tokens?: number;
+    cache_creation_input_tokens?: number;
     total_tokens: number;
   };
   failed: boolean;
@@ -116,11 +126,97 @@ const USAGE_TIME_RANGE_MS: Record<Exclude<UsageTimeRange, 'all'>, number> = {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
 
+const hasOwn = (value: Record<string, unknown> | null, key: string): boolean =>
+  Boolean(value) && Object.prototype.hasOwnProperty.call(value, key);
+
+const toFiniteNumber = (value: unknown): number | null => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return null;
+  }
+  return parsed;
+};
+
+const getRecordedCost = (value: unknown): number | null => {
+  const record = isRecord(value) ? value : null;
+  if (!record || !hasOwn(record, 'cost_usd')) {
+    return null;
+  }
+  const parsed = toFiniteNumber(record.cost_usd);
+  if (parsed === null || parsed < 0) {
+    return null;
+  }
+  return parsed;
+};
+
+const getPricingStatus = (value: unknown): string | null => {
+  const record = isRecord(value) ? value : null;
+  if (!record || typeof record.pricing_status !== 'string') {
+    return null;
+  }
+  const trimmed = record.pricing_status.trim();
+  return trimmed ? trimmed : null;
+};
+
 const getApisRecord = (usageData: unknown): Record<string, unknown> | null => {
   const usageRecord = isRecord(usageData) ? usageData : null;
   const apisRaw = usageRecord ? usageRecord.apis : null;
   return isRecord(apisRaw) ? apisRaw : null;
 };
+
+const toTokenNumber = (value: unknown): number => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.max(parsed, 0) : 0;
+};
+
+const getUsageTokensRecord = (detail: unknown): Record<string, unknown> => {
+  const record = isRecord(detail) ? detail : null;
+  const tokensRaw = record?.tokens;
+  return isRecord(tokensRaw) ? tokensRaw : {};
+};
+
+export function extractCacheReadTokens(detail: unknown): number {
+  const tokens = getUsageTokensRecord(detail);
+  return Math.max(
+    toTokenNumber(tokens.cache_read_input_tokens),
+    toTokenNumber(tokens.cached_tokens),
+    toTokenNumber(tokens.cache_tokens)
+  );
+}
+
+export function extractCacheWriteTokens(detail: unknown): number {
+  const tokens = getUsageTokensRecord(detail);
+  return Math.max(
+    toTokenNumber(tokens.cache_write_input_tokens),
+    toTokenNumber(tokens.cache_creation_input_tokens)
+  );
+}
+
+export function calculateCacheMetricsFromDetails(details: UsageDetail[]) {
+  let cacheReadTokens = 0;
+  let cacheWriteTokens = 0;
+  let hitRequests = 0;
+
+  details.forEach((detail) => {
+    const cacheRead = extractCacheReadTokens(detail);
+    const cacheWrite = extractCacheWriteTokens(detail);
+    cacheReadTokens += cacheRead;
+    cacheWriteTokens += cacheWrite;
+    if (cacheRead > 0) {
+      hitRequests += 1;
+    }
+  });
+
+  const totalRequests = details.length;
+
+  return {
+    cacheReadTokens,
+    cacheWriteTokens,
+    hitRequests,
+    totalRequests,
+    hitRate: totalRequests > 0 ? hitRequests / totalRequests : 0,
+  };
+}
 
 interface UsageSummary {
   totalRequests: number;
@@ -553,6 +649,8 @@ export function collectUsageDetails(usageData: unknown): UsageDetail[] {
           source: normalizeSource(detailRaw.source),
           auth_index: detailRaw.auth_index as unknown as number,
           latency_ms: latencyMs ?? undefined,
+          cost_usd: getRecordedCost(detailRaw) ?? undefined,
+          pricing_status: getPricingStatus(detailRaw) ?? undefined,
           tokens: tokensRaw as unknown as UsageDetail['tokens'],
           failed: detailRaw.failed === true,
           __modelName: modelName,
@@ -626,6 +724,8 @@ export function collectUsageDetailsWithEndpoint(usageData: unknown): UsageDetail
           source: normalizeSource(detailRaw.source),
           auth_index: detailRaw.auth_index as unknown as number,
           latency_ms: latencyMs ?? undefined,
+          cost_usd: getRecordedCost(detailRaw) ?? undefined,
+          pricing_status: getPricingStatus(detailRaw) ?? undefined,
           tokens: tokensRaw as unknown as UsageDetail['tokens'],
           failed: detailRaw.failed === true,
           __modelName: modelName,
@@ -648,21 +748,17 @@ export function collectUsageDetailsWithEndpoint(usageData: unknown): UsageDetail
  * 从单条明细提取总 tokens
  */
 export function extractTotalTokens(detail: unknown): number {
-  const record = isRecord(detail) ? detail : null;
-  const tokensRaw = record?.tokens;
-  const tokens = isRecord(tokensRaw) ? tokensRaw : {};
+  const tokens = getUsageTokensRecord(detail);
   if (typeof tokens.total_tokens === 'number') {
     return tokens.total_tokens;
   }
-  const inputTokens = typeof tokens.input_tokens === 'number' ? tokens.input_tokens : 0;
-  const outputTokens = typeof tokens.output_tokens === 'number' ? tokens.output_tokens : 0;
-  const reasoningTokens = typeof tokens.reasoning_tokens === 'number' ? tokens.reasoning_tokens : 0;
-  const cachedTokens = Math.max(
-    typeof tokens.cached_tokens === 'number' ? Math.max(tokens.cached_tokens, 0) : 0,
-    typeof tokens.cache_tokens === 'number' ? Math.max(tokens.cache_tokens, 0) : 0
-  );
+  const inputTokens = toTokenNumber(tokens.input_tokens);
+  const outputTokens = toTokenNumber(tokens.output_tokens);
+  const reasoningTokens = toTokenNumber(tokens.reasoning_tokens);
+  const cacheReadTokens = extractCacheReadTokens(detail);
+  const cacheWriteTokens = extractCacheWriteTokens(detail);
 
-  return inputTokens + outputTokens + reasoningTokens + cachedTokens;
+  return inputTokens + outputTokens + reasoningTokens + cacheReadTokens + cacheWriteTokens;
 }
 
 /**
@@ -678,24 +774,36 @@ export function calculateLatencyStats(usageData: unknown): LatencyStats {
 export function calculateTokenBreakdown(usageData: unknown): TokenBreakdown {
   const details = collectUsageDetails(usageData);
   if (!details.length) {
-    return { cachedTokens: 0, reasoningTokens: 0 };
+    return {
+      cachedTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      hitRequests: 0,
+      totalRequests: 0,
+      hitRate: 0,
+      reasoningTokens: 0
+    };
   }
 
-  let cachedTokens = 0;
   let reasoningTokens = 0;
+  const cacheMetrics = calculateCacheMetricsFromDetails(details);
 
   details.forEach((detail) => {
     const tokens = detail.tokens;
-    cachedTokens += Math.max(
-      typeof tokens.cached_tokens === 'number' ? Math.max(tokens.cached_tokens, 0) : 0,
-      typeof tokens.cache_tokens === 'number' ? Math.max(tokens.cache_tokens, 0) : 0
-    );
     if (typeof tokens.reasoning_tokens === 'number') {
       reasoningTokens += tokens.reasoning_tokens;
     }
   });
 
-  return { cachedTokens, reasoningTokens };
+  return {
+    cachedTokens: cacheMetrics.cacheReadTokens,
+    cacheReadTokens: cacheMetrics.cacheReadTokens,
+    cacheWriteTokens: cacheMetrics.cacheWriteTokens,
+    hitRequests: cacheMetrics.hitRequests,
+    totalRequests: cacheMetrics.totalRequests,
+    hitRate: cacheMetrics.hitRate,
+    reasoningTokens
+  };
 }
 
 /**
@@ -767,6 +875,11 @@ export function calculateCost(
   detail: UsageDetail,
   modelPrices: Record<string, ModelPrice>
 ): number {
+  const recordedCost = toFiniteNumber(detail.cost_usd);
+  if (recordedCost !== null && recordedCost >= 0) {
+    return recordedCost;
+  }
+
   const modelName = detail.__modelName || '';
   const price = modelPrices[modelName];
   if (!price) {
@@ -804,10 +917,79 @@ export function calculateTotalCost(
   modelPrices: Record<string, ModelPrice>
 ): number {
   const details = collectUsageDetails(usageData);
-  if (!details.length || !Object.keys(modelPrices).length) {
+  if (!details.length) {
     return 0;
   }
   return details.reduce((sum, detail) => sum + calculateCost(detail, modelPrices), 0);
+}
+
+export function hasUsageCostSupport(
+  usageData: unknown,
+  modelPrices: Record<string, ModelPrice>
+): boolean {
+  if (Object.keys(modelPrices).length > 0) {
+    return true;
+  }
+
+  const usageRecord = isRecord(usageData) ? usageData : null;
+  if (!usageRecord) {
+    return false;
+  }
+
+  if (
+    hasOwn(usageRecord, 'total_cost_usd') ||
+    getPricingStatus(usageRecord) !== null ||
+    hasOwn(usageRecord, 'unpriced_request_count') ||
+    hasOwn(usageRecord, 'unfinalized_request_count')
+  ) {
+    return true;
+  }
+
+  const apis = getApisRecord(usageData);
+  if (!apis) {
+    return false;
+  }
+
+  return Object.values(apis).some((apiEntry) => {
+    if (!isRecord(apiEntry)) {
+      return false;
+    }
+    if (
+      hasOwn(apiEntry, 'total_cost_usd') ||
+      getPricingStatus(apiEntry) !== null ||
+      hasOwn(apiEntry, 'unpriced_request_count') ||
+      hasOwn(apiEntry, 'unfinalized_request_count')
+    ) {
+      return true;
+    }
+
+    const models = isRecord(apiEntry.models) ? apiEntry.models : null;
+    if (!models) {
+      return false;
+    }
+
+    return Object.values(models).some((modelEntry) => {
+      if (!isRecord(modelEntry)) {
+        return false;
+      }
+      if (
+        hasOwn(modelEntry, 'total_cost_usd') ||
+        getPricingStatus(modelEntry) !== null ||
+        hasOwn(modelEntry, 'unpriced_request_count') ||
+        hasOwn(modelEntry, 'unfinalized_request_count')
+      ) {
+        return true;
+      }
+
+      const details = Array.isArray(modelEntry.details) ? modelEntry.details : [];
+      return details.some((detail) => {
+        if (!isRecord(detail)) {
+          return false;
+        }
+        return hasOwn(detail, 'cost_usd') || getPricingStatus(detail) !== null;
+      });
+    });
+  });
 }
 
 /**
@@ -897,6 +1079,7 @@ export function getApiStats(
     let derivedSuccessCount = 0;
     let derivedFailureCount = 0;
     let totalCost = 0;
+    let apiCostDerived = false;
 
     const modelsData = isRecord(apiData.models) ? apiData.models : {};
     Object.entries(modelsData).forEach(([modelName, modelData]) => {
@@ -912,8 +1095,10 @@ export function getApiStats(
         failureCount += Number(modelData.failure_count) || 0;
       }
 
-      const price = modelPrices[modelName];
-      if (details.length > 0 && (!hasExplicitCounts || price)) {
+      let modelCost = 0;
+      let modelCostDerived = false;
+      const explicitModelCost = toFiniteNumber(modelData.total_cost_usd);
+      if (details.length > 0) {
         details.forEach((detail) => {
           const detailRecord = isRecord(detail) ? detail : null;
           if (!hasExplicitCounts) {
@@ -924,13 +1109,23 @@ export function getApiStats(
             }
           }
 
-          if (price && detailRecord) {
-            totalCost += calculateCost(
+          if (detailRecord) {
+            modelCost += calculateCost(
               { ...(detailRecord as unknown as UsageDetail), __modelName: modelName },
               modelPrices
             );
+            modelCostDerived = true;
           }
         });
+      }
+      if ((!modelCostDerived || modelCost <= 0) && explicitModelCost !== null && explicitModelCost >= 0) {
+        modelCost = explicitModelCost;
+        modelCostDerived = true;
+      }
+
+      if (modelCostDerived) {
+        totalCost += modelCost;
+        apiCostDerived = true;
       }
 
       models[modelName] = {
@@ -951,6 +1146,12 @@ export function getApiStats(
     const failureCount = hasApiExplicitCounts
       ? Number(apiData.failure_count) || 0
       : derivedFailureCount;
+    if (!apiCostDerived) {
+      const explicitApiCost = toFiniteNumber(apiData.total_cost_usd);
+      if (explicitApiCost !== null && explicitApiCost >= 0) {
+        totalCost = explicitApiCost;
+      }
+    }
 
     result.push({
       endpoint: maskUsageSensitiveValue(endpoint) || endpoint,
@@ -1008,8 +1209,9 @@ export function getModelStats(
       existing.tokens += Number(modelData.total_tokens) || 0;
 
       const details = Array.isArray(modelData.details) ? modelData.details : [];
-
-      const price = modelPrices[modelName];
+      let modelCostDerived = false;
+      let modelCost = 0;
+      const explicitModelCost = toFiniteNumber(modelData.total_cost_usd);
 
       const hasExplicitCounts =
         typeof modelData.success_count === 'number' || typeof modelData.failure_count === 'number';
@@ -1032,13 +1234,21 @@ export function getModelStats(
 
           addLatencySample(existing.latency, latencyMs);
 
-          if (price && detailRecord) {
-            existing.cost += calculateCost(
+          if (detailRecord) {
+            modelCost += calculateCost(
               { ...(detailRecord as unknown as UsageDetail), __modelName: modelName },
               modelPrices
             );
+            modelCostDerived = true;
           }
         });
+      }
+      if ((!modelCostDerived || modelCost <= 0) && explicitModelCost !== null && explicitModelCost >= 0) {
+        modelCost = explicitModelCost;
+        modelCostDerived = true;
+      }
+      if (modelCostDerived) {
+        existing.cost += modelCost;
       }
       modelMap.set(modelName, existing);
     });
@@ -1747,10 +1957,7 @@ export function buildHourlyTokenBreakdown(
     const tokens = detail.tokens;
     const input = typeof tokens.input_tokens === 'number' ? Math.max(tokens.input_tokens, 0) : 0;
     const output = typeof tokens.output_tokens === 'number' ? Math.max(tokens.output_tokens, 0) : 0;
-    const cached = Math.max(
-      typeof tokens.cached_tokens === 'number' ? Math.max(tokens.cached_tokens, 0) : 0,
-      typeof tokens.cache_tokens === 'number' ? Math.max(tokens.cache_tokens, 0) : 0
-    );
+    const cached = extractCacheReadTokens(detail);
     const reasoning =
       typeof tokens.reasoning_tokens === 'number' ? Math.max(tokens.reasoning_tokens, 0) : 0;
 
@@ -1788,10 +1995,7 @@ export function buildDailyTokenBreakdown(usageData: unknown): TokenBreakdownSeri
     const tokens = detail.tokens;
     const input = typeof tokens.input_tokens === 'number' ? Math.max(tokens.input_tokens, 0) : 0;
     const output = typeof tokens.output_tokens === 'number' ? Math.max(tokens.output_tokens, 0) : 0;
-    const cached = Math.max(
-      typeof tokens.cached_tokens === 'number' ? Math.max(tokens.cached_tokens, 0) : 0,
-      typeof tokens.cache_tokens === 'number' ? Math.max(tokens.cache_tokens, 0) : 0
-    );
+    const cached = extractCacheReadTokens(detail);
     const reasoning =
       typeof tokens.reasoning_tokens === 'number' ? Math.max(tokens.reasoning_tokens, 0) : 0;
 

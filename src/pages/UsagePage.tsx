@@ -38,6 +38,7 @@ import {
   getApiStats,
   getModelStats,
   filterUsageByTimeRange,
+  hasUsageCostSupport,
   type UsageTimeRange
 } from '@/utils/usage';
 import styles from './UsagePage.module.scss';
@@ -129,8 +130,14 @@ export function UsagePage() {
     error,
     lastRefreshedAt,
     modelPrices,
-    setModelPrices,
+    pricing,
+    pricingLoading,
+    pricingRefreshing,
+    pricingError,
     loadUsage,
+    refreshPricing,
+    savePricingOverride,
+    deletePricingOverride,
     handleExport,
     handleImport,
     handleImportChange,
@@ -196,7 +203,7 @@ export function UsagePage() {
     rpmSparkline,
     tpmSparkline,
     costSparkline
-  } = useSparklines({ usage: filteredUsage, loading, nowMs });
+  } = useSparklines({ usage: filteredUsage, loading, nowMs, modelPrices });
 
   // Chart data hook
   const {
@@ -220,7 +227,10 @@ export function UsagePage() {
     () => getModelStats(filteredUsage, modelPrices),
     [filteredUsage, modelPrices]
   );
-  const hasPrices = Object.keys(modelPrices).length > 0;
+  const hasCostData = useMemo(
+    () => hasUsageCostSupport(filteredUsage, modelPrices),
+    [filteredUsage, modelPrices]
+  );
 
   return (
     <div className={styles.container}>
@@ -295,6 +305,7 @@ export function UsagePage() {
         usage={filteredUsage}
         loading={loading}
         modelPrices={modelPrices}
+        hasCostData={hasCostData}
         nowMs={nowMs}
         sparklines={{
           requests: requestsSparkline,
@@ -356,13 +367,14 @@ export function UsagePage() {
         isDark={isDark}
         isMobile={isMobile}
         modelPrices={modelPrices}
+        hasCostData={hasCostData}
         hourWindowHours={hourWindowHours}
       />
 
       {/* Details Grid */}
       <div className={styles.detailsGrid}>
-        <ApiDetailsCard apiStats={apiStats} loading={loading} hasPrices={hasPrices} />
-        <ModelStatsCard modelStats={modelStats} loading={loading} hasPrices={hasPrices} />
+        <ApiDetailsCard apiStats={apiStats} loading={loading} hasPrices={hasCostData} />
+        <ModelStatsCard modelStats={modelStats} loading={loading} hasPrices={hasCostData} />
       </div>
 
       <RequestEventsDetailsCard
@@ -388,9 +400,14 @@ export function UsagePage() {
 
       {/* Price Settings */}
       <PriceSettingsCard
-        modelNames={modelNames}
-        modelPrices={modelPrices}
-        onPricesChange={setModelPrices}
+        usageModelNames={modelNames}
+        pricing={pricing}
+        loading={pricingLoading}
+        refreshing={pricingRefreshing}
+        error={pricingError}
+        onRefresh={refreshPricing}
+        onSaveOverride={savePricingOverride}
+        onDeleteOverride={deletePricingOverride}
       />
     </div>
   );
