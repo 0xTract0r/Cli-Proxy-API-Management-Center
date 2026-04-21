@@ -571,7 +571,6 @@
     "reauth_cancel": "取消",
     "reauth_cancel_failed": "取消重新认证失败",
     "reauth_cancelled": "已取消重新认证，当前 auth 文件保持不变。",
-    "reauth_open_link": "打开认证页",
     "reauth_waiting": "等待重新认证完成",
     "reauth_success": "已成功重新认证 \"{{name}}\"",
     "reauth_failed": "重新认证 \"{{name}}\" 失败",

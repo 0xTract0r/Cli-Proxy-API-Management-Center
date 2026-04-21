@@ -571,7 +571,6 @@
     "reauth_cancel": "Cancel",
     "reauth_cancel_failed": "Failed to cancel re-authentication",
     "reauth_cancelled": "Re-authentication cancelled. Current auth file was kept.",
-    "reauth_open_link": "Open auth page",
     "reauth_waiting": "Waiting for re-authentication to complete",
     "reauth_success": "Re-authenticated \"{{name}}\" successfully",
     "reauth_failed": "Failed to re-authenticate \"{{name}}\"",

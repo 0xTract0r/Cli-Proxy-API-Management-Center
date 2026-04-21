@@ -157,7 +157,6 @@ export function AuthFilesPage() {
   const {
     reauthStates,
     startReauth,
-    openReauthLink,
     copyReauthLink,
     cancelReauth,
     updateReauthCallbackUrl,
@@ -933,7 +932,6 @@ export function AuthFilesPage() {
                       onDelete={handleDelete}
                       reauthState={reauthStates[file.name]}
                       onReauthenticate={startReauth}
-                      onOpenReauthLink={openReauthLink}
                       onCopyReauthLink={copyReauthLink}
                       onCancelReauth={cancelReauth}
                       onChangeReauthCallbackUrl={updateReauthCallbackUrl}

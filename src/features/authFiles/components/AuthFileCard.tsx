@@ -62,7 +62,6 @@ export type AuthFileCardProps = {
   onOpenPrefixProxyEditor: (file: AuthFileItem) => void;
   onDelete: (name: string) => void;
   onReauthenticate: (file: AuthFileItem) => void;
-  onOpenReauthLink: (fileName: string) => void;
   onCopyReauthLink: (fileName: string) => void;
   onCancelReauth: (fileName: string) => void;
   onChangeReauthCallbackUrl: (fileName: string, callbackUrl: string) => void;
@@ -135,7 +134,6 @@ export function AuthFileCard(props: AuthFileCardProps) {
     onOpenPrefixProxyEditor,
     onDelete,
     onReauthenticate,
-    onOpenReauthLink,
     onCopyReauthLink,
     onCancelReauth,
     onChangeReauthCallbackUrl,
@@ -349,26 +347,15 @@ export function AuthFileCard(props: AuthFileCardProps) {
             <>
               <div className={styles.reauthActionRow}>
                 {reauthState.url && (
-                  <>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className={styles.reauthActionButton}
-                      onClick={() => onCopyReauthLink(file.name)}
-                      disabled={disableControls}
-                    >
-                      {t('auth_files.reauth_copy_link', { defaultValue: 'Copy link' })}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className={styles.reauthActionButton}
-                      onClick={() => onOpenReauthLink(file.name)}
-                      disabled={disableControls}
-                    >
-                      {t('auth_files.reauth_open_link', { defaultValue: 'Open auth page' })}
-                    </Button>
-                  </>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className={styles.reauthActionButton}
+                    onClick={() => onCopyReauthLink(file.name)}
+                    disabled={disableControls}
+                  >
+                    {t('auth_files.reauth_copy_link', { defaultValue: 'Copy link' })}
+                  </Button>
                 )}
                 <Button
                   variant="ghost"

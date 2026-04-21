@@ -97,12 +97,6 @@ export function useAuthFilesReauth(options: UseAuthFilesReauthOptions) {
     };
   }, []);
 
-  const openReauthLink = useCallback((fileName: string) => {
-    const url = states[fileName]?.url;
-    if (!url) return;
-    window.open(url, '_blank', 'noopener,noreferrer');
-  }, [states]);
-
   const copyReauthLink = useCallback(async (fileName: string) => {
     const url = states[fileName]?.url;
     if (!url) return;
@@ -428,7 +422,6 @@ export function useAuthFilesReauth(options: UseAuthFilesReauthOptions) {
   return {
     reauthStates: states,
     startReauth,
-    openReauthLink,
     copyReauthLink,
     cancelReauth,
     updateReauthCallbackUrl,
