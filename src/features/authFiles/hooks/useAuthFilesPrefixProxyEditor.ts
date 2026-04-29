@@ -1,18 +1,13 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { authFilesApi } from '@/services/api';
-import type { AuthFileItem } from '@/types';
+import type {
+  AuthFileAccountSettings,
+  AuthFileAccountSettingsPatchRequest,
+  AuthFileManagedHeaderState,
+  AuthFileItem,
+} from '@/types/authFile';
 import { useNotificationStore } from '@/stores';
-import { formatFileSize } from '@/utils/format';
-import { MAX_AUTH_FILE_SIZE } from '@/utils/constants';
-import {
-  applyCodexAuthFileWebsockets,
-  normalizeExcludedModels,
-  parseDisableCoolingValue,
-  parseExcludedModelsText,
-  parsePriorityValue,
-  readCodexAuthFileWebsockets,
-} from '@/features/authFiles/constants';
 
 type AuthFileHeaders = Record<string, string>;
 type AuthFileHeadersErrorKey =
@@ -21,38 +16,37 @@ type AuthFileHeadersErrorKey =
   | 'auth_files.headers_invalid_value';
 
 export type PrefixProxyEditorField =
-  | 'prefix'
   | 'proxyUrl'
-  | 'priority'
-  | 'excludedModelsText'
-  | 'disableCooling'
-  | 'websockets'
   | 'note'
-  | 'headersText';
+  | 'disabled'
+  | 'extraHeadersText'
+  | 'transportProfileText'
+  | 'tlsProfileText';
 
 export type PrefixProxyEditorFieldValue = string | boolean;
 
 export type PrefixProxyEditorState = {
   fileName: string;
   fileInfoText: string;
-  isCodexFile: boolean;
   loading: boolean;
   saving: boolean;
   error: string | null;
-  originalText: string;
-  rawText: string;
-  json: Record<string, unknown> | null;
-  prefix: string;
   proxyUrl: string;
-  priority: string;
-  excludedModelsText: string;
-  disableCooling: string;
-  websockets: boolean;
   note: string;
-  noteTouched: boolean;
-  headersText: string;
-  headersTouched: boolean;
-  headersError: string | null;
+  disabled: boolean;
+  managedHeaders: AuthFileHeaders;
+  managedHeaderState: AuthFileManagedHeaderState | null;
+  warnings: string[];
+  extraHeadersText: string;
+  extraHeadersTouched: boolean;
+  extraHeadersError: string | null;
+  transportProfileText: string;
+  transportProfileTouched: boolean;
+  transportProfileError: string | null;
+  tlsProfileText: string;
+  tlsProfileTouched: boolean;
+  tlsProfileError: string | null;
+  originalSerializedRequest: string;
 };
 
 export type UseAuthFilesPrefixProxyEditorOptions = {
@@ -91,7 +85,7 @@ const parseHeadersText = (
 ): { value: AuthFileHeaders | null; errorKey: AuthFileHeadersErrorKey | null } => {
   const trimmed = text.trim();
   if (!trimmed) {
-    return { value: null, errorKey: null };
+    return { value: {}, errorKey: null };
   }
 
   let parsed: unknown;
@@ -109,64 +103,77 @@ const parseHeadersText = (
   return { value: parsed as AuthFileHeaders, errorKey: null };
 };
 
-const buildPrefixProxyUpdatedText = (
-  editor: PrefixProxyEditorState | null,
-  resolveHeadersError: (key: AuthFileHeadersErrorKey) => string
-): string => {
-  if (!editor?.json) return editor?.rawText ?? '';
-  const next: Record<string, unknown> = { ...editor.json };
-  if ('prefix' in next || editor.prefix.trim()) {
-    next.prefix = editor.prefix;
-  }
-  if ('proxy_url' in next || editor.proxyUrl.trim()) {
-    next.proxy_url = editor.proxyUrl;
-  }
+const stringifyProfile = (value: string | Record<string, unknown> | null | undefined): string => {
+  if (!value) return '';
+  if (typeof value === 'string') return value;
+  return JSON.stringify(value, null, 2);
+};
 
-  const parsedPriority = parsePriorityValue(editor.priority);
-  if (parsedPriority !== undefined) {
-    next.priority = parsedPriority;
-  } else if ('priority' in next) {
-    delete next.priority;
+const parseProfileText = (
+  text: string
+): { value: string | Record<string, unknown> | null; error: string | null } => {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return { value: null, error: null };
   }
-
-  const excludedModels = parseExcludedModelsText(editor.excludedModelsText);
-  if (excludedModels.length > 0) {
-    next.excluded_models = excludedModels;
-  } else if ('excluded_models' in next) {
-    delete next.excluded_models;
+  if (!trimmed.startsWith('{')) {
+    return { value: trimmed, error: null };
   }
-
-  const parsedDisableCooling = parseDisableCoolingValue(editor.disableCooling);
-  if (parsedDisableCooling !== undefined) {
-    next.disable_cooling = parsedDisableCooling;
-  } else if ('disable_cooling' in next) {
-    delete next.disable_cooling;
-  }
-
-  if (editor.noteTouched) {
-    const noteValue = editor.note.trim();
-    if (noteValue) {
-      next.note = editor.note;
-    } else if ('note' in next) {
-      delete next.note;
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (!isRecordObject(parsed)) {
+      return { value: null, error: 'Profile must be a JSON object or plain string preset.' };
     }
+    return { value: parsed, error: null };
+  } catch {
+    return { value: null, error: 'Profile JSON is invalid.' };
+  }
+};
+
+const normalizeSettings = (
+  fileName: string,
+  settings: Partial<AuthFileAccountSettings> | null | undefined
+): AuthFileAccountSettingsPatchRequest => ({
+  name: fileName,
+  proxy_url: (settings?.proxy_url || '').trim() || null,
+  note: (settings?.note || '').trim() || null,
+  disabled: settings?.disabled === true,
+  extra_headers: settings?.extra_headers || {},
+  transport_profile: settings?.transport_profile || null,
+  tls_profile: settings?.tls_profile || null,
+});
+
+const buildPatchRequest = (
+  editor: PrefixProxyEditorState
+): {
+  request: AuthFileAccountSettingsPatchRequest | null;
+  error: string | null;
+} => {
+  const parsedHeaders = parseHeadersText(editor.extraHeadersText);
+  if (parsedHeaders.errorKey) {
+    return { request: null, error: parsedHeaders.errorKey };
+  }
+  const parsedTransportProfile = parseProfileText(editor.transportProfileText);
+  if (parsedTransportProfile.error) {
+    return { request: null, error: parsedTransportProfile.error };
+  }
+  const parsedTLSProfile = parseProfileText(editor.tlsProfileText);
+  if (parsedTLSProfile.error) {
+    return { request: null, error: parsedTLSProfile.error };
   }
 
-  if (editor.headersTouched) {
-    const { value: parsedHeaders, errorKey } = parseHeadersText(editor.headersText);
-    if (errorKey) {
-      throw new Error(resolveHeadersError(errorKey));
-    }
-    if (parsedHeaders) {
-      next.headers = parsedHeaders;
-    } else {
-      delete next.headers;
-    }
-  }
-
-  return JSON.stringify(
-    editor.isCodexFile ? applyCodexAuthFileWebsockets(next, editor.websockets) : next
-  );
+  return {
+    request: {
+      name: editor.fileName,
+      proxy_url: editor.proxyUrl.trim() || null,
+      note: editor.note.trim() || null,
+      disabled: editor.disabled,
+      extra_headers: parsedHeaders.value || {},
+      transport_profile: parsedTransportProfile.value,
+      tls_profile: parsedTLSProfile.value,
+    },
+    error: null,
+  };
 };
 
 export function useAuthFilesPrefixProxyEditor(
@@ -178,32 +185,55 @@ export function useAuthFilesPrefixProxyEditor(
 
   const [prefixProxyEditor, setPrefixProxyEditor] = useState<PrefixProxyEditorState | null>(null);
 
-  const hasBlockingValidationError = Boolean(
-    prefixProxyEditor?.headersTouched && prefixProxyEditor.headersError
-  );
-  const prefixProxyUpdatedText =
-    prefixProxyEditor?.json && !hasBlockingValidationError
-      ? buildPrefixProxyUpdatedText(prefixProxyEditor, (key) => t(key))
-      : '';
+  const prefixProxyUpdatedText = (() => {
+    if (!prefixProxyEditor) return '';
+    const { request, error } = buildPatchRequest(prefixProxyEditor);
+    if (!request || error) return '';
+    return JSON.stringify(request, null, 2);
+  })();
 
   const prefixProxyDirty =
-    Boolean(prefixProxyEditor?.json) &&
-    Boolean(prefixProxyEditor?.originalText) &&
-    (prefixProxyUpdatedText === '' || prefixProxyUpdatedText !== prefixProxyEditor?.originalText);
+    Boolean(prefixProxyEditor) &&
+    prefixProxyUpdatedText !== '' &&
+    prefixProxyUpdatedText !== prefixProxyEditor?.originalSerializedRequest;
 
   const closePrefixProxyEditor = () => {
     setPrefixProxyEditor(null);
   };
 
+  const hydrateEditor = (
+    name: string,
+    file: AuthFileItem,
+    settings: Partial<AuthFileAccountSettings> | null | undefined
+  ) => {
+    const normalizedRequest = normalizeSettings(name, settings);
+    setPrefixProxyEditor({
+      fileName: name,
+      fileInfoText: JSON.stringify(file, null, 2),
+      loading: false,
+      saving: false,
+      error: null,
+      proxyUrl: settings?.proxy_url || '',
+      note: settings?.note || '',
+      disabled: settings?.disabled === true,
+      managedHeaders: settings?.managed_headers || {},
+      managedHeaderState: settings?.managed_header_state || null,
+      warnings: Array.isArray(settings?.warnings) ? settings.warnings : [],
+      extraHeadersText: JSON.stringify(settings?.extra_headers || {}, null, 2),
+      extraHeadersTouched: false,
+      extraHeadersError: null,
+      transportProfileText: stringifyProfile(settings?.transport_profile),
+      transportProfileTouched: false,
+      transportProfileError: null,
+      tlsProfileText: stringifyProfile(settings?.tls_profile),
+      tlsProfileTouched: false,
+      tlsProfileError: null,
+      originalSerializedRequest: JSON.stringify(normalizedRequest, null, 2),
+    });
+  };
+
   const openPrefixProxyEditor = async (file: AuthFileItem) => {
     const name = file.name;
-    const normalizedType = String(file.type ?? '')
-      .trim()
-      .toLowerCase();
-    const normalizedProvider = String(file.provider ?? '')
-      .trim()
-      .toLowerCase();
-    const isCodexFile = normalizedType === 'codex' || normalizedProvider === 'codex';
 
     if (disableControls) return;
     if (prefixProxyEditor?.fileName === name) {
@@ -211,115 +241,43 @@ export function useAuthFilesPrefixProxyEditor(
       return;
     }
 
+    const inlineSettings = file.account_settings || file.accountSettings || null;
     setPrefixProxyEditor({
       fileName: name,
       fileInfoText: JSON.stringify(file, null, 2),
-      isCodexFile,
       loading: true,
       saving: false,
       error: null,
-      originalText: '',
-      rawText: '',
-      json: null,
-      prefix: '',
-      proxyUrl: '',
-      priority: '',
-      excludedModelsText: '',
-      disableCooling: '',
-      websockets: false,
-      note: '',
-      noteTouched: false,
-      headersText: '',
-      headersTouched: false,
-      headersError: null,
+      proxyUrl: inlineSettings?.proxy_url || '',
+      note: inlineSettings?.note || '',
+      disabled: inlineSettings?.disabled === true,
+      managedHeaders: inlineSettings?.managed_headers || {},
+      managedHeaderState: inlineSettings?.managed_header_state || null,
+      warnings: Array.isArray(inlineSettings?.warnings) ? inlineSettings.warnings : [],
+      extraHeadersText: JSON.stringify(inlineSettings?.extra_headers || {}, null, 2),
+      extraHeadersTouched: false,
+      extraHeadersError: null,
+      transportProfileText: stringifyProfile(inlineSettings?.transport_profile),
+      transportProfileTouched: false,
+      transportProfileError: null,
+      tlsProfileText: stringifyProfile(inlineSettings?.tls_profile),
+      tlsProfileTouched: false,
+      tlsProfileError: null,
+      originalSerializedRequest: '',
     });
 
     try {
-      const rawText = await authFilesApi.downloadText(name);
-      const trimmed = rawText.trim();
-
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(trimmed) as unknown;
-      } catch {
-        setPrefixProxyEditor((prev) => {
-          if (!prev || prev.fileName !== name) return prev;
-          return {
-            ...prev,
-            loading: false,
-            error: t('auth_files.prefix_proxy_invalid_json'),
-            rawText: trimmed,
-            originalText: trimmed,
-          };
-        });
-        return;
-      }
-
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-        setPrefixProxyEditor((prev) => {
-          if (!prev || prev.fileName !== name) return prev;
-          return {
-            ...prev,
-            loading: false,
-            error: t('auth_files.prefix_proxy_invalid_json'),
-            rawText: trimmed,
-            originalText: trimmed,
-          };
-        });
-        return;
-      }
-
-      const json = { ...(parsed as Record<string, unknown>) };
-      if (isCodexFile) {
-        const normalizedWebsockets = readCodexAuthFileWebsockets(json);
-        delete json.websocket;
-        json.websockets = normalizedWebsockets;
-      }
-      const originalText = JSON.stringify(json);
-      const prefix = typeof json.prefix === 'string' ? json.prefix : '';
-      const proxyUrl = typeof json.proxy_url === 'string' ? json.proxy_url : '';
-      const priority = parsePriorityValue(json.priority);
-      const excludedModels = normalizeExcludedModels(json.excluded_models);
-      const disableCoolingValue = parseDisableCoolingValue(json.disable_cooling);
-      const websocketsValue = readCodexAuthFileWebsockets(json);
-      const note = typeof json.note === 'string' ? json.note : '';
-      const headers = json.headers;
-      let headersText = '';
-      let headersError: string | null = null;
-      if (headers !== undefined) {
-        headersText = JSON.stringify(headers, null, 2);
-        const { errorKey } = parseHeadersText(headersText);
-        headersError = errorKey ? t(errorKey) : null;
-      }
-
-      setPrefixProxyEditor((prev) => {
-        if (!prev || prev.fileName !== name) return prev;
-        return {
-          ...prev,
-          loading: false,
-          originalText,
-          rawText: originalText,
-          json,
-          prefix,
-          proxyUrl,
-          priority: priority !== undefined ? String(priority) : '',
-          excludedModelsText: excludedModels.join('\n'),
-          disableCooling:
-            disableCoolingValue === undefined ? '' : disableCoolingValue ? 'true' : 'false',
-          websockets: websocketsValue,
-          note,
-          noteTouched: false,
-          headersText,
-          headersTouched: false,
-          headersError,
-          error: null,
-        };
-      });
+      const settings = await authFilesApi.getAccountSettings(name);
+      hydrateEditor(name, file, settings);
     } catch (err: unknown) {
+      if (inlineSettings) {
+        hydrateEditor(name, file, inlineSettings);
+        return;
+      }
       const errorMessage = err instanceof Error ? err.message : t('notification.download_failed');
       setPrefixProxyEditor((prev) => {
         if (!prev || prev.fileName !== name) return prev;
-        return { ...prev, loading: false, error: errorMessage, rawText: '' };
+        return { ...prev, loading: false, error: errorMessage };
       });
       showNotification(`${t('notification.download_failed')}: ${errorMessage}`, 'error');
     }
@@ -331,57 +289,62 @@ export function useAuthFilesPrefixProxyEditor(
   ) => {
     setPrefixProxyEditor((prev) => {
       if (!prev) return prev;
-      if (field === 'prefix') return { ...prev, prefix: String(value) };
       if (field === 'proxyUrl') return { ...prev, proxyUrl: String(value) };
-      if (field === 'priority') return { ...prev, priority: String(value) };
-      if (field === 'excludedModelsText') return { ...prev, excludedModelsText: String(value) };
-      if (field === 'disableCooling') return { ...prev, disableCooling: String(value) };
-      if (field === 'note') return { ...prev, note: String(value), noteTouched: true };
-      if (field === 'headersText') {
-        const headersText = String(value);
-        const { errorKey } = parseHeadersText(headersText);
+      if (field === 'note') return { ...prev, note: String(value) };
+      if (field === 'disabled') return { ...prev, disabled: Boolean(value) };
+      if (field === 'extraHeadersText') {
+        const extraHeadersText = String(value);
+        const { errorKey } = parseHeadersText(extraHeadersText);
         return {
           ...prev,
-          headersText,
-          headersTouched: true,
-          headersError: errorKey ? t(errorKey) : null,
+          extraHeadersText,
+          extraHeadersTouched: true,
+          extraHeadersError: errorKey ? t(errorKey) : null,
         };
       }
-      return { ...prev, websockets: Boolean(value) };
+      if (field === 'transportProfileText') {
+        const transportProfileText = String(value);
+        return {
+          ...prev,
+          transportProfileText,
+          transportProfileTouched: true,
+          transportProfileError: parseProfileText(transportProfileText).error,
+        };
+      }
+      const tlsProfileText = String(value);
+      return {
+        ...prev,
+        tlsProfileText,
+        tlsProfileTouched: true,
+        tlsProfileError: parseProfileText(tlsProfileText).error,
+      };
     });
   };
 
   const handlePrefixProxySave = async () => {
-    if (!prefixProxyEditor?.json) return;
-    if (!prefixProxyDirty) return;
+    if (!prefixProxyEditor || !prefixProxyDirty) return;
 
-    const name = prefixProxyEditor.fileName;
-    let payload = '';
-    try {
-      payload = buildPrefixProxyUpdatedText(prefixProxyEditor, (key) => t(key));
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Invalid format';
+    const { request, error } = buildPatchRequest(prefixProxyEditor);
+    if (!request) {
+      const errorMessage = error?.startsWith('auth_files.') ? t(error) : error || 'Invalid format';
       showNotification(errorMessage, 'error');
       return;
     }
 
-    const fileSize = new Blob([payload]).size;
-    if (fileSize > MAX_AUTH_FILE_SIZE) {
-      showNotification(
-        t('auth_files.upload_error_size', { maxSize: formatFileSize(MAX_AUTH_FILE_SIZE) }),
-        'error'
-      );
-      return;
-    }
-
     setPrefixProxyEditor((prev) => {
-      if (!prev || prev.fileName !== name) return prev;
+      if (!prev) return prev;
       return { ...prev, saving: true };
     });
 
     try {
-      await authFilesApi.saveText(name, payload);
-      showNotification(t('auth_files.prefix_proxy_saved_success', { name }), 'success');
+      await authFilesApi.updateAccountSettings(request);
+      showNotification(
+        t('auth_files.prefix_proxy_saved_success', {
+          name: request.name,
+          defaultValue: `Saved account settings for ${request.name}`,
+        }),
+        'success'
+      );
       await loadFiles();
       await loadKeyStats();
       setPrefixProxyEditor(null);
@@ -389,7 +352,7 @@ export function useAuthFilesPrefixProxyEditor(
       const errorMessage = err instanceof Error ? err.message : '';
       showNotification(`${t('notification.upload_failed')}: ${errorMessage}`, 'error');
       setPrefixProxyEditor((prev) => {
-        if (!prev || prev.fileName !== name) return prev;
+        if (!prev) return prev;
         return { ...prev, saving: false };
       });
     }

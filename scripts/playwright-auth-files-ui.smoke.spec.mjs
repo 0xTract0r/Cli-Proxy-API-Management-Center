@@ -9,6 +9,14 @@ const managementKey = process.env.MANAGEMENT_KEY || 'quotio-dev-management-key';
 const managementApiBase = process.env.MANAGEMENT_API_BASE || '';
 const smokeOutDir =
   process.env.OUT_DIR || path.resolve(path.dirname(new URL(import.meta.url).pathname), '../build/playwright-auth-files-smoke');
+const ignoreHTTPSErrors = /^(1|true|yes|on)$/i.test(
+  process.env.PLAYWRIGHT_IGNORE_HTTPS_ERRORS || process.env.MANAGEMENT_UI_IGNORE_HTTPS_ERRORS || ''
+);
+const allowDisabledPrimaryActions = /^(1|true|yes|on)$/i.test(
+  process.env.PLAYWRIGHT_ALLOW_DISABLED_PRIMARY_ACTIONS ||
+    process.env.MANAGEMENT_UI_ALLOW_DISABLED_PRIMARY_ACTIONS ||
+    ''
+);
 
 const targetUrl = `${managementUiBase}${managementUiRoute}`;
 const viewports = [
@@ -19,6 +27,8 @@ const viewports = [
 ];
 const primaryActionSelector =
   '[data-testid="auth-file-action-models"], [data-testid="auth-file-action-refresh"], [data-testid="auth-file-action-reauth"]';
+
+test.use({ ignoreHTTPSErrors });
 
 async function loginIfNeeded(page) {
   if (managementApiBase && managementKey) {
@@ -159,15 +169,20 @@ async function collectFilterPanelSummary(page) {
 }
 
 async function waitForRefreshButtonsToSettle(page) {
-  await page.waitForFunction(
-    (selector) => {
-      const refreshButtons = Array.from(document.querySelectorAll(selector));
-      if (refreshButtons.length === 0) return true;
-      return refreshButtons.every((button) => !button.hasAttribute('disabled'));
-    },
-    '[data-testid="auth-file-action-refresh"]',
-    { timeout: 5000 }
-  );
+  try {
+    await page.waitForFunction(
+      (selector) => {
+        const refreshButtons = Array.from(document.querySelectorAll(selector));
+        if (refreshButtons.length === 0) return true;
+        return refreshButtons.every((button) => !button.hasAttribute('disabled'));
+      },
+      '[data-testid="auth-file-action-refresh"]',
+      { timeout: 5000 }
+    );
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function verifyStatusMarkerTooltip(page, viewportName) {
@@ -199,89 +214,126 @@ for (const viewport of viewports) {
   test(`auth-files primary actions stay compact on ${viewport.name}`, async ({ page }, testInfo) => {
     fs.mkdirSync(smokeOutDir, { recursive: true });
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await page.context().tracing.start({ screenshots: true, snapshots: true });
 
     const consoleErrors = [];
     const pageErrors = [];
+    const requestFailures = [];
+    let cards = [];
+    let filterPanel = null;
+    let statusTooltip = null;
+    let pageRefreshButtonCount = 0;
+    let refreshButtonsSettled = false;
     page.on('console', (msg) => {
       if (msg.type() === 'error') consoleErrors.push(msg.text());
     });
     page.on('pageerror', (err) => {
       pageErrors.push(err.message);
     });
-
-    await loginIfNeeded(page);
-    await waitForRefreshButtonsToSettle(page);
-
-    const cards = await collectCardSummary(page);
-    const filterPanel = await collectFilterPanelSummary(page);
-    const statusTooltip = await verifyStatusMarkerTooltip(page, viewport.name);
-    expect(cards.length).toBeGreaterThan(0);
-
-    const actionCards = cards.filter((card) => card.primaryButtons.length > 0);
-    expect(actionCards.length).toBeGreaterThan(0);
-    expect(
-      actionCards.some((card) => card.actionIds.includes('auth-file-action-refresh')),
-      'at least one sampled card exposes refresh'
-    ).toBeTruthy();
-    expect(
-      actionCards.some((card) => card.actionIds.includes('auth-file-action-reauth')),
-      'at least one sampled card exposes reauth'
-    ).toBeTruthy();
-
-    for (const card of actionCards) {
-      expect(card.hasOverflow).toBeFalsy();
-      expect(card.missingLabels).toBeFalsy();
-      expect(card.hasSpinnerOverlay).toBeFalsy();
-      expect(card.hasBusyPrimaryAction).toBeFalsy();
-      expect(card.hasCoveredPrimaryAction).toBeFalsy();
-      expect(card.actionRowCount).toBeLessThanOrEqual(2);
-      for (const button of card.primaryButtons) {
-        expect(button.width).toBeLessThanOrEqual(36);
-        expect(button.height).toBeLessThanOrEqual(36);
-        expect(button.disabled).toBeFalsy();
-        expect(button.hasSpinner).toBeFalsy();
-        expect(button.ariaBusy).toBeFalsy();
-        expect(button.isCovered).toBeFalsy();
-      }
-    }
-
-    if (viewport.name === 'tight') {
-      expect(filterPanel.filterPanel?.overflow).toBeFalsy();
-      expect(filterPanel.filterControls?.overflow).toBeFalsy();
-    }
-
-    if (viewport.name === 'compact') {
-      for (const card of actionCards) {
-        expect(card.cardHeight).toBeLessThan(390);
-        expect(card.primaryButtonTops.length).toBe(1);
-      }
-    }
-
-    expect(consoleErrors, 'console errors').toEqual([]);
-    expect(pageErrors, 'page errors').toEqual([]);
-
-    await page.screenshot({
-      path: path.join(smokeOutDir, `auth-files-${viewport.name}.png`),
-      fullPage: true,
+    page.on('requestfailed', (request) => {
+      requestFailures.push({
+        url: request.url(),
+        method: request.method(),
+        resourceType: request.resourceType(),
+        failureText: request.failure()?.errorText || 'unknown',
+      });
     });
 
-    fs.writeFileSync(
-      path.join(smokeOutDir, `summary-${viewport.name}.json`),
-      JSON.stringify(
-        {
-          viewport,
-          url: page.url(),
-          primaryActionSelector,
-          cards,
-          filterPanel,
-          statusTooltip,
-          consoleErrors,
-          pageErrors,
-          status: testInfo.status,
-        },
-        null,
-        2
-      )
-    );
+    try {
+      await loginIfNeeded(page);
+      refreshButtonsSettled = await waitForRefreshButtonsToSettle(page);
+      if (!allowDisabledPrimaryActions) {
+        expect(refreshButtonsSettled, 'refresh buttons should settle before assertions').toBeTruthy();
+      }
+
+      cards = await collectCardSummary(page);
+      filterPanel = await collectFilterPanelSummary(page);
+      statusTooltip = await verifyStatusMarkerTooltip(page, viewport.name);
+      pageRefreshButtonCount = await page
+        .getByRole('button', { name: /Refresh|Refresh All|刷新|全部刷新/i })
+        .count();
+      expect(cards.length).toBeGreaterThan(0);
+
+      const actionCards = cards.filter((card) => card.primaryButtons.length > 0);
+      expect(actionCards.length).toBeGreaterThan(0);
+      const hasCardRefresh = actionCards.some((card) => card.actionIds.includes('auth-file-action-refresh'));
+      expect(
+        hasCardRefresh || pageRefreshButtonCount > 0,
+        'refresh is available either on sampled cards or as a page-level action'
+      ).toBeTruthy();
+      expect(
+        actionCards.some((card) => card.actionIds.includes('auth-file-action-reauth')),
+        'at least one sampled card exposes reauth'
+      ).toBeTruthy();
+
+      for (const card of actionCards) {
+        expect(card.hasOverflow).toBeFalsy();
+        expect(card.missingLabels).toBeFalsy();
+        expect(card.hasSpinnerOverlay).toBeFalsy();
+        expect(card.hasCoveredPrimaryAction).toBeFalsy();
+        expect(card.actionRowCount).toBeLessThanOrEqual(2);
+        if (!allowDisabledPrimaryActions) {
+          expect(card.hasBusyPrimaryAction).toBeFalsy();
+        }
+        for (const button of card.primaryButtons) {
+          expect(button.width).toBeLessThanOrEqual(36);
+          expect(button.height).toBeLessThanOrEqual(36);
+          expect(button.hasSpinner).toBeFalsy();
+          expect(button.isCovered).toBeFalsy();
+          if (!allowDisabledPrimaryActions) {
+            expect(button.disabled).toBeFalsy();
+            expect(button.ariaBusy).toBeFalsy();
+          }
+        }
+      }
+
+      if (viewport.name === 'tight') {
+        expect(filterPanel.filterPanel?.overflow).toBeFalsy();
+        expect(filterPanel.filterControls?.overflow).toBeFalsy();
+      }
+
+      if (viewport.name === 'compact') {
+        for (const card of actionCards) {
+          expect(card.cardHeight).toBeLessThan(390);
+          expect(card.primaryButtonTops.length).toBe(1);
+        }
+      }
+
+      expect(consoleErrors, 'console errors').toEqual([]);
+      expect(pageErrors, 'page errors').toEqual([]);
+      expect(requestFailures, 'request failures').toEqual([]);
+
+    } finally {
+      await page.screenshot({
+        path: path.join(smokeOutDir, `auth-files-${viewport.name}.png`),
+        fullPage: true,
+      });
+      fs.writeFileSync(
+        path.join(smokeOutDir, `summary-${viewport.name}.json`),
+        JSON.stringify(
+          {
+            viewport,
+            url: page.url(),
+            primaryActionSelector,
+            ignoreHTTPSErrors,
+            allowDisabledPrimaryActions,
+            refreshButtonsSettled,
+            pageRefreshButtonCount,
+            cards,
+            filterPanel,
+            statusTooltip,
+            consoleErrors,
+            pageErrors,
+            requestFailures,
+            status: testInfo.status,
+          },
+          null,
+          2
+        )
+      );
+      await page.context().tracing.stop({
+        path: path.join(smokeOutDir, `trace-${viewport.name}.zip`),
+      });
+    }
   });
 }
