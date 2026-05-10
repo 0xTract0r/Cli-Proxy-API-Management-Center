@@ -59,6 +59,10 @@ export type AuthFileHeaderMap = Record<string, string>;
 
 export interface AuthFileManagedHeaderProjection {
   generated_at?: string;
+  source?: string;
+  source_url?: string;
+  checked_at?: string;
+  completeness?: string;
   summary_headers?: AuthFileHeaderMap;
   versioned_capabilities?: AuthFileHeaderMap;
   stable_identity?: AuthFileHeaderMap;
@@ -69,9 +73,13 @@ export interface AuthFileManagedHeaderHistoryEntry {
   recorded_at?: string;
   policy_version?: string;
   reason?: string;
+  source?: string;
+  source_url?: string;
   changed_fields?: string[];
   previous_versioned_capabilities?: AuthFileHeaderMap;
   next_versioned_capabilities?: AuthFileHeaderMap;
+  previous?: Record<string, unknown>;
+  next?: Record<string, unknown>;
 }
 
 export interface AuthFileManagedHeaderState {
@@ -93,8 +101,11 @@ export interface AuthFileAccountSettings {
   disabled: boolean;
   managed_headers: AuthFileHeaderMap;
   extra_headers: AuthFileHeaderMap;
+  refresh_enabled: boolean;
   transport_profile: string | Record<string, unknown> | null;
   tls_profile: string | Record<string, unknown> | null;
+  runtime_profile?: Record<string, unknown> | null;
+  runtime_identity?: Record<string, unknown> | null;
   managed_header_state?: AuthFileManagedHeaderState | null;
   activation: AuthFileAccountSettingsActivation;
   warnings: string[];
@@ -112,6 +123,7 @@ export interface AuthFileAccountSettingsPatchRequest {
   note: string | null;
   disabled: boolean;
   extra_headers: AuthFileHeaderMap;
+  refresh_enabled: boolean;
   transport_profile: string | Record<string, unknown> | null;
   tls_profile: string | Record<string, unknown> | null;
 }

@@ -96,13 +96,15 @@ interface QuotaSectionProps<TState extends QuotaStatusState, TData> {
   files: AuthFileItem[];
   loading: boolean;
   disabled: boolean;
+  quotaRefreshSignal?: number;
 }
 
 export function QuotaSection<TState extends QuotaStatusState, TData>({
   config,
   files,
   loading,
-  disabled
+  disabled,
+  quotaRefreshSignal = 0
 }: QuotaSectionProps<TState, TData>) {
   const { t } = useTranslation();
   const resolvedTheme: ResolvedTheme = useThemeStore((state) => state.resolvedTheme);
@@ -185,6 +187,28 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
     if (targets.length === 0) return;
     loadQuota(targets, scope, setLoading);
   }, [loading, effectiveViewMode, filteredFiles, pageItems, loadQuota, setLoading]);
+
+  useEffect(() => {
+    if (quotaRefreshSignal <= 0) return;
+    if (disabled || loading) return;
+
+    const scope = effectiveViewMode === 'all' ? 'all' : 'page';
+    const targets = (effectiveViewMode === 'all' ? filteredFiles : pageItems).filter(
+      (file) => !file.disabled
+    );
+    if (targets.length === 0) return;
+
+    loadQuota(targets, scope, setLoading);
+  }, [
+    quotaRefreshSignal,
+    disabled,
+    loading,
+    effectiveViewMode,
+    filteredFiles,
+    pageItems,
+    loadQuota,
+    setLoading
+  ]);
 
   useEffect(() => {
     if (loading) return;

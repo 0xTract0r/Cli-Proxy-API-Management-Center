@@ -19,6 +19,7 @@ export type PrefixProxyEditorField =
   | 'proxyUrl'
   | 'note'
   | 'disabled'
+  | 'refreshEnabled'
   | 'extraHeadersText'
   | 'transportProfileText'
   | 'tlsProfileText';
@@ -34,8 +35,11 @@ export type PrefixProxyEditorState = {
   proxyUrl: string;
   note: string;
   disabled: boolean;
+  refreshEnabled: boolean;
   managedHeaders: AuthFileHeaders;
   managedHeaderState: AuthFileManagedHeaderState | null;
+  runtimeProfileText: string;
+  runtimeIdentityText: string;
   warnings: string[];
   extraHeadersText: string;
   extraHeadersTouched: boolean;
@@ -138,6 +142,7 @@ const normalizeSettings = (
   proxy_url: (settings?.proxy_url || '').trim() || null,
   note: (settings?.note || '').trim() || null,
   disabled: settings?.disabled === true,
+  refresh_enabled: settings?.refresh_enabled !== false,
   extra_headers: settings?.extra_headers || {},
   transport_profile: settings?.transport_profile || null,
   tls_profile: settings?.tls_profile || null,
@@ -168,6 +173,7 @@ const buildPatchRequest = (
       proxy_url: editor.proxyUrl.trim() || null,
       note: editor.note.trim() || null,
       disabled: editor.disabled,
+      refresh_enabled: editor.refreshEnabled,
       extra_headers: parsedHeaders.value || {},
       transport_profile: parsedTransportProfile.value,
       tls_profile: parsedTLSProfile.value,
@@ -216,8 +222,11 @@ export function useAuthFilesPrefixProxyEditor(
       proxyUrl: settings?.proxy_url || '',
       note: settings?.note || '',
       disabled: settings?.disabled === true,
+      refreshEnabled: settings?.refresh_enabled !== false,
       managedHeaders: settings?.managed_headers || {},
       managedHeaderState: settings?.managed_header_state || null,
+      runtimeProfileText: stringifyProfile(settings?.runtime_profile),
+      runtimeIdentityText: stringifyProfile(settings?.runtime_identity),
       warnings: Array.isArray(settings?.warnings) ? settings.warnings : [],
       extraHeadersText: JSON.stringify(settings?.extra_headers || {}, null, 2),
       extraHeadersTouched: false,
@@ -251,8 +260,11 @@ export function useAuthFilesPrefixProxyEditor(
       proxyUrl: inlineSettings?.proxy_url || '',
       note: inlineSettings?.note || '',
       disabled: inlineSettings?.disabled === true,
+      refreshEnabled: inlineSettings?.refresh_enabled !== false,
       managedHeaders: inlineSettings?.managed_headers || {},
       managedHeaderState: inlineSettings?.managed_header_state || null,
+      runtimeProfileText: stringifyProfile(inlineSettings?.runtime_profile),
+      runtimeIdentityText: stringifyProfile(inlineSettings?.runtime_identity),
       warnings: Array.isArray(inlineSettings?.warnings) ? inlineSettings.warnings : [],
       extraHeadersText: JSON.stringify(inlineSettings?.extra_headers || {}, null, 2),
       extraHeadersTouched: false,
@@ -292,6 +304,7 @@ export function useAuthFilesPrefixProxyEditor(
       if (field === 'proxyUrl') return { ...prev, proxyUrl: String(value) };
       if (field === 'note') return { ...prev, note: String(value) };
       if (field === 'disabled') return { ...prev, disabled: Boolean(value) };
+      if (field === 'refreshEnabled') return { ...prev, refreshEnabled: Boolean(value) };
       if (field === 'extraHeadersText') {
         const extraHeadersText = String(value);
         const { errorKey } = parseHeadersText(extraHeadersText);
