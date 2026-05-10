@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { usageApi } from '@/services/api';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { collectUsageDetails, computeKeyStatsFromDetails, type KeyStats, type UsageDetail } from '@/utils/usage';
+import { createPreviewSampleUsage, isPreviewSampleUsageEnabled } from '@/utils/usagePreview';
 import i18n from '@/i18n';
 
 export const USAGE_STATS_STALE_TIME_MS = 240_000;
@@ -36,6 +37,19 @@ const getErrorMessage = (error: unknown) =>
     : typeof error === 'string'
       ? error
       : i18n.t('usage_stats.loading_error');
+
+const resolveUsageSnapshot = (usage: UsageStatsSnapshot | null) => {
+  const usageDetails = collectUsageDetails(usage);
+  if (usageDetails.length > 0 || !isPreviewSampleUsageEnabled()) {
+    return { usage, usageDetails };
+  }
+
+  const previewUsage = createPreviewSampleUsage();
+  return {
+    usage: previewUsage,
+    usageDetails: collectUsageDetails(previewUsage),
+  };
+};
 
 export const useUsageStatsStore = create<UsageStatsState>((set, get) => ({
   usage: null,
@@ -95,14 +109,14 @@ export const useUsageStatsStore = create<UsageStatsState>((set, get) => ({
         const rawUsage = usageResponse?.usage ?? usageResponse;
         const usage =
           rawUsage && typeof rawUsage === 'object' ? (rawUsage as UsageStatsSnapshot) : null;
+        const resolvedUsage = resolveUsageSnapshot(usage);
 
         if (requestId !== usageRequestToken) return;
 
-        const usageDetails = collectUsageDetails(usage);
         set({
-          usage,
-          keyStats: computeKeyStatsFromDetails(usageDetails),
-          usageDetails,
+          usage: resolvedUsage.usage,
+          keyStats: computeKeyStatsFromDetails(resolvedUsage.usageDetails),
+          usageDetails: resolvedUsage.usageDetails,
           loading: false,
           error: null,
           lastRefreshedAt: Date.now(),
@@ -110,6 +124,20 @@ export const useUsageStatsStore = create<UsageStatsState>((set, get) => ({
         });
       } catch (error: unknown) {
         if (requestId !== usageRequestToken) return;
+        if (isPreviewSampleUsageEnabled()) {
+          const previewUsage = createPreviewSampleUsage();
+          const usageDetails = collectUsageDetails(previewUsage);
+          set({
+            usage: previewUsage,
+            keyStats: computeKeyStatsFromDetails(usageDetails),
+            usageDetails,
+            loading: false,
+            error: null,
+            lastRefreshedAt: Date.now(),
+            scopeKey
+          });
+          return;
+        }
         const message = getErrorMessage(error);
         set({
           loading: false,

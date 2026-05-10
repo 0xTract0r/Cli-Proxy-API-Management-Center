@@ -41,6 +41,7 @@ import {
   hasUsageCostSupport,
   type UsageTimeRange
 } from '@/utils/usage';
+import { isPreviewSampleUsage } from '@/utils/usagePreview';
 import styles from './UsagePage.module.scss';
 
 // Register Chart.js components
@@ -62,18 +63,27 @@ const DEFAULT_TIME_RANGE: UsageTimeRange = '24h';
 const MAX_CHART_LINES = 9;
 const TIME_RANGE_OPTIONS: ReadonlyArray<{ value: UsageTimeRange; labelKey: string }> = [
   { value: 'all', labelKey: 'usage_stats.range_all' },
+  { value: '1h', labelKey: 'usage_stats.range_1h' },
+  { value: '3h', labelKey: 'usage_stats.range_3h' },
   { value: '7h', labelKey: 'usage_stats.range_7h' },
   { value: '24h', labelKey: 'usage_stats.range_24h' },
   { value: '7d', labelKey: 'usage_stats.range_7d' },
 ];
 const HOUR_WINDOW_BY_TIME_RANGE: Record<Exclude<UsageTimeRange, 'all'>, number> = {
+  '1h': 1,
+  '3h': 3,
   '7h': 7,
   '24h': 24,
   '7d': 7 * 24
 };
 
 const isUsageTimeRange = (value: unknown): value is UsageTimeRange =>
-  value === '7h' || value === '24h' || value === '7d' || value === 'all';
+  value === '1h' ||
+  value === '3h' ||
+  value === '7h' ||
+  value === '24h' ||
+  value === '7d' ||
+  value === 'all';
 
 const normalizeChartLines = (value: unknown, maxLines = MAX_CHART_LINES): string[] => {
   if (!Array.isArray(value)) {
@@ -231,6 +241,7 @@ export function UsagePage() {
     () => hasUsageCostSupport(filteredUsage, modelPrices),
     [filteredUsage, modelPrices]
   );
+  const showingPreviewSample = useMemo(() => isPreviewSampleUsage(usage), [usage]);
 
   return (
     <div className={styles.container}>
@@ -299,6 +310,10 @@ export function UsagePage() {
       </div>
 
       {error && <div className={styles.errorBox}>{error}</div>}
+
+      {showingPreviewSample && (
+        <div className={styles.previewNotice}>{t('usage_stats.preview_sample_notice')}</div>
+      )}
 
       {/* Stats Overview Cards */}
       <StatCards

@@ -106,18 +106,23 @@ export interface ModelStatsSummary {
   successCount: number;
   failureCount: number;
   tokens: number;
+  cacheHitRequests: number;
+  cacheTotalRequests: number;
+  cacheHitRate: number | null;
   cost: number;
   averageLatencyMs: number | null;
   totalLatencyMs: number | null;
   latencySampleCount: number;
 }
 
-export type UsageTimeRange = '7h' | '24h' | '7d' | 'all';
+export type UsageTimeRange = '1h' | '3h' | '7h' | '24h' | '7d' | 'all';
 
 const TOKENS_PER_PRICE_UNIT = 1_000_000;
 const MODEL_PRICE_STORAGE_KEY = 'cli-proxy-model-prices-v2';
 const USAGE_ENDPOINT_METHOD_REGEX = /^(GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)\s+(\S+)/i;
 const USAGE_TIME_RANGE_MS: Record<Exclude<UsageTimeRange, 'all'>, number> = {
+  '1h': 60 * 60 * 1000,
+  '3h': 3 * 60 * 60 * 1000,
   '7h': 7 * 60 * 60 * 1000,
   '24h': 24 * 60 * 60 * 1000,
   '7d': 7 * 24 * 60 * 60 * 1000,
@@ -1184,6 +1189,8 @@ export function getModelStats(
       successCount: number;
       failureCount: number;
       tokens: number;
+      cacheHitRequests: number;
+      cacheTotalRequests: number;
       cost: number;
       latency: LatencyAccumulator;
     }
@@ -1202,6 +1209,8 @@ export function getModelStats(
         successCount: 0,
         failureCount: 0,
         tokens: 0,
+        cacheHitRequests: 0,
+        cacheTotalRequests: 0,
         cost: 0,
         latency: createLatencyAccumulator(),
       };
@@ -1235,6 +1244,10 @@ export function getModelStats(
           addLatencySample(existing.latency, latencyMs);
 
           if (detailRecord) {
+            existing.cacheTotalRequests += 1;
+            if (extractCacheReadTokens(detailRecord) > 0) {
+              existing.cacheHitRequests += 1;
+            }
             modelCost += calculateCost(
               { ...(detailRecord as unknown as UsageDetail), __modelName: modelName },
               modelPrices
@@ -1263,6 +1276,12 @@ export function getModelStats(
         successCount: stats.successCount,
         failureCount: stats.failureCount,
         tokens: stats.tokens,
+        cacheHitRequests: stats.cacheHitRequests,
+        cacheTotalRequests: stats.cacheTotalRequests,
+        cacheHitRate:
+          stats.cacheTotalRequests > 0
+            ? (stats.cacheHitRequests / stats.cacheTotalRequests) * 100
+            : null,
         cost: stats.cost,
         averageLatencyMs: latencyStats.averageMs,
         totalLatencyMs: latencyStats.totalMs,

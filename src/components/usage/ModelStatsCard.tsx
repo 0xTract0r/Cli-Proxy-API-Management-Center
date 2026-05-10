@@ -22,6 +22,7 @@ type SortKey =
   | 'model'
   | 'requests'
   | 'tokens'
+  | 'cacheHitRate'
   | 'cost'
   | 'successRate'
   | 'averageLatencyMs'
@@ -40,6 +41,7 @@ export function ModelStatsCard({ modelStats, loading, hasPrices }: ModelStatsCar
     field: LATENCY_SOURCE_FIELD,
     unit: t('usage_stats.duration_unit_ms'),
   });
+  const cacheHitHint = t('usage_stats.cache_hit_request_rate_hint');
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -118,6 +120,17 @@ export function ModelStatsCard({ modelStats, loading, hasPrices }: ModelStatsCar
                         {arrow('tokens')}
                       </button>
                     </th>
+                    <th className={styles.sortableHeader} aria-sort={ariaSort('cacheHitRate')}>
+                      <button
+                        type="button"
+                        className={styles.sortHeaderButton}
+                        onClick={() => handleSort('cacheHitRate')}
+                        title={cacheHitHint}
+                      >
+                        {t('usage_stats.cache_hit_request_rate')}
+                        {arrow('cacheHitRate')}
+                      </button>
+                    </th>
                     <th className={styles.sortableHeader} aria-sort={ariaSort('averageLatencyMs')}>
                       <button
                         type="button"
@@ -184,6 +197,23 @@ export function ModelStatsCard({ modelStats, loading, hasPrices }: ModelStatsCar
                         </span>
                       </td>
                       <td>{formatCompactNumber(stat.tokens)}</td>
+                      <td title={cacheHitHint}>
+                        {stat.cacheHitRate === null ? (
+                          '--'
+                        ) : (
+                          <span
+                            className={
+                              stat.cacheHitRate >= 80
+                                ? styles.statSuccess
+                                : stat.cacheHitRate >= 50
+                                  ? styles.statNeutral
+                                  : styles.statFailure
+                            }
+                          >
+                            {stat.cacheHitRate.toFixed(1)}%
+                          </span>
+                        )}
+                      </td>
                       <td className={styles.durationCell}>
                         {formatDurationMs(stat.averageLatencyMs)}
                       </td>
