@@ -80,6 +80,133 @@
   font-size: 14px;
 }
 
+.autoRefreshPanel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-md;
+  padding: $spacing-md;
+  border: 1px solid var(--border-color);
+  border-radius: $radius-lg;
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--primary-color) 8%, var(--bg-primary)),
+      var(--bg-primary)
+    );
+
+  @include mobile {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+.autoRefreshText {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.autoRefreshTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.autoRefreshStatus {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.autoRefreshControls {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+
+  @include mobile {
+    justify-content: stretch;
+  }
+}
+
+.autoRefreshToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+
+  input {
+    accent-color: var(--primary-color);
+  }
+
+  @include mobile {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+}
+
+.autoRefreshSelect {
+  min-height: 38px;
+  padding: 0 34px 0 12px;
+  border: 1px solid var(--border-color);
+  border-radius: $radius-md;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+
+  &:focus {
+    outline: none;
+    border-color: var(--primary-color);
+  }
+
+  @include mobile {
+    flex: 1 1 auto;
+  }
+}
+
+.autoRefreshButton {
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid color-mix(in srgb, var(--primary-color) 28%, var(--border-color));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary-color) 12%, var(--bg-secondary));
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+
+  &:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--primary-color) 18%, var(--bg-secondary));
+    border-color: color-mix(in srgb, var(--primary-color) 40%, var(--border-color));
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.65;
+  }
+
+  @include mobile {
+    flex: 1 1 auto;
+  }
+}
+
 .pageSizeSelect {
   padding: 8px 12px;
   border: 1px solid var(--border-color);

@@ -4,6 +4,9 @@
 
 import { apiClient } from './client';
 import type {
+  AuthFileAccountSettings,
+  AuthFileAccountSettingsPatchRequest,
+  AuthFileAccountSettingsResponse,
   AuthFilesResponse,
   AuthFileReauthHistoryEntry,
   AuthFileStatusHistoryEntry,
@@ -425,6 +428,23 @@ const OAUTH_MODEL_ALIAS_ENDPOINT = '/oauth-model-alias';
 
 export const authFilesApi = {
   list: async () => dedupeAuthFilesResponse(await apiClient.get<AuthFilesResponse>('/auth-files')),
+
+  async getAccountSettings(name: string): Promise<AuthFileAccountSettings> {
+    const payload = await apiClient.get<AuthFileAccountSettingsResponse>(
+      `/auth-files/account-settings?name=${encodeURIComponent(name)}`
+    );
+    return (payload?.account_settings || payload) as AuthFileAccountSettings;
+  },
+
+  async updateAccountSettings(
+    request: AuthFileAccountSettingsPatchRequest
+  ): Promise<AuthFileAccountSettings> {
+    const payload = await apiClient.patch<AuthFileAccountSettingsResponse>(
+      '/auth-files/account-settings',
+      request
+    );
+    return (payload?.account_settings || payload) as AuthFileAccountSettings;
+  },
 
   setStatus: (name: string, disabled: boolean) =>
     apiClient.patch<AuthFileStatusResponse>('/auth-files/status', { name, disabled }),

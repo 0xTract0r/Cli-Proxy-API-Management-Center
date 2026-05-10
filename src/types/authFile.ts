@@ -55,6 +55,79 @@ export interface AuthFileStatusHistoryEntry {
   error?: string;
 }
 
+export type AuthFileHeaderMap = Record<string, string>;
+
+export interface AuthFileManagedHeaderProjection {
+  generated_at?: string;
+  source?: string;
+  source_url?: string;
+  checked_at?: string;
+  completeness?: string;
+  summary_headers?: AuthFileHeaderMap;
+  versioned_capabilities?: AuthFileHeaderMap;
+  stable_identity?: AuthFileHeaderMap;
+  runtime_fingerprint?: AuthFileHeaderMap;
+}
+
+export interface AuthFileManagedHeaderHistoryEntry {
+  recorded_at?: string;
+  policy_version?: string;
+  reason?: string;
+  source?: string;
+  source_url?: string;
+  changed_fields?: string[];
+  previous_versioned_capabilities?: AuthFileHeaderMap;
+  next_versioned_capabilities?: AuthFileHeaderMap;
+  previous?: Record<string, unknown>;
+  next?: Record<string, unknown>;
+}
+
+export interface AuthFileManagedHeaderState {
+  policy_version?: string;
+  current?: AuthFileManagedHeaderProjection | null;
+  history?: AuthFileManagedHeaderHistoryEntry[];
+}
+
+export interface AuthFileAccountSettingsActivation {
+  summary: string;
+  state?: string;
+  source?: string;
+  effective?: boolean;
+}
+
+export interface AuthFileAccountSettings {
+  proxy_url: string;
+  note: string;
+  disabled: boolean;
+  managed_headers: AuthFileHeaderMap;
+  extra_headers: AuthFileHeaderMap;
+  refresh_enabled: boolean;
+  transport_profile: string | Record<string, unknown> | null;
+  tls_profile: string | Record<string, unknown> | null;
+  runtime_profile?: Record<string, unknown> | null;
+  runtime_identity?: Record<string, unknown> | null;
+  managed_header_state?: AuthFileManagedHeaderState | null;
+  activation: AuthFileAccountSettingsActivation;
+  warnings: string[];
+}
+
+export interface AuthFileAccountSettingsResponse {
+  name?: string;
+  account_settings?: Partial<AuthFileAccountSettings> | null;
+  [key: string]: unknown;
+}
+
+export interface AuthFileAccountSettingsPatchRequest {
+  name: string;
+  proxy_url: string | null;
+  note: string | null;
+  disabled: boolean;
+  extra_headers: AuthFileHeaderMap;
+  refresh_enabled: boolean;
+  transport_profile: string | Record<string, unknown> | null;
+  tls_profile: string | Record<string, unknown> | null;
+}
+
 export interface AuthFileItem {
   name: string;
   type?: AuthFileType | string;
@@ -68,6 +141,11 @@ export interface AuthFileItem {
   statusMessage?: string;
   lastRefresh?: string | number;
   modified?: number;
+  note?: string;
+  proxy_url?: string;
+  headers?: AuthFileHeaderMap;
+  account_settings?: AuthFileAccountSettings;
+  accountSettings?: AuthFileAccountSettings;
   reauth_history?: AuthFileReauthHistoryEntry[];
   status_history?: AuthFileStatusHistoryEntry[];
   [key: string]: unknown;

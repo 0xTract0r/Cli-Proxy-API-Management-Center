@@ -8,6 +8,7 @@ interface ToggleSwitchProps {
   ariaLabel?: string;
   disabled?: boolean;
   labelPosition?: 'left' | 'right';
+  testId?: string;
 }
 
 export function ToggleSwitch({
@@ -16,7 +17,8 @@ export function ToggleSwitch({
   label,
   ariaLabel,
   disabled = false,
-  labelPosition = 'right'
+  labelPosition = 'right',
+  testId
 }: ToggleSwitchProps) {
   const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
     onChange(event.target.checked);
@@ -38,6 +40,7 @@ export function ToggleSwitch({
         onChange={handleChange}
         disabled={disabled}
         aria-label={ariaLabel}
+        data-testid={testId}
       />
       <span className={styles.track}>
         <span className={styles.thumb} />

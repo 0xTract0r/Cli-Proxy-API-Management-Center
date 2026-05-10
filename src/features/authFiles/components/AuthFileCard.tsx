@@ -79,13 +79,7 @@ const resolveQuotaType = (file: AuthFileItem): QuotaProviderType | null => {
 
 type StatusMarkerVariant = 'warning' | 'pending' | 'error';
 
-function StatusMarker({
-  variant,
-  tooltip,
-}: {
-  variant: StatusMarkerVariant;
-  tooltip: string;
-}) {
+function StatusMarker({ variant, tooltip }: { variant: StatusMarkerVariant; tooltip: string }) {
   const variantClass =
     variant === 'warning'
       ? styles.statusMarkerWarning
@@ -152,8 +146,7 @@ export function AuthFileCard(props: AuthFileCardProps) {
   const providerIcon = getAuthFileIcon(file.type || 'unknown', resolvedTheme);
   const oauthProvider = resolveAuthFileOAuthProvider(file);
   const canReauthenticate = Boolean(oauthProvider) && !isRuntimeOnly;
-  const reauthInProgress =
-    reauthState?.status === 'starting' || reauthState?.status === 'polling';
+  const reauthInProgress = reauthState?.status === 'starting' || reauthState?.status === 'polling';
   const supportsReauthCallback =
     reauthState?.status === 'polling' && supportsAuthFileReauthCallback(reauthState.provider);
 
@@ -328,15 +321,9 @@ export function AuthFileCard(props: AuthFileCardProps) {
             {canReauthenticate && (
               <div className={styles.cardMetaAction}>
                 <div className={styles.cardMetaActionList}>
-                  <AuthFilesReauthHistoryPanel
-                    file={file}
-                    reloadKey={reauthHistoryReloadKey}
-                  />
+                  <AuthFilesReauthHistoryPanel file={file} reloadKey={reauthHistoryReloadKey} />
                   {canViewStatusHistory && (
-                    <AuthFilesStatusHistoryPanel
-                      file={file}
-                      reloadKey={statusHistoryReloadKey}
-                    />
+                    <AuthFilesStatusHistoryPanel file={file} reloadKey={statusHistoryReloadKey} />
                   )}
                 </div>
               </div>
@@ -368,6 +355,17 @@ export function AuthFileCard(props: AuthFileCardProps) {
                 </Button>
               </div>
             </>
+          )}
+
+          {reauthState?.status === 'error' && reauthState.error && (
+            <div className={styles.reauthPersistentError} role="alert">
+              <span className={styles.reauthPersistentErrorTitle}>
+                {t('auth_files.reauth_failed_badge', {
+                  defaultValue: 'Re-authentication failed',
+                })}
+              </span>
+              <span className={styles.reauthPersistentErrorMessage}>{reauthState.error}</span>
+            </div>
           )}
 
           {supportsReauthCallback && (
@@ -520,6 +518,7 @@ export function AuthFileCard(props: AuthFileCardProps) {
                     size="sm"
                     onClick={() => onOpenPrefixProxyEditor(file)}
                     className={styles.iconButton}
+                    data-testid="auth-file-action-account-settings"
                     title={t('auth_files.prefix_proxy_button')}
                     disabled={disableControls}
                   >
