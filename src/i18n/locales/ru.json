@@ -500,6 +500,7 @@
     "test_message_result_latency": "Задержка: {{latency}} мс",
     "test_message_error_model_cooldown": "Выбранная модель находится в cooldown. Повторите позже или выберите другую модель.",
     "test_message_error_model_cooldown_with_duration": "Выбранная модель находится в cooldown. Повторите через {{duration}}.",
+    "test_message_error_claude_extra_usage": "Claude Sonnet 1M требует включённого Claude extra usage даже на тарифах Max. Включите extra usage для этой учётной записи или выберите модель Opus 1M.",
     "test_message_error_usage_limit": "Достигнут лимит использования учётной записи. Выберите другую учётную запись или дождитесь сброса квоты.",
     "test_message_error_usage_limit_with_duration": "Достигнут лимит использования учётной записи. Повторите через {{duration}}.",
     "test_message_error_unknown": "Тестовый запрос не выполнен. См. исходные сведения ниже.",

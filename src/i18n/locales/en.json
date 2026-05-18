@@ -501,6 +501,7 @@
     "test_message_result_latency": "Latency: {{latency}} ms",
     "test_message_error_model_cooldown": "The selected model is cooling down. Try again later or choose another model.",
     "test_message_error_model_cooldown_with_duration": "The selected model is cooling down. Try again in {{duration}}.",
+    "test_message_error_claude_extra_usage": "Claude Sonnet 1M requires Claude extra usage even on Max plans. Enable extra usage for this account or choose an Opus 1M model.",
     "test_message_error_usage_limit": "The account usage limit was reached. Try another account or wait for quota reset.",
     "test_message_error_usage_limit_with_duration": "The account usage limit was reached. Try again in {{duration}}.",
     "test_message_error_unknown": "The test request failed. See raw details below.",

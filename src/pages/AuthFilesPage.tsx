@@ -854,6 +854,19 @@ export function AuthFilesPage() {
         };
       }
 
+      if (
+        searchable.includes('long_context_extra_usage_required') ||
+        searchable.includes('extra usage is required for long context requests')
+      ) {
+        return {
+          message: t('auth_files.test_message_error_claude_extra_usage', {
+            defaultValue:
+              'Claude Sonnet 1M requires Claude extra usage even on Max plans. Enable extra usage for this account or choose an Opus 1M model.',
+          }),
+          raw,
+        };
+      }
+
       if (searchable.includes('usage_limit_reached')) {
         return {
           message: duration
