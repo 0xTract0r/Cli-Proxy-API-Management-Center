@@ -62,6 +62,10 @@ function getLocalizedErrorMessage(error: unknown, t: (key: string) => string): s
     return t('login.error_cors');
   }
 
+  if (message.includes('Invalid management API response')) {
+    return t('login.error_invalid_management_response');
+  }
+
   // 默认错误消息
   return t('login.error_invalid');
 }

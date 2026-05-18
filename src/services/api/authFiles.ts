@@ -24,6 +24,22 @@ type AuthFileStatusRefreshResponse = {
 type AuthFileStatusRefreshOptions = {
   trigger?: AuthFileStatusHistoryTrigger;
 };
+export type AuthFileTestMessageRequest = {
+  name: string;
+  model?: string;
+  message?: string;
+  max_tokens?: number;
+};
+export type AuthFileTestMessageResponse = {
+  status: 'ok';
+  name?: string;
+  auth_id?: string;
+  selected_auth_id?: string;
+  provider?: string;
+  model?: string;
+  latency_ms?: number;
+  output_preview?: string;
+};
 type AuthFileEntry = AuthFilesResponse['files'][number];
 type AuthFileBatchFailure = { name: string; error: string };
 type AuthFileBatchUploadResponse = {
@@ -460,6 +476,9 @@ export const authFilesApi = {
       file: normalizeSingleAuthFileEntry(payload?.file),
     };
   },
+
+  testMessage: (payload: AuthFileTestMessageRequest) =>
+    apiClient.post<AuthFileTestMessageResponse>('/auth-files/test-message', payload),
 
   async getAuthStatusHistory(name: string, limit = 20): Promise<AuthFileStatusHistoryEntry[]> {
     const params = new URLSearchParams();

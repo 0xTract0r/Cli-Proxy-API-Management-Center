@@ -6,12 +6,35 @@ import { apiClient } from './client';
 import type { Config } from '@/types';
 import { normalizeConfigResponse } from './transformers';
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === 'object' && !Array.isArray(value);
+
+const looksLikeManagementConfig = (value: Record<string, unknown>) => {
+  const knownKeys = [
+    'debug',
+    'api-keys',
+    'proxy-url',
+    'request-retry',
+    'quota-exceeded',
+    'codex-api-key',
+    'claude-api-key',
+    'gemini-api-key',
+    'openai-compatibility',
+    'routing',
+    'usage-statistics-enabled',
+  ];
+  return knownKeys.some((key) => Object.prototype.hasOwnProperty.call(value, key));
+};
+
 export const configApi = {
   /**
    * 获取配置（会进行字段规范化）
    */
   async getConfig(): Promise<Config> {
     const raw = await apiClient.get('/config');
+    if (!isRecord(raw) || !looksLikeManagementConfig(raw)) {
+      throw new Error('Invalid management API response. Check that the API address points to CPA backend, not the web UI server.');
+    }
     return normalizeConfigResponse(raw);
   },
 

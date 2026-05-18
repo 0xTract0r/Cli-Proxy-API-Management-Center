@@ -2950,6 +2950,119 @@
   }
 }
 
+.testMessageModal {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-md;
+}
+
+.testMessageFileName {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-md;
+  padding: $spacing-sm $spacing-md;
+  border: 1px solid var(--border-color);
+  border-radius: $radius-md;
+  background-color: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 13px;
+
+  code {
+    min-width: 0;
+    max-width: 70%;
+    overflow: hidden;
+    color: var(--text-primary);
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.testMessageResult {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-sm;
+  padding: $spacing-md;
+  border: 1px solid var(--border-color);
+  border-radius: $radius-md;
+  background-color: var(--bg-secondary);
+}
+
+.testMessageResultSuccess {
+  border-color: rgba($success-color, 0.45);
+}
+
+.testMessageResultError {
+  border-color: rgba($error-color, 0.45);
+}
+
+.testMessageResultHeader {
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.testMessagePreview {
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.testMessageMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: $spacing-xs;
+
+  span {
+    padding: 2px 8px;
+    border-radius: 999px;
+    background-color: var(--bg-tertiary);
+    color: var(--text-secondary);
+    font-size: 12px;
+  }
+}
+
+.testMessageRaw {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: $spacing-sm;
+  align-items: center;
+}
+
+.testMessageRawToggle {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--primary-color);
+  cursor: pointer;
+  font-size: 13px;
+  text-align: left;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.testMessageRawContent {
+  grid-column: 1 / -1;
+  max-width: 100%;
+  max-height: 220px;
+  margin: 0;
+  overflow: auto;
+  padding: $spacing-sm;
+  border: 1px solid var(--border-color);
+  border-radius: $radius-sm;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .hint {
   font-size: 12px;
   color: var(--text-tertiary);

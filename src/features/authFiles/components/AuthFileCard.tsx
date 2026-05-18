@@ -5,6 +5,7 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { SelectionCheckbox } from '@/components/ui/SelectionCheckbox';
 import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
 import {
+  IconBot,
   IconDownload,
   IconKey,
   IconModelCluster,
@@ -51,6 +52,7 @@ export type AuthFileCardProps = {
   deleting: string | null;
   statusUpdating: Record<string, boolean>;
   statusRefreshing: Record<string, boolean>;
+  messageTesting: Record<string, boolean>;
   reauthState?: AuthFileReauthState;
   reauthHistoryReloadKey?: number;
   statusHistoryReloadKey?: number;
@@ -68,6 +70,7 @@ export type AuthFileCardProps = {
   onSubmitReauthCallback: (fileName: string) => void;
   onToggleStatus: (file: AuthFileItem, enabled: boolean) => void;
   onRefreshStatus: (file: AuthFileItem) => void;
+  onTestMessage: (file: AuthFileItem) => void;
   onToggleSelect: (name: string) => void;
 };
 
@@ -117,6 +120,7 @@ export function AuthFileCard(props: AuthFileCardProps) {
     deleting,
     statusUpdating,
     statusRefreshing,
+    messageTesting,
     reauthState,
     reauthHistoryReloadKey = 0,
     statusHistoryReloadKey = 0,
@@ -134,6 +138,7 @@ export function AuthFileCard(props: AuthFileCardProps) {
     onSubmitReauthCallback,
     onToggleStatus,
     onRefreshStatus,
+    onTestMessage,
     onToggleSelect,
   } = props;
 
@@ -141,6 +146,7 @@ export function AuthFileCard(props: AuthFileCardProps) {
   const isRuntimeOnly = isRuntimeOnlyAuthFile(file);
   const isAistudio = (file.type || '').toLowerCase() === 'aistudio';
   const showModelsButton = !isRuntimeOnly || isAistudio;
+  const canTestMessage = !isRuntimeOnly && !file.disabled;
   const typeColor = getTypeColor(file.type || 'unknown', resolvedTheme);
   const typeLabel = getTypeLabel(t, file.type || 'unknown');
   const providerIcon = getAuthFileIcon(file.type || 'unknown', resolvedTheme);
@@ -211,6 +217,9 @@ export function AuthFileCard(props: AuthFileCardProps) {
   const modelsButtonTitle = t('auth_files.models_button', { defaultValue: '模型' });
   const refreshStatusButtonTitle = t('auth_files.status_refresh_button', {
     defaultValue: 'Refresh status',
+  });
+  const testMessageButtonTitle = t('auth_files.test_message_button', {
+    defaultValue: 'Test message',
   });
   const reauthButtonTitle = reauthInProgress
     ? t('auth_files.reauth_waiting', {
@@ -472,6 +481,34 @@ export function AuthFileCard(props: AuthFileCardProps) {
                     </span>
                   </div>
                 )}
+                {canTestMessage && (
+                  <div className={styles.primaryActionSlot}>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => onTestMessage(file)}
+                      className={`${styles.iconButton} ${styles.compactPrimaryActionButton}`}
+                      title={testMessageButtonTitle}
+                      aria-label={testMessageButtonTitle}
+                      data-testid="auth-file-action-test-message"
+                      disabled={
+                        disableControls ||
+                        reauthInProgress ||
+                        statusRefreshing[file.name] === true ||
+                        messageTesting[file.name] === true
+                      }
+                    >
+                      {messageTesting[file.name] === true ? (
+                        <LoadingSpinner size={16} />
+                      ) : (
+                        <IconBot className={styles.actionIcon} size={16} />
+                      )}
+                    </Button>
+                    <span className={styles.primaryActionCaption} aria-hidden="true">
+                      {testMessageButtonTitle}
+                    </span>
+                  </div>
+                )}
                 {canReauthenticate && (
                   <div className={styles.primaryActionSlot}>
                     <Button
@@ -495,6 +532,7 @@ export function AuthFileCard(props: AuthFileCardProps) {
               <div className={styles.cardPrimaryActionsHint} aria-hidden="true">
                 {[
                   modelsButtonTitle,
+                  canTestMessage ? testMessageButtonTitle : null,
                   canRefreshStatus ? refreshStatusButtonTitle : null,
                   canReauthenticate ? reauthButtonTitle : null,
                 ]

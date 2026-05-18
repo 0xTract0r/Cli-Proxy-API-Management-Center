@@ -15,10 +15,12 @@ import { animate } from 'motion/mini';
 import type { AnimationPlaybackControlsWithThen } from 'motion-dom';
 import { useInterval } from '@/hooks/useInterval';
 import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
+import { authFilesApi } from '@/services/api';
 import { usePageTransitionLayer } from '@/components/common/PageTransitionLayer';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { Modal } from '@/components/ui/Modal';
 import { Select } from '@/components/ui/Select';
 import { IconFilterAll } from '@/components/ui/icons';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -64,6 +66,7 @@ import {
   type AuthFilesSortMode,
 } from '@/features/authFiles/uiState';
 import { useAuthStore, useNotificationStore, useThemeStore } from '@/stores';
+import type { AuthFileItem } from '@/types';
 import styles from './AuthFilesPage.module.scss';
 
 const easePower3Out = (progress: number) => 1 - (1 - progress) ** 4;
@@ -74,6 +77,24 @@ const DEFAULT_REGULAR_PAGE_SIZE = 9;
 const DEFAULT_COMPACT_PAGE_SIZE = 12;
 const WARNING_AUTO_REFRESH_INTERVAL_MS = 240_000;
 const WARNING_AUTO_REFRESH_REENTRY_COOLDOWN_MS = 15_000;
+const DEFAULT_TEST_MESSAGE = 'Reply with OK only.';
+const DEFAULT_TEST_MAX_TOKENS = 16;
+const TEST_MESSAGE_CUSTOM_MODEL_VALUE = '__custom_model__';
+
+type TestMessageResultState =
+  | {
+      status: 'success';
+      title: string;
+      outputPreview: string;
+      meta: string[];
+      raw: string;
+    }
+  | {
+      status: 'error';
+      title: string;
+      message: string;
+      raw: string;
+    };
 
 const escapeWildcardSearchSegment = (value: string) =>
   value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -82,6 +103,132 @@ const buildWildcardSearch = (value: string): RegExp | null => {
   if (!value.includes('*')) return null;
   const pattern = value.split('*').map(escapeWildcardSearchSegment).join('.*');
   return new RegExp(pattern, 'i');
+};
+
+const getErrorMessage = (err: unknown): string => {
+  if (err instanceof Error) return err.message;
+  if (err && typeof err === 'object') {
+    const payload = err as Record<string, unknown>;
+    if (typeof payload.message === 'string') return payload.message;
+    if (typeof payload.error === 'string') return payload.error;
+  }
+  return '';
+};
+
+const asRecord = (value: unknown): Record<string, unknown> | null =>
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+
+const parseJsonIfPossible = (value: unknown): unknown => {
+  if (typeof value !== 'string') return value;
+  const trimmed = value.trim();
+  if (!trimmed || (!trimmed.startsWith('{') && !trimmed.startsWith('['))) return value;
+  try {
+    return JSON.parse(trimmed) as unknown;
+  } catch {
+    return value;
+  }
+};
+
+const toPrettyJson = (value: unknown): string => {
+  if (value === undefined || value === null) return '';
+  if (typeof value === 'string') return value;
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+};
+
+const extractFirstString = (value: unknown, keys: Set<string>, depth = 0): string => {
+  if (depth > 5 || value === null || value === undefined) return '';
+  const parsed = parseJsonIfPossible(value);
+  if (typeof parsed === 'string') return '';
+  if (Array.isArray(parsed)) {
+    for (const entry of parsed) {
+      const found = extractFirstString(entry, keys, depth + 1);
+      if (found) return found;
+    }
+    return '';
+  }
+  const record = asRecord(parsed);
+  if (!record) return '';
+
+  for (const [key, entry] of Object.entries(record)) {
+    if (keys.has(key.toLowerCase()) && typeof entry === 'string' && entry.trim()) {
+      return entry.trim();
+    }
+  }
+  for (const entry of Object.values(record)) {
+    const found = extractFirstString(entry, keys, depth + 1);
+    if (found) return found;
+  }
+  return '';
+};
+
+const extractFirstNumber = (value: unknown, keys: Set<string>, depth = 0): number | null => {
+  if (depth > 5 || value === null || value === undefined) return null;
+  const parsed = parseJsonIfPossible(value);
+  if (Array.isArray(parsed)) {
+    for (const entry of parsed) {
+      const found = extractFirstNumber(entry, keys, depth + 1);
+      if (found !== null) return found;
+    }
+    return null;
+  }
+  const record = asRecord(parsed);
+  if (!record) return null;
+
+  for (const [key, entry] of Object.entries(record)) {
+    if (!keys.has(key.toLowerCase())) continue;
+    const numeric = typeof entry === 'number' ? entry : Number(entry);
+    if (Number.isFinite(numeric)) return numeric;
+  }
+  for (const entry of Object.values(record)) {
+    const found = extractFirstNumber(entry, keys, depth + 1);
+    if (found !== null) return found;
+  }
+  return null;
+};
+
+const normalizeModelId = (value: unknown): string => {
+  if (typeof value === 'string') return value.trim();
+  const record = asRecord(value);
+  if (!record) return '';
+  const raw = record.id ?? record.model ?? record.name ?? record.display_name;
+  return typeof raw === 'string' ? raw.trim() : '';
+};
+
+const resolveModelOptions = (
+  file: AuthFileItem,
+  accountModels: Record<string, { id: string }[]> = {}
+): string[] => {
+  const rawFileModels = file.models ?? file['models'];
+  const candidates = [
+    ...(Array.isArray(rawFileModels) ? rawFileModels.map(normalizeModelId) : []),
+    ...(accountModels[file.name] ?? []).map(normalizeModelId),
+  ];
+  const seen = new Set<string>();
+  return candidates.reduce<string[]>((result, entry) => {
+    const model = entry.trim();
+    if (!model || seen.has(model)) return result;
+    seen.add(model);
+    result.push(model);
+    return result;
+  }, []);
+};
+
+const getErrorPayload = (err: unknown): unknown => {
+  const record = asRecord(err);
+  return parseJsonIfPossible(record?.details ?? record?.data ?? getErrorMessage(err) ?? err);
+};
+
+const formatDuration = (seconds: number): string => {
+  if (!Number.isFinite(seconds) || seconds <= 0) return '';
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
+  return `${Math.round(seconds / 3600)}h`;
 };
 
 export function AuthFilesPage() {
@@ -109,8 +256,22 @@ export function AuthFilesPage() {
   const [uiStateHydrated, setUiStateHydrated] = useState(false);
   const [reauthHistoryReloadKey, setReauthHistoryReloadKey] = useState(0);
   const [statusHistoryReloadKey, setStatusHistoryReloadKey] = useState(0);
+  const [messageTesting, setMessageTesting] = useState<Record<string, boolean>>({});
+  const [testMessageFile, setTestMessageFile] = useState<AuthFileItem | null>(null);
+  const [testMessageModel, setTestMessageModel] = useState('');
+  const [testMessageText, setTestMessageText] = useState(DEFAULT_TEST_MESSAGE);
+  const [testMessageMaxTokens, setTestMessageMaxTokens] = useState(String(DEFAULT_TEST_MAX_TOKENS));
+  const [testMessageResult, setTestMessageResult] = useState<TestMessageResultState | null>(null);
+  const [testMessageRawExpanded, setTestMessageRawExpanded] = useState(false);
+  const [testMessageAccountModels, setTestMessageAccountModels] = useState<
+    Record<string, { id: string }[]>
+  >({});
+  const [testMessageModelsLoading, setTestMessageModelsLoading] = useState(false);
+  const [testMessageModelsError, setTestMessageModelsError] = useState('');
   const floatingBatchActionsRef = useRef<HTMLDivElement>(null);
   const batchActionAnimationRef = useRef<AnimationPlaybackControlsWithThen | null>(null);
+  const testMessageModelsCacheRef = useRef<Map<string, { id: string }[]>>(new Map());
+  const testMessageModelsRequestRef = useRef(0);
   const previousSelectionCountRef = useRef(0);
   const selectionCountRef = useRef(0);
   const warningAutoRefreshAtRef = useRef<Record<string, number>>({});
@@ -560,6 +721,49 @@ export function AuthFilesPage() {
     () => selectedNames.some((name) => statusUpdating[name] === true),
     [selectedNames, statusUpdating]
   );
+  const testMessageModelOptions = useMemo(
+    () =>
+      testMessageFile
+        ? resolveModelOptions(testMessageFile, testMessageAccountModels)
+        : [],
+    [testMessageAccountModels, testMessageFile]
+  );
+  const testMessageModelSelectOptions = useMemo(
+    () => [
+      ...testMessageModelOptions.map((model) => ({ value: model, label: model })),
+      {
+        value: TEST_MESSAGE_CUSTOM_MODEL_VALUE,
+        label: t('auth_files.test_message_model_custom_option', {
+          defaultValue: 'Enter model ID manually',
+        }),
+      },
+    ],
+    [t, testMessageModelOptions]
+  );
+  const testMessageModelFromList = testMessageModelOptions.includes(testMessageModel.trim());
+  const testMessageSelectValue =
+    testMessageModelFromList && testMessageModel.trim()
+      ? testMessageModel.trim()
+      : TEST_MESSAGE_CUSTOM_MODEL_VALUE;
+  const testMessageManualModelVisible =
+    testMessageModelOptions.length === 0 || testMessageSelectValue === TEST_MESSAGE_CUSTOM_MODEL_VALUE;
+  const parsedTestMessageMaxTokens = useMemo(() => {
+    const value = Number(testMessageMaxTokens);
+    if (!Number.isFinite(value)) return null;
+    const rounded = Math.round(value);
+    return rounded > 0 && rounded <= 256 ? rounded : null;
+  }, [testMessageMaxTokens]);
+  const testMessageFileName = String(testMessageFile?.name ?? '').trim();
+  const testMessageSubmitting = testMessageFileName
+    ? messageTesting[testMessageFileName] === true
+    : false;
+  const testMessageSubmitDisabled =
+    disableControls ||
+    testMessageSubmitting ||
+    !testMessageFileName ||
+    !testMessageModel.trim() ||
+    !testMessageText.trim() ||
+    parsedTestMessageMaxTokens === null;
   const batchStatusButtonsDisabled =
     disableControls ||
     selectedNames.length === 0 ||
@@ -608,6 +812,206 @@ export function AuthFilesPage() {
     },
     [filter, navigate]
   );
+
+  const describeTestMessageError = useCallback(
+    (err: unknown) => {
+      const payload = getErrorPayload(err);
+      const fallback = getErrorMessage(err);
+      const raw = toPrettyJson(payload) || fallback;
+      const codeFromPayload = extractFirstString(
+        payload,
+        new Set(['code', 'type', 'error_code', 'error_type'])
+      );
+      const messageFromPayload = extractFirstString(
+        payload,
+        new Set(['message', 'detail', 'reason', 'error_description'])
+      );
+      const searchable = `${codeFromPayload} ${messageFromPayload} ${fallback} ${raw}`.toLowerCase();
+      const resetSeconds = extractFirstNumber(
+        payload,
+        new Set([
+          'reset_seconds',
+          'reset_in_seconds',
+          'resets_in_seconds',
+          'retry_after',
+          'retry_after_seconds',
+          'cooldown_seconds',
+        ])
+      );
+      const duration = resetSeconds !== null ? formatDuration(resetSeconds) : '';
+
+      if (searchable.includes('model_cooldown')) {
+        return {
+          message: duration
+            ? t('auth_files.test_message_error_model_cooldown_with_duration', {
+                duration,
+                defaultValue: `The selected model is cooling down. Try again in ${duration}.`,
+              })
+            : t('auth_files.test_message_error_model_cooldown', {
+                defaultValue: 'The selected model is cooling down. Try again later or choose another model.',
+              }),
+          raw,
+        };
+      }
+
+      if (searchable.includes('usage_limit_reached')) {
+        return {
+          message: duration
+            ? t('auth_files.test_message_error_usage_limit_with_duration', {
+                duration,
+                defaultValue: `The account usage limit was reached. Try again in ${duration}.`,
+              })
+            : t('auth_files.test_message_error_usage_limit', {
+                defaultValue: 'The account usage limit was reached. Try another account or wait for quota reset.',
+              }),
+          raw,
+        };
+      }
+
+      return {
+        message:
+          messageFromPayload ||
+          fallback ||
+          t('auth_files.test_message_error_unknown', {
+            defaultValue: 'The test request failed. See raw details below.',
+          }),
+        raw,
+      };
+    },
+    [t]
+  );
+
+  const handleTestMessage = useCallback(
+    (file: AuthFileItem) => {
+      const accountName = String(file.name ?? '').trim();
+      const cachedModels = testMessageModelsCacheRef.current.get(accountName);
+      const initialAccountModels = cachedModels
+        ? { ...testMessageAccountModels, [accountName]: cachedModels }
+        : testMessageAccountModels;
+      const models = resolveModelOptions(file, initialAccountModels);
+      setTestMessageFile(file);
+      setTestMessageModel(models[0] ?? '');
+      setTestMessageText(DEFAULT_TEST_MESSAGE);
+      setTestMessageMaxTokens(String(DEFAULT_TEST_MAX_TOKENS));
+      setTestMessageResult(null);
+      setTestMessageRawExpanded(false);
+      setTestMessageModelsError('');
+
+      if (!accountName) {
+        setTestMessageModelsLoading(false);
+        return;
+      }
+      if (cachedModels) {
+        setTestMessageAccountModels((prev) => ({ ...prev, [accountName]: cachedModels }));
+        setTestMessageModelsLoading(false);
+        return;
+      }
+
+      const requestID = testMessageModelsRequestRef.current + 1;
+      testMessageModelsRequestRef.current = requestID;
+      setTestMessageModelsLoading(true);
+      void authFilesApi
+        .getModelsForAuthFile(accountName)
+        .then((accountModels) => {
+          if (testMessageModelsRequestRef.current !== requestID) return;
+          testMessageModelsCacheRef.current.set(accountName, accountModels);
+          const nextAccountModels = { [accountName]: accountModels };
+          setTestMessageAccountModels((prev) => ({ ...prev, ...nextAccountModels }));
+          const resolved = resolveModelOptions(file, nextAccountModels);
+          if (resolved.length > 0) {
+            setTestMessageModel((current) =>
+              current.trim() && resolved.includes(current.trim()) ? current : resolved[0]
+            );
+          }
+        })
+        .catch((err: unknown) => {
+          if (testMessageModelsRequestRef.current !== requestID) return;
+          setTestMessageModelsError(getErrorMessage(err));
+        })
+        .finally(() => {
+          if (testMessageModelsRequestRef.current === requestID) {
+            setTestMessageModelsLoading(false);
+          }
+        });
+    },
+    [testMessageAccountModels]
+  );
+
+  const closeTestMessageModal = useCallback(() => {
+    if (testMessageSubmitting) return;
+    testMessageModelsRequestRef.current += 1;
+    setTestMessageFile(null);
+    setTestMessageResult(null);
+    setTestMessageRawExpanded(false);
+    setTestMessageModelsLoading(false);
+    setTestMessageModelsError('');
+  }, [testMessageSubmitting]);
+
+  const submitTestMessage = useCallback(async () => {
+    const name = testMessageFileName;
+    const model = testMessageModel.trim();
+    const message = testMessageText.trim();
+    if (!name || !model || !message || parsedTestMessageMaxTokens === null) return;
+
+    setMessageTesting((prev) => ({ ...prev, [name]: true }));
+    setTestMessageResult(null);
+    setTestMessageRawExpanded(false);
+    try {
+      const result = await authFilesApi.testMessage({
+        name,
+        model,
+        message,
+        max_tokens: parsedTestMessageMaxTokens,
+      });
+      const preview = String(result.output_preview ?? '').trim();
+      const meta = [
+        result.provider
+          ? t('auth_files.test_message_result_provider', {
+              provider: result.provider,
+              defaultValue: `Provider: ${result.provider}`,
+            })
+          : '',
+        result.model
+          ? t('auth_files.test_message_result_model', {
+              model: result.model,
+              defaultValue: `Model: ${result.model}`,
+            })
+          : '',
+        typeof result.latency_ms === 'number'
+          ? t('auth_files.test_message_result_latency', {
+              latency: Math.round(result.latency_ms),
+              defaultValue: `Latency: ${Math.round(result.latency_ms)} ms`,
+            })
+          : '',
+      ].filter(Boolean);
+      setTestMessageResult({
+        status: 'success',
+        title: t('auth_files.test_message_success', { name }),
+        outputPreview: preview,
+        meta,
+        raw: toPrettyJson(result),
+      });
+      await loadFiles();
+    } catch (err) {
+      const detail = describeTestMessageError(err);
+      setTestMessageResult({
+        status: 'error',
+        title: t('auth_files.test_message_failed', { name }),
+        message: detail.message,
+        raw: detail.raw,
+      });
+    } finally {
+      setMessageTesting((prev) => ({ ...prev, [name]: false }));
+    }
+  }, [
+    describeTestMessageError,
+    loadFiles,
+    parsedTestMessageMaxTokens,
+    t,
+    testMessageFileName,
+    testMessageModel,
+    testMessageText,
+  ]);
 
   useLayoutEffect(() => {
     if (typeof window === 'undefined') return;
@@ -921,6 +1325,7 @@ export function AuthFilesPage() {
                       deleting={deleting}
                       statusUpdating={statusUpdating}
                       statusRefreshing={statusRefreshing}
+                      messageTesting={messageTesting}
                       quotaFilterType={quotaFilterType}
                       reauthHistoryReloadKey={reauthHistoryReloadKey}
                       statusHistoryReloadKey={statusHistoryReloadKey}
@@ -938,6 +1343,7 @@ export function AuthFilesPage() {
                       onSubmitReauthCallback={submitReauthCallback}
                       onToggleStatus={handleStatusToggle}
                       onRefreshStatus={handleStatusRefresh}
+                      onTestMessage={handleTestMessage}
                       onToggleSelect={toggleSelect}
                     />
                   ))}
@@ -1013,6 +1419,187 @@ export function AuthFilesPage() {
         onClose={closeModelsModal}
         onCopyText={copyTextWithNotification}
       />
+
+      <Modal
+        open={Boolean(testMessageFile)}
+        onClose={closeTestMessageModal}
+        closeDisabled={testMessageSubmitting}
+        width={640}
+        title={t('auth_files.test_message_modal_title', {
+          name: testMessageFileName,
+          defaultValue: `Test message - ${testMessageFileName}`,
+        })}
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={closeTestMessageModal}
+              disabled={testMessageSubmitting}
+            >
+              {t('common.close')}
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => void submitTestMessage()}
+              loading={testMessageSubmitting}
+              disabled={testMessageSubmitDisabled}
+              data-testid="auth-file-test-message-submit"
+            >
+              {t('auth_files.test_message_submit', { defaultValue: 'Send test message' })}
+            </Button>
+          </>
+        }
+      >
+        <div className={styles.testMessageModal}>
+          <div className={styles.testMessageFileName}>
+            <span>{t('auth_files.test_message_account_label', { defaultValue: 'Account file' })}</span>
+            <code title={testMessageFileName}>{testMessageFileName || '-'}</code>
+          </div>
+
+          <div className={styles.formGroup}>
+            <label id="auth-file-test-message-model-label">
+              {t('auth_files.test_message_model_label', { defaultValue: 'Model' })}
+            </label>
+            <div data-testid="auth-file-test-message-model-select">
+              <Select
+                value={testMessageSelectValue}
+                options={testMessageModelSelectOptions}
+                onChange={(value) => {
+                  setTestMessageModel(value === TEST_MESSAGE_CUSTOM_MODEL_VALUE ? '' : value);
+                }}
+                disabled={testMessageSubmitting || testMessageModelsLoading}
+                ariaLabelledBy="auth-file-test-message-model-label"
+              />
+            </div>
+            <div className="hint">
+              {testMessageModelsLoading
+                ? t('auth_files.test_message_model_loading', {
+                    defaultValue: 'Loading this account model list...',
+                  })
+                : testMessageModelsError
+                  ? t('auth_files.test_message_model_load_failed', {
+                      defaultValue: 'Model list could not be loaded. Type a model id manually.',
+                    })
+                  : testMessageModelOptions.length > 0
+                    ? t('auth_files.test_message_model_hint', {
+                        defaultValue: 'Pick from this account model list or enter a model id manually.',
+                      })
+                    : t('auth_files.test_message_model_hint_empty', {
+                        defaultValue: 'No model list was reported. Enter a model id manually.',
+                      })}
+            </div>
+          </div>
+
+          {testMessageManualModelVisible && (
+            <Input
+              label={t('auth_files.test_message_model_manual_label', {
+                defaultValue: 'Manual model ID',
+              })}
+              value={testMessageModel}
+              onChange={(event) => setTestMessageModel(event.currentTarget.value)}
+              disabled={testMessageSubmitting}
+              data-testid="auth-file-test-message-model"
+              placeholder={t('auth_files.test_message_model_placeholder', {
+                defaultValue: 'Enter a model id',
+              })}
+            />
+          )}
+
+          <Input
+            label={t('auth_files.test_message_max_tokens_label', {
+              defaultValue: 'Max tokens',
+            })}
+            type="number"
+            min={1}
+            max={256}
+            step={1}
+            value={testMessageMaxTokens}
+            onChange={(event) => setTestMessageMaxTokens(event.currentTarget.value)}
+            disabled={testMessageSubmitting}
+            error={
+              parsedTestMessageMaxTokens === null
+                ? t('auth_files.test_message_max_tokens_error', {
+                    defaultValue: 'Enter a positive integer from 1 to 256.',
+                  })
+                : undefined
+            }
+          />
+
+          <div className={styles.formGroup}>
+            <label htmlFor="auth-file-test-message-text">
+              {t('auth_files.test_message_text_label', { defaultValue: 'Message' })}
+            </label>
+            <textarea
+              id="auth-file-test-message-text"
+              className={styles.textarea}
+              rows={5}
+              value={testMessageText}
+              onChange={(event) => setTestMessageText(event.currentTarget.value)}
+              disabled={testMessageSubmitting}
+              placeholder={DEFAULT_TEST_MESSAGE}
+            />
+          </div>
+
+          {testMessageResult && (
+            <div
+              className={`${styles.testMessageResult} ${
+                testMessageResult.status === 'success'
+                  ? styles.testMessageResultSuccess
+                  : styles.testMessageResultError
+              }`}
+              data-testid={`auth-file-test-message-result-${testMessageResult.status}`}
+            >
+              <div className={styles.testMessageResultHeader}>
+                <strong>{testMessageResult.title}</strong>
+              </div>
+              {testMessageResult.status === 'success' ? (
+                <>
+                  <div className={styles.testMessagePreview}>
+                    {testMessageResult.outputPreview ||
+                      t('auth_files.test_message_empty_preview', {
+                        defaultValue: 'The request succeeded with no output preview.',
+                      })}
+                  </div>
+                  {testMessageResult.meta.length > 0 && (
+                    <div className={styles.testMessageMeta}>
+                      {testMessageResult.meta.map((entry) => (
+                        <span key={entry}>{entry}</span>
+                      ))}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className={styles.testMessagePreview}>{testMessageResult.message}</div>
+              )}
+              {testMessageResult.raw && (
+                <div className={styles.testMessageRaw}>
+                  <button
+                    type="button"
+                    className={styles.testMessageRawToggle}
+                    onClick={() => setTestMessageRawExpanded((value) => !value)}
+                  >
+                    {testMessageRawExpanded
+                      ? t('auth_files.test_message_raw_hide', { defaultValue: 'Hide raw details' })
+                      : t('auth_files.test_message_raw_show', { defaultValue: 'Show raw details' })}
+                  </button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => void copyTextWithNotification(testMessageResult.raw)}
+                  >
+                    {t('common.copy', { defaultValue: 'Copy' })}
+                  </Button>
+                  {testMessageRawExpanded && (
+                    <pre className={styles.testMessageRawContent}>
+                      <code>{testMessageResult.raw}</code>
+                    </pre>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </Modal>
 
       <AuthFilesPrefixProxyEditorModal
         disableControls={disableControls}

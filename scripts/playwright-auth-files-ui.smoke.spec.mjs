@@ -503,7 +503,15 @@ for (const viewport of viewports) {
   }, testInfo) => {
     fs.mkdirSync(smokeOutDir, { recursive: true });
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
-    await page.context().tracing.start({ screenshots: true, snapshots: true });
+    let tracingStarted = false;
+    let traceStartError = null;
+    let traceStopError = null;
+    try {
+      await page.context().tracing.start({ screenshots: true, snapshots: true });
+      tracingStarted = true;
+    } catch (error) {
+      traceStartError = error instanceof Error ? error.message : String(error);
+    }
 
     const consoleErrors = [];
     const pageErrors = [];
@@ -624,14 +632,26 @@ for (const viewport of viewports) {
             requestFailures,
             accountSettingsUi,
             status: testInfo.status,
+            traceStartError,
+            traceStopError,
           },
           null,
           2
         )
       );
-      await page.context().tracing.stop({
-        path: path.join(smokeOutDir, `trace-${viewport.name}.zip`),
-      });
+      if (tracingStarted) {
+        try {
+          await page.context().tracing.stop({
+            path: path.join(smokeOutDir, `trace-${viewport.name}.zip`),
+          });
+        } catch (error) {
+          traceStopError = error instanceof Error ? error.message : String(error);
+          fs.writeFileSync(
+            path.join(smokeOutDir, `trace-${viewport.name}.error.txt`),
+            traceStopError
+          );
+        }
+      }
     }
   });
 }
