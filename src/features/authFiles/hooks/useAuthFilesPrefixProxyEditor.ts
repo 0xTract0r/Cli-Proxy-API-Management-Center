@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { authFilesApi } from '@/services/api';
 import type {
   AuthFileAccountSettings,
+  AuthFileClientVersionObservation,
   AuthFileAccountSettingsPatchRequest,
   AuthFileManagedHeaderState,
   AuthFileItem,
@@ -28,6 +29,7 @@ export type PrefixProxyEditorFieldValue = string | boolean;
 
 export type PrefixProxyEditorState = {
   fileName: string;
+  provider: string;
   fileInfoText: string;
   loading: boolean;
   saving: boolean;
@@ -38,6 +40,7 @@ export type PrefixProxyEditorState = {
   refreshEnabled: boolean;
   managedHeaders: AuthFileHeaders;
   managedHeaderState: AuthFileManagedHeaderState | null;
+  clientVersionObservations: AuthFileClientVersionObservation[];
   runtimeProfileText: string;
   runtimeIdentityText: string;
   warnings: string[];
@@ -111,6 +114,19 @@ const stringifyProfile = (value: string | Record<string, unknown> | null | undef
   if (!value) return '';
   if (typeof value === 'string') return value;
   return JSON.stringify(value, null, 2);
+};
+
+const resolveAuthFileProvider = (
+  file: AuthFileItem,
+  settings: Partial<AuthFileAccountSettings> | null | undefined
+): string => {
+  const runtimeProvider = settings?.runtime_profile?.provider;
+  const rawProvider =
+    (typeof runtimeProvider === 'string' && runtimeProvider) ||
+    (typeof file.provider === 'string' && file.provider) ||
+    (typeof file.type === 'string' && file.type) ||
+    '';
+  return rawProvider.trim().toLowerCase();
 };
 
 const parseProfileText = (
@@ -215,6 +231,7 @@ export function useAuthFilesPrefixProxyEditor(
     const normalizedRequest = normalizeSettings(name, settings);
     setPrefixProxyEditor({
       fileName: name,
+      provider: resolveAuthFileProvider(file, settings),
       fileInfoText: JSON.stringify(file, null, 2),
       loading: false,
       saving: false,
@@ -225,6 +242,9 @@ export function useAuthFilesPrefixProxyEditor(
       refreshEnabled: settings?.refresh_enabled !== false,
       managedHeaders: settings?.managed_headers || {},
       managedHeaderState: settings?.managed_header_state || null,
+      clientVersionObservations: Array.isArray(settings?.client_version_observations)
+        ? settings.client_version_observations
+        : [],
       runtimeProfileText: stringifyProfile(settings?.runtime_profile),
       runtimeIdentityText: stringifyProfile(settings?.runtime_identity),
       warnings: Array.isArray(settings?.warnings) ? settings.warnings : [],
@@ -253,6 +273,7 @@ export function useAuthFilesPrefixProxyEditor(
     const inlineSettings = file.account_settings || file.accountSettings || null;
     setPrefixProxyEditor({
       fileName: name,
+      provider: resolveAuthFileProvider(file, inlineSettings),
       fileInfoText: JSON.stringify(file, null, 2),
       loading: true,
       saving: false,
@@ -263,6 +284,9 @@ export function useAuthFilesPrefixProxyEditor(
       refreshEnabled: inlineSettings?.refresh_enabled !== false,
       managedHeaders: inlineSettings?.managed_headers || {},
       managedHeaderState: inlineSettings?.managed_header_state || null,
+      clientVersionObservations: Array.isArray(inlineSettings?.client_version_observations)
+        ? inlineSettings.client_version_observations
+        : [],
       runtimeProfileText: stringifyProfile(inlineSettings?.runtime_profile),
       runtimeIdentityText: stringifyProfile(inlineSettings?.runtime_identity),
       warnings: Array.isArray(inlineSettings?.warnings) ? inlineSettings.warnings : [],

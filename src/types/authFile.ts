@@ -88,6 +88,19 @@ export interface AuthFileManagedHeaderState {
   history?: AuthFileManagedHeaderHistoryEntry[];
 }
 
+export interface AuthFileClientVersionObservation {
+  user_agent?: string;
+  version?: string;
+  package_version?: string;
+  runtime_version?: string;
+  os?: string;
+  arch?: string;
+  source?: string | Record<string, unknown>;
+  first_seen_at?: string;
+  last_seen_at?: string;
+  request_count?: number;
+}
+
 export interface AuthFileAccountSettingsActivation {
   summary: string;
   state?: string;
@@ -107,6 +120,7 @@ export interface AuthFileAccountSettings {
   runtime_profile?: Record<string, unknown> | null;
   runtime_identity?: Record<string, unknown> | null;
   managed_header_state?: AuthFileManagedHeaderState | null;
+  client_version_observations?: AuthFileClientVersionObservation[];
   activation: AuthFileAccountSettingsActivation;
   warnings: string[];
 }

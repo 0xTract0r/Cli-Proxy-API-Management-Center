@@ -1990,6 +1990,18 @@
   text-overflow: ellipsis;
 }
 
+.clientObservationSubtext {
+  display: block;
+  margin-top: 3px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .managedHeaderEmpty {
   padding: 10px 12px;
   border-radius: $radius-sm;

@@ -16,7 +16,10 @@ import type {
   PrefixProxyEditorFieldValue,
   PrefixProxyEditorState,
 } from '@/features/authFiles/hooks/useAuthFilesPrefixProxyEditor';
-import type { AuthFileManagedHeaderHistoryEntry } from '@/types/authFile';
+import type {
+  AuthFileClientVersionObservation,
+  AuthFileManagedHeaderHistoryEntry,
+} from '@/types/authFile';
 import { useThemeStore } from '@/stores';
 import styles from '@/pages/AuthFilesPage.module.scss';
 
@@ -199,6 +202,215 @@ function ManagedHeadersPanel({
         {t('auth_files.account_settings_managed_headers_hint', {
           defaultValue:
             'Read-only. These are the headers core will merge into the runtime request. Use Extra headers only for user-owned additions.',
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ClaudeHeaderStrategyPanel({
+  t,
+}: {
+  t: (key: string, options?: Record<string, unknown>) => string;
+}) {
+  const rows = [
+    ['User-Agent', 'auth_files.account_settings_claude_header_strategy_client_version'],
+    [
+      'X-Stainless-Package-Version',
+      'auth_files.account_settings_claude_header_strategy_client_version',
+    ],
+    [
+      'X-Stainless-Runtime-Version',
+      'auth_files.account_settings_claude_header_strategy_client_runtime',
+    ],
+    ['X-Stainless-Os / X-Stainless-Arch', 'auth_files.account_settings_claude_header_strategy_platform'],
+    ['X-App', 'auth_files.account_settings_claude_header_strategy_stable'],
+  ] as const;
+
+  return (
+    <div className="form-group">
+      <label>
+        {t('auth_files.account_settings_claude_header_strategy', {
+          defaultValue: 'Claude request header strategy',
+        })}
+      </label>
+      <div className={styles.managedHeaderPanel} data-testid="account-settings-claude-header-strategy-panel">
+        <div className={styles.managedHeaderPlainHeader}>
+          <span>
+            {t('auth_files.account_settings_claude_header_strategy_runtime_title', {
+              defaultValue: 'Resolved per incoming Claude CLI request',
+            })}
+          </span>
+          <span className={styles.managedHeaderMeta}>Claude only</span>
+        </div>
+        <table className={styles.managedHeaderTable}>
+          <thead>
+            <tr>
+              <th>
+                {t('auth_files.account_settings_managed_headers_table_name', {
+                  defaultValue: 'Header',
+                })}
+              </th>
+              <th>
+                {t('auth_files.account_settings_claude_header_strategy_source', {
+                  defaultValue: 'Source',
+                })}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(([name, sourceKey]) => (
+              <tr data-testid="account-settings-claude-header-strategy-row" key={name}>
+                <th scope="row" className={styles.managedHeaderKey}>
+                  {name}
+                </th>
+                <td>
+                  <span className={styles.managedHeaderValue}>
+                    {t(sourceKey, {
+                      defaultValue:
+                        'From the real incoming Claude CLI request; account fallback is used only before this core observes a compatible client.',
+                    })}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="hint">
+        {t('auth_files.account_settings_claude_header_strategy_hint', {
+          defaultValue:
+            'Claude does not pin one managed version on the account page. Multiple clients may use the same CPA instance, so concrete versions are shown below as recent current-process observations.',
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ClaudeClientVersionObservationsPanel({
+  observations,
+  t,
+}: {
+  observations: AuthFileClientVersionObservation[];
+  t: (key: string, options?: Record<string, unknown>) => string;
+}) {
+  const rows = observations.slice(0, 8);
+  const sourceLabel = (source: AuthFileClientVersionObservation['source']) => {
+    if (typeof source === 'string') return source;
+    if (source && typeof source === 'object') {
+      const value = source.source;
+      return typeof value === 'string' ? value : '';
+    }
+    return '';
+  };
+
+  return (
+    <div className="form-group">
+      <label>
+        {t('auth_files.account_settings_claude_client_observations', {
+          defaultValue: 'Recent Claude client observations',
+        })}
+      </label>
+      <div
+        className={styles.managedHeaderPanel}
+        data-testid="account-settings-claude-client-observations-panel"
+      >
+        <div className={styles.managedHeaderPlainHeader}>
+          <span>
+            {t('auth_files.account_settings_claude_client_observations_runtime_title', {
+              defaultValue: 'Observed by the current core process',
+            })}
+          </span>
+          <span className={styles.managedHeaderMeta}>
+            {t('auth_files.account_settings_claude_client_observations_count', {
+              count: rows.length,
+              defaultValue: '{{count}} versions',
+            })}
+          </span>
+        </div>
+        {rows.length > 0 ? (
+          <table className={styles.managedHeaderTable}>
+            <thead>
+              <tr>
+                <th>
+                  {t('auth_files.account_settings_claude_client_version', {
+                    defaultValue: 'Version',
+                  })}
+                </th>
+                <th>
+                  {t('auth_files.account_settings_claude_client_user_agent', {
+                    defaultValue: 'User-Agent',
+                  })}
+                </th>
+                <th>
+                  {t('auth_files.account_settings_claude_client_last_seen', {
+                    defaultValue: 'Last seen',
+                  })}
+                </th>
+                <th>
+                  {t('auth_files.account_settings_claude_client_requests', {
+                    defaultValue: 'Requests',
+                  })}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((observation, index) => (
+                <tr
+                  data-testid="account-settings-claude-client-observation-row"
+                  key={`${observation.version || 'unknown'}-${observation.user_agent || index}`}
+                >
+                  <th scope="row" className={styles.managedHeaderKey}>
+                    {observation.version || '-'}
+                    <span className={styles.clientObservationSubtext}>
+                      {[observation.package_version, observation.runtime_version]
+                        .filter(Boolean)
+                        .join(' · ') || '-'}
+                    </span>
+                  </th>
+                  <td>
+                    <code className={styles.managedHeaderValue} title={observation.user_agent}>
+                      {observation.user_agent || '-'}
+                    </code>
+                    <span className={styles.clientObservationSubtext}>
+                      {[observation.os, observation.arch, sourceLabel(observation.source)]
+                        .filter(Boolean)
+                        .join(' · ') || '-'}
+                    </span>
+                  </td>
+                  <td>
+                    <code
+                      className={styles.managedHeaderValue}
+                      title={observation.last_seen_at || observation.first_seen_at}
+                    >
+                      {observation.last_seen_at || observation.first_seen_at || '-'}
+                    </code>
+                  </td>
+                  <td>
+                    <code className={styles.managedHeaderValue}>
+                      {String(observation.request_count || 0)}
+                    </code>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <div
+            className={styles.managedHeaderEmpty}
+            data-testid="account-settings-claude-client-observations-empty"
+          >
+            {t('auth_files.account_settings_claude_client_observations_empty', {
+              defaultValue:
+                'No real Claude CLI request has been observed by this core process yet.',
+            })}
+          </div>
+        )}
+      </div>
+      <div className="hint">
+        {t('auth_files.account_settings_claude_client_observations_hint', {
+          defaultValue:
+            'Claude runtime resolves request version markers from real incoming Claude CLI requests first. This list is recent in-memory observation for this core process, not a fixed per-account managed version and not a complete audit log of every client.',
         })}
       </div>
     </div>
@@ -465,11 +677,16 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
   const managedHeaderPolicy = managedHeaderState?.policy_version || '';
   const managedHeaderPolicyMatch = managedHeaderPolicy.match(/^([a-z0-9_-]+)-managed\/v(\d+)$/i);
   const managedHeaderPolicyProvider = (managedHeaderPolicyMatch?.[1] || '').toLowerCase();
+  const editorProvider = (editor?.provider || '').toLowerCase();
+  const isClaudeProvider = editorProvider === 'claude' || managedHeaderPolicyProvider === 'claude';
+  const isClaudeManagedPolicy =
+    isClaudeProvider ||
+    (editor?.clientVersionObservations || []).length > 0;
   const managedHeaderPolicyVersion = managedHeaderPolicyMatch?.[2]
     ? `v${managedHeaderPolicyMatch[2]}`
     : managedHeaderPolicy || '-';
   const managedHeaderPolicyStrategy =
-    managedHeaderPolicyProvider === 'claude'
+    isClaudeManagedPolicy
       ? t('auth_files.account_settings_managed_header_policy_strategy_claude', {
           defaultValue: 'Claude core-managed request headers',
         })
@@ -481,10 +698,10 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
             defaultValue: 'Core-managed request headers',
           });
   const managedHeaderPolicyRule =
-    managedHeaderPolicyProvider === 'claude'
+    isClaudeManagedPolicy
       ? t('auth_files.account_settings_managed_header_policy_rule_claude', {
           defaultValue:
-            'Core may refresh Claude CLI version markers when it sees a newer real client/default strategy, while keeping stable identity and pinned runtime fingerprint fields unchanged.',
+            'Core resolves Claude CLI version markers from real incoming client requests first; fallback defaults are used only when this core has not observed a compatible client.',
         })
       : managedHeaderPolicyProvider === 'codex'
         ? t('auth_files.account_settings_managed_header_policy_rule_codex', {
@@ -622,7 +839,18 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
             <>
               {editor.error && <div className={styles.prefixProxyError}>{editor.error}</div>}
 
-              <ManagedHeadersPanel entries={managedHeaderEntries} t={t} />
+              {isClaudeManagedPolicy ? (
+                <ClaudeHeaderStrategyPanel t={t} />
+              ) : (
+                <ManagedHeadersPanel entries={managedHeaderEntries} t={t} />
+              )}
+
+              {isClaudeManagedPolicy && (
+                <ClaudeClientVersionObservationsPanel
+                  observations={editor.clientVersionObservations}
+                  t={t}
+                />
+              )}
 
               <details
                 className={styles.prefixProxyAdvancedDetails}

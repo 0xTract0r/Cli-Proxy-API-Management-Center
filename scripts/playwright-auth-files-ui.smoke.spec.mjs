@@ -20,6 +20,9 @@ const allowDisabledPrimaryActions = /^(1|true|yes|on)$/i.test(
     process.env.MANAGEMENT_UI_ALLOW_DISABLED_PRIMARY_ACTIONS ||
     ''
 );
+const useMockManagementApi = /^(1|true|yes|on)$/i.test(
+  process.env.MOCK_AUTH_FILES_MANAGEMENT_API || ''
+);
 
 const targetUrl = `${managementUiBase}${managementUiRoute}`;
 const viewports = [
@@ -33,8 +36,250 @@ const primaryActionSelector =
 
 test.use({ ignoreHTTPSErrors });
 
+const nowIso = '2026-05-19T13:10:00Z';
+const sampleClaudeAccountSettings = {
+  proxy_url: 'socks5://redacted-proxy.example:10000',
+  note: 'claude-ui-smoke',
+  disabled: false,
+  refresh_enabled: true,
+  managed_headers: {
+    'User-Agent': 'claude-cli/2.1.142 (external, cli)',
+    'X-Stainless-Package-Version': '0.81.0',
+    'X-Stainless-Runtime-Version': 'v24.6.0',
+  },
+  extra_headers: {},
+  transport_profile: null,
+  tls_profile: null,
+  runtime_profile: {
+    provider: 'claude',
+    profile_id: 'claude_reqwest_rustls_compatible_v1',
+    tls_profile_id: 'claude_reqwest_rustls_compatible_v1',
+    tls_family: 'reqwest-rustls-compatible',
+    tls_status: 'configured',
+    transport_status: 'account isolated',
+    tls_configured: true,
+    source: 'provider-default',
+    core_managed: true,
+  },
+  runtime_identity: {
+    current: {
+      revision: 2,
+      base_url_host: 'api.anthropic.com',
+    },
+  },
+  managed_header_state: {
+    policy_version: 'claude-managed/v2',
+    current: {
+      generated_at: nowIso,
+      source: 'observed:first_party',
+      checked_at: nowIso,
+      completeness: 'observed-client-profile',
+      versioned_capabilities: {
+        'User-Agent': 'claude-cli/2.1.142 (external, cli)',
+        'X-Stainless-Package-Version': '0.81.0',
+      },
+      stable_identity: {
+        'X-App': 'cli',
+      },
+      runtime_fingerprint: {
+        'X-Stainless-Runtime': 'node',
+      },
+    },
+    history: [
+      {
+        recorded_at: nowIso,
+        policy_version: 'claude-managed/v2',
+        reason: 'observed-client-profile',
+        source: 'observed:first_party',
+        changed_fields: ['User-Agent'],
+        previous_versioned_capabilities: {
+          'User-Agent': 'claude-cli/2.1.140 (external, cli)',
+        },
+        next_versioned_capabilities: {
+          'User-Agent': 'claude-cli/2.1.142 (external, cli)',
+        },
+      },
+    ],
+  },
+  client_version_observations: [
+    {
+      user_agent: 'claude-cli/2.1.142 (external, cli)',
+      version: '2.1.142',
+      package_version: '0.81.0',
+      runtime_version: 'v24.6.0',
+      os: 'darwin',
+      arch: 'arm64',
+      source: 'observed:first_party',
+      first_seen_at: '2026-05-19T12:58:00Z',
+      last_seen_at: nowIso,
+      request_count: 3,
+    },
+    {
+      user_agent: 'claude-cli/2.1.140 (external, cli)',
+      version: '2.1.140',
+      package_version: '0.80.0',
+      runtime_version: 'v24.5.0',
+      os: 'darwin',
+      arch: 'arm64',
+      source: 'observed:first_party',
+      first_seen_at: '2026-05-19T12:30:00Z',
+      last_seen_at: '2026-05-19T12:45:00Z',
+      request_count: 1,
+    },
+  ],
+  activation: {
+    summary: 'active',
+    state: 'active',
+    effective: true,
+  },
+  warnings: [],
+};
+const sampleCodexAccountSettings = {
+  proxy_url: '',
+  note: 'codex-ui-smoke',
+  disabled: false,
+  refresh_enabled: true,
+  managed_headers: {
+    'User-Agent': 'codex-proxy-compatible/1.0',
+    Version: 'codex_proxy_compatible_v1',
+  },
+  extra_headers: {},
+  transport_profile: null,
+  tls_profile: null,
+  runtime_profile: {
+    provider: 'codex',
+    profile_id: 'codex_proxy_compatible_v1',
+    tls_profile_id: 'codex_proxy_compatible_v1',
+    tls_family: 'codex-proxy-compatible',
+    tls_status: 'configured',
+    transport_status: 'account isolated',
+    tls_configured: true,
+    source: 'provider-default',
+    core_managed: true,
+  },
+  runtime_identity: {
+    current: {
+      revision: 1,
+      base_url_host: 'chatgpt.com',
+    },
+  },
+  managed_header_state: {
+    policy_version: 'codex-managed/v2',
+    current: {
+      generated_at: nowIso,
+      source: 'community:codex-proxy',
+      checked_at: nowIso,
+      completeness: 'online-coherent-bundle',
+      versioned_capabilities: {
+        Version: 'codex_proxy_compatible_v1',
+      },
+      stable_identity: {
+        Originator: 'codex_cli_rs',
+      },
+      runtime_fingerprint: {
+        'Sec-CH-UA': '"Chromium";v="146"',
+      },
+    },
+    history: [],
+  },
+  activation: {
+    summary: 'active',
+    state: 'active',
+    effective: true,
+  },
+  warnings: [],
+};
+
+async function installMockManagementApi(page) {
+  if (!useMockManagementApi) return;
+
+  await page.route('**/v0/management/**', async (route) => {
+    const url = new URL(route.request().url());
+    const pathname = url.pathname;
+    const respond = (body, status = 200) =>
+      route.fulfill({
+        status,
+        contentType: 'application/json',
+        body: JSON.stringify(body),
+        headers: {
+          'X-CPA-VERSION': 'playwright-smoke',
+          'X-CPA-COMMIT': 'mock',
+          'X-CPA-BUILD-DATE': nowIso,
+        },
+      });
+
+    if (pathname.endsWith('/auth-files/account-settings')) {
+      const name = url.searchParams.get('name') || '';
+      return respond({
+        name,
+        account_settings: name.includes('codex')
+          ? sampleCodexAccountSettings
+          : sampleClaudeAccountSettings,
+      });
+    }
+
+    if (pathname.endsWith('/config')) {
+      return respond({
+        debug: false,
+        'api-keys': [],
+        'proxy-url': '',
+        'request-retry': 2,
+        'usage-statistics-enabled': false,
+        routing: { strategy: 'round-robin' },
+      });
+    }
+
+    if (pathname.endsWith('/auth-files')) {
+      return respond({
+        files: [
+          {
+            name: 'claude-ui-smoke.json',
+            type: 'claude',
+            provider: 'claude',
+            source: 'file',
+            size: 2048,
+            modified: Date.parse(nowIso),
+            note: 'claude-ui-smoke',
+            status: 'ok',
+            statusMessage: 'Ready',
+            account_settings: sampleClaudeAccountSettings,
+          },
+          {
+            name: 'codex-ui-smoke.json',
+            type: 'codex',
+            provider: 'codex',
+            source: 'file',
+            size: 2048,
+            modified: Date.parse(nowIso) - 1000,
+            note: 'codex-ui-smoke',
+            status: 'ok',
+            statusMessage: 'Ready',
+            account_settings: sampleCodexAccountSettings,
+          },
+        ],
+        total: 2,
+      });
+    }
+
+    if (pathname.endsWith('/usage')) return respond({ usage: {} });
+    if (pathname.endsWith('/oauth-reauth-history')) return respond({ events: [] });
+    if (pathname.endsWith('/auth-status-history')) return respond({ events: [] });
+    if (pathname.includes('/auth-files/models')) return respond({ models: [] });
+    if (pathname.includes('/model-definitions/')) return respond({ models: [] });
+    return respond({});
+  });
+}
+
 async function loginIfNeeded(page) {
-  if (managementApiBase && managementKey) {
+  await installMockManagementApi(page);
+
+  if (useMockManagementApi) {
+    await page.addInitScript(() => {
+      window.localStorage.setItem('apiBase', '');
+      window.localStorage.setItem('managementKey', 'mock-management-key');
+      window.localStorage.setItem('isLoggedIn', 'true');
+    });
+  } else if (managementApiBase && managementKey) {
     await page.addInitScript(
       ({ apiBase, key }) => {
         window.localStorage.setItem('apiBase', apiBase);
@@ -219,7 +464,12 @@ async function verifyAccountSettingsManagedHeaderUi(page) {
 
     await button.click();
     await expect(
-      page.locator('[data-testid="account-settings-managed-headers-panel"]')
+      page.locator(
+        [
+          '[data-testid="account-settings-managed-headers-panel"]',
+          '[data-testid="account-settings-claude-header-strategy-panel"]',
+        ].join(', ')
+      )
     ).toBeVisible({
       timeout: 10000,
     });
@@ -227,6 +477,8 @@ async function verifyAccountSettingsManagedHeaderUi(page) {
     const generatedPanels = page.locator(
       [
         '[data-testid="account-settings-managed-headers-panel"]',
+        '[data-testid="account-settings-claude-header-strategy-panel"]',
+        '[data-testid="account-settings-claude-client-observations-panel"]',
         '[data-testid="account-settings-managed-policy-panel"]',
         '[data-testid="account-settings-managed-history-panel"]',
       ].join(', ')
@@ -260,7 +512,12 @@ async function verifyAccountSettingsManagedHeaderUi(page) {
       .locator('[data-testid="account-settings-tls-summary-panel"]')
       .count();
     const managedHeaderTableCount = await page
-      .locator('[data-testid="account-settings-managed-headers-panel"] table')
+      .locator(
+        [
+          '[data-testid="account-settings-managed-headers-panel"] table',
+          '[data-testid="account-settings-claude-header-strategy-panel"] table',
+        ].join(', ')
+      )
       .count();
     const transportJsonEditorCount = await page
       .locator('[data-testid="account-settings-transport-profile-editor-wrapper"] .cm-editor')
@@ -294,6 +551,9 @@ async function verifyAccountSettingsManagedHeaderUi(page) {
     const managedHeaderRowCount = await page
       .locator('[data-testid="account-settings-managed-header-row"]')
       .count();
+    const claudeHeaderStrategyRowCount = await page
+      .locator('[data-testid="account-settings-claude-header-strategy-row"]')
+      .count();
     const policyPanelCount = await page
       .locator('[data-testid="account-settings-managed-policy-panel"]')
       .count();
@@ -308,6 +568,15 @@ async function verifyAccountSettingsManagedHeaderUi(page) {
       .count();
     const historyDetailsToggleCount = await page
       .locator('[data-testid="account-settings-managed-history-details-toggle"]')
+      .count();
+    const claudeObservationPanelCount = await page
+      .locator('[data-testid="account-settings-claude-client-observations-panel"]')
+      .count();
+    const claudeObservationRowCount = await page
+      .locator('[data-testid="account-settings-claude-client-observation-row"]')
+      .count();
+    const claudeObservationEmptyCount = await page
+      .locator('[data-testid="account-settings-claude-client-observations-empty"]')
       .count();
 
     expect(generatedInputCount, 'managed/generated sections must not use inputs').toBe(0);
@@ -328,7 +597,7 @@ async function verifyAccountSettingsManagedHeaderUi(page) {
     expect(tlsSummaryPanelCount, 'TLS/runtime profile should render a human summary').toBeGreaterThan(
       0
     );
-    expect(managedHeaderTableCount, 'managed headers should use a real table').toBe(1);
+    expect(managedHeaderTableCount, 'runtime header strategy should use a real table').toBe(1);
     expect(transportJsonEditorCount, 'transport profile should use CodeMirror JSON editor').toBe(1);
     expect(tlsJsonEditorCount, 'TLS profile should use CodeMirror JSON editor').toBe(1);
     expect(extraHeadersJsonEditorCount, 'extra headers should use CodeMirror JSON editor').toBe(1);
@@ -345,6 +614,15 @@ async function verifyAccountSettingsManagedHeaderUi(page) {
         0
       );
     }
+    if (claudeObservationPanelCount > 0) {
+      expect(
+        claudeObservationRowCount + claudeObservationEmptyCount,
+        'Claude observations panel should show recent rows or an explicit empty state'
+      ).toBeGreaterThan(0);
+      await expect(
+        page.locator('[data-testid="account-settings-claude-client-observations-panel"]')
+      ).toContainText(/Observed|观察|наблюд/i);
+    }
     if (managedHeaderRowCount > 0) {
       await expect(
         page.locator('[data-testid="account-settings-managed-headers-panel"]'),
@@ -360,6 +638,16 @@ async function verifyAccountSettingsManagedHeaderUi(page) {
           'managed headers should be above advanced raw JSON previews'
         ).toBeLessThan(rawBox.y);
       }
+    }
+    if (claudeHeaderStrategyRowCount > 0) {
+      await expect(
+        page.locator('[data-testid="account-settings-claude-header-strategy-panel"]'),
+        'Claude strategy panel should avoid pinning one concrete managed version'
+      ).toContainText(/incoming Claude CLI|进入 CPA|Claude CLI/i);
+      await expect(
+        page.locator('[data-testid="account-settings-claude-header-strategy-panel"]'),
+        'Claude strategy panel should still name affected headers'
+      ).toContainText(/User-Agent|X-Stainless-Package-Version|X-App/i);
     }
     if (historyPanelCount > 0) {
       expect(
@@ -399,11 +687,15 @@ async function verifyAccountSettingsManagedHeaderUi(page) {
     const summary = {
       index,
       managedHeaderRowCount,
+      claudeHeaderStrategyRowCount,
       policyPanelCount,
       policyRuleCount,
       sourceStatusCount,
       historyPanelCount,
       historyDetailsToggleCount,
+      claudeObservationPanelCount,
+      claudeObservationRowCount,
+      claudeObservationEmptyCount,
       generatedInputCount,
       readOnlyViewerCount,
       readOnlyInputLikeCount,
@@ -423,7 +715,13 @@ async function verifyAccountSettingsManagedHeaderUi(page) {
       refreshToggleCount,
       managedHeadersText: (
         (await page
-          .locator('[data-testid="account-settings-managed-headers-panel"]')
+          .locator(
+            [
+              '[data-testid="account-settings-managed-headers-panel"]',
+              '[data-testid="account-settings-claude-header-strategy-panel"]',
+            ].join(', ')
+          )
+          .first()
           .innerText()) || ''
       ).slice(0, 500),
       policyText:
@@ -442,11 +740,20 @@ async function verifyAccountSettingsManagedHeaderUi(page) {
                 .innerText()) || ''
             ).slice(0, 500)
           : '',
+      claudeObservationText:
+        claudeObservationPanelCount > 0
+          ? (
+              (await page
+                .locator('[data-testid="account-settings-claude-client-observations-panel"]')
+                .innerText()) || ''
+            ).slice(0, 500)
+          : '',
     };
     inspected.push(summary);
 
     if (
-      managedHeaderRowCount > 0 &&
+      !useMockManagementApi &&
+      managedHeaderRowCount + claudeHeaderStrategyRowCount > 0 &&
       policyPanelCount > 0 &&
       policyRuleCount > 0 &&
       sourceStatusCount > 0 &&
@@ -465,8 +772,8 @@ async function verifyAccountSettingsManagedHeaderUi(page) {
   }
 
   expect(
-    inspected.some((item) => item.managedHeaderRowCount > 0),
-    'at least one account settings modal should show runtime managed header rows'
+    inspected.some((item) => item.managedHeaderRowCount + item.claudeHeaderStrategyRowCount > 0),
+    'at least one account settings modal should show runtime header strategy rows'
   ).toBeTruthy();
   expect(
     inspected.some((item) => item.policyPanelCount > 0),
@@ -481,6 +788,16 @@ async function verifyAccountSettingsManagedHeaderUi(page) {
     'at least one policy summary should disclose the managed header source'
   ).toBeTruthy();
   const inspectedHistoryPanels = inspected.filter((item) => item.historyPanelCount > 0);
+  if (useMockManagementApi) {
+    expect(
+      inspected.some((item) => item.claudeHeaderStrategyRowCount > 0),
+      'mock Claude account should show dynamic header strategy instead of a fixed managed version'
+    ).toBeTruthy();
+    expect(
+      inspected.some((item) => item.managedHeaderRowCount > 0),
+      'mock Codex account should keep the concrete managed headers table'
+    ).toBeTruthy();
+  }
   if (inspectedHistoryPanels.length > 0) {
     expect(
       inspectedHistoryPanels.some((item) => item.historyDetailsToggleCount > 0),
