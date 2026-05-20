@@ -163,7 +163,13 @@ export function useUsageData(): UseUsageDataReturn {
     try {
       const response = await usageApi.refreshPricing();
       setPricing(response?.pricing ?? null);
-      showNotification(t('usage_stats.pricing_refresh_success'), 'success');
+      const warning = typeof response?.warning === 'string' ? response.warning.trim() : '';
+      if (warning) {
+        setPricingError(warning);
+        showNotification(warning, 'warning');
+      } else {
+        showNotification(t('usage_stats.pricing_refresh_success'), 'success');
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : '';
       const text = message || t('usage_stats.pricing_refresh_failed');

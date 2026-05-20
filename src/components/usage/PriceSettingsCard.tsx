@@ -40,7 +40,13 @@ const formatTimestamp = (value?: string) => {
     return '-';
   }
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  if (date.getUTCFullYear() <= 1) {
+    return '-';
+  }
+  return date.toLocaleString();
 };
 
 const formatPrice = (value?: number) => {

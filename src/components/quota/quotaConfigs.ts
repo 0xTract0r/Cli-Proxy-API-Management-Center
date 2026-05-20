@@ -29,17 +29,18 @@ import type {
   KimiQuotaRow,
   KimiQuotaState,
 } from '@/types';
-import { apiCallApi, authFilesApi, getApiCallErrorMessage } from '@/services/api';
+import {
+  apiCallApi,
+  authFilesApi,
+  getApiCallErrorMessage,
+  quotaApi,
+  type CoreQuotaSnapshotEntry,
+} from '@/services/api';
 import { useQuotaStore } from '@/stores';
 import {
   ANTIGRAVITY_QUOTA_URLS,
   ANTIGRAVITY_REQUEST_HEADERS,
-  CLAUDE_PROFILE_URL,
-  CLAUDE_USAGE_URL,
-  CLAUDE_REQUEST_HEADERS,
   CLAUDE_USAGE_WINDOW_KEYS,
-  CODEX_USAGE_URL,
-  CODEX_REQUEST_HEADERS,
   GEMINI_CLI_QUOTA_URL,
   GEMINI_CLI_CODE_ASSIST_URL,
   GEMINI_CLI_REQUEST_HEADERS,
@@ -56,7 +57,6 @@ import {
   parseGeminiCliQuotaPayload,
   parseGeminiCliCodeAssistPayload,
   parseKimiUsagePayload,
-  resolveCodexChatgptAccountId,
   resolveCodexPlanType,
   resolveGeminiCliProjectId,
   formatCodexResetLabel,
@@ -112,6 +112,7 @@ export interface QuotaConfig<TState, TData> {
   cardIdleMessageKey?: string;
   filterFn: (file: AuthFileItem) => boolean;
   fetchQuota: (file: AuthFileItem, t: TFunction) => Promise<TData>;
+  refreshQuota?: (file: AuthFileItem, t: TFunction) => Promise<TData>;
   storeSelector: (state: QuotaStore) => Record<string, TState>;
   storeSetter: keyof QuotaStore;
   buildLoadingState: () => TState;
@@ -123,6 +124,82 @@ export interface QuotaConfig<TState, TData> {
   gridClassName: string;
   renderQuotaItems: (quota: TState, t: TFunction, helpers: QuotaRenderHelpers) => ReactNode;
 }
+
+const resolveAuthFileID = (file: AuthFileItem): string | null =>
+  normalizeStringValue(file.auth_id ?? file.authId ?? file.id);
+
+const findCoreQuotaEntry = (
+  entries: CoreQuotaSnapshotEntry[] | undefined,
+  file: AuthFileItem,
+  provider: string
+): CoreQuotaSnapshotEntry | null => {
+  const fileName = normalizeStringValue(file.name);
+  const authID = resolveAuthFileID(file);
+  const authIndex = normalizeAuthIndex(file.auth_index ?? file.authIndex);
+  const normalizedProvider = provider.toLowerCase();
+
+  return (
+    entries?.find((entry) => {
+      if (normalizeStringValue(entry.provider)?.toLowerCase() !== normalizedProvider) return false;
+      if (authID && entry.auth_id === authID) return true;
+      if (fileName && entry.name === fileName) return true;
+      if (authIndex && entry.auth_index === authIndex) return true;
+      return false;
+    }) ?? null
+  );
+};
+
+const loadCoreQuotaEntry = async (
+  file: AuthFileItem,
+  provider: string,
+  refresh: boolean
+): Promise<CoreQuotaSnapshotEntry> => {
+  const payload = refresh
+    ? await quotaApi.refresh({
+        auth_id: resolveAuthFileID(file) ?? undefined,
+        name: normalizeStringValue(file.name) ?? undefined,
+        provider,
+      })
+    : await quotaApi.getSnapshots();
+  const entry = findCoreQuotaEntry(payload.entries, file, provider);
+  if (!entry) {
+    throw new Error('Quota snapshot is not available yet');
+  }
+  if (entry.status === 'error') {
+    throw createStatusError(entry.error || 'Quota snapshot refresh failed', 502);
+  }
+  if (!entry.snapshot) {
+    throw new Error('Quota snapshot is empty');
+  }
+  return entry;
+};
+
+const formatCoreQuotaSnapshotTime = (value?: string | null): string | null => {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+};
+
+const formatCoreQuotaSnapshotLabel = (
+  lastRefreshedAt: string | undefined,
+  nextRefreshAt: string | undefined,
+  t: TFunction
+): string | null => {
+  const last = formatCoreQuotaSnapshotTime(lastRefreshedAt);
+  const next = formatCoreQuotaSnapshotTime(nextRefreshAt);
+  const parts: string[] = [];
+  if (last) {
+    parts.push(t('quota_management.snapshot_refreshed_at', { time: last }));
+  }
+  if (next) {
+    parts.push(t('quota_management.snapshot_next_refresh', { time: next }));
+  }
+  return parts.length > 0 ? parts.join(' / ') : null;
+};
 
 const resolveAntigravityProjectId = async (file: AuthFileItem): Promise<string> => {
   try {
@@ -400,45 +477,33 @@ const buildCodexQuotaWindows = (payload: CodexUsagePayload, t: TFunction): Codex
 
 const fetchCodexQuota = async (
   file: AuthFileItem,
-  t: TFunction
-): Promise<{ planType: string | null; windows: CodexQuotaWindow[] }> => {
-  const rawAuthIndex = file['auth_index'] ?? file.authIndex;
-  const authIndex = normalizeAuthIndex(rawAuthIndex);
-  if (!authIndex) {
-    throw new Error(t('codex_quota.missing_auth_index'));
-  }
-
+  t: TFunction,
+  refresh = false
+): Promise<{
+  planType: string | null;
+  windows: CodexQuotaWindow[];
+  lastRefreshedAt?: string;
+  nextRefreshAt?: string;
+}> => {
   const planTypeFromFile = resolveCodexPlanType(file);
-  const accountId = resolveCodexChatgptAccountId(file);
-  if (!accountId) {
-    throw new Error(t('codex_quota.missing_account_id'));
-  }
-
-  const requestHeader: Record<string, string> = {
-    ...CODEX_REQUEST_HEADERS,
-    'Chatgpt-Account-Id': accountId,
-  };
-
-  const result = await apiCallApi.request({
-    authIndex,
-    method: 'GET',
-    url: CODEX_USAGE_URL,
-    header: requestHeader,
-  });
-
-  if (result.statusCode < 200 || result.statusCode >= 300) {
-    throw createStatusError(getApiCallErrorMessage(result), result.statusCode);
-  }
-
-  const payload = parseCodexUsagePayload(result.body ?? result.bodyText);
+  const entry = await loadCoreQuotaEntry(file, 'codex', refresh);
+  const payload = parseCodexUsagePayload(entry.snapshot?.usage);
   if (!payload) {
     throw new Error(t('codex_quota.empty_windows'));
   }
 
   const planTypeFromUsage = normalizePlanType(payload.plan_type ?? payload.planType);
+  const planTypeFromSnapshot = normalizePlanType(entry.plan_type);
   const windows = buildCodexQuotaWindows(payload, t);
-  return { planType: planTypeFromUsage ?? planTypeFromFile, windows };
+  return {
+    planType: planTypeFromUsage ?? planTypeFromSnapshot ?? planTypeFromFile,
+    windows,
+    lastRefreshedAt: entry.last_refreshed_at,
+    nextRefreshAt: entry.next_refresh_at,
+  };
 };
+
+const refreshCodexQuota = (file: AuthFileItem, t: TFunction) => fetchCodexQuota(file, t, true);
 
 const GEMINI_CLI_G1_CREDIT_TYPE = 'GOOGLE_ONE_AI';
 
@@ -744,6 +809,11 @@ const renderCodexItems = (
   const { createElement: h, Fragment } = React;
   const windows = quota.windows ?? [];
   const planType = quota.planType ?? null;
+  const snapshotLabel = formatCoreQuotaSnapshotLabel(
+    quota.lastRefreshedAt,
+    quota.nextRefreshAt,
+    t
+  );
 
   const getPlanLabel = (pt?: string | null): string | null => {
     const normalized = normalizePlanType(pt);
@@ -770,6 +840,17 @@ const renderCodexItems = (
         { key: 'plan', className: styleMap.codexPlan },
         h('span', { className: styleMap.codexPlanLabel }, t('codex_quota.plan_label')),
         h('span', { className: valueClass }, planLabel)
+      )
+    );
+  }
+
+  if (snapshotLabel) {
+    nodes.push(
+      h(
+        'div',
+        { key: 'snapshot', className: styleMap.codexPlan },
+        h('span', { className: styleMap.codexPlanLabel }, t('quota_management.snapshot_label')),
+        h('span', { className: styleMap.codexPlanValue }, snapshotLabel)
       )
     );
   }
@@ -981,56 +1062,36 @@ const resolveClaudePlanType = (profile: ClaudeProfileResponse | null): string | 
 
 const fetchClaudeQuota = async (
   file: AuthFileItem,
-  t: TFunction
-): Promise<{ windows: ClaudeQuotaWindow[]; extraUsage?: ClaudeExtraUsage | null; planType?: string | null }> => {
-  const rawAuthIndex = file['auth_index'] ?? file.authIndex;
-  const authIndex = normalizeAuthIndex(rawAuthIndex);
-  if (!authIndex) {
-    throw new Error(t('claude_quota.missing_auth_index'));
-  }
-
-  const [usageResult, profileResult] = await Promise.allSettled([
-    apiCallApi.request({
-      authIndex,
-      method: 'GET',
-      url: CLAUDE_USAGE_URL,
-      header: { ...CLAUDE_REQUEST_HEADERS },
-    }),
-    apiCallApi.request({
-      authIndex,
-      method: 'GET',
-      url: CLAUDE_PROFILE_URL,
-      header: { ...CLAUDE_REQUEST_HEADERS },
-    }),
-  ]);
-
-  if (usageResult.status === 'rejected') {
-    throw usageResult.reason;
-  }
-
-  const result = usageResult.value;
-
-  if (result.statusCode < 200 || result.statusCode >= 300) {
-    throw createStatusError(getApiCallErrorMessage(result), result.statusCode);
-  }
-
-  const payload = parseClaudeUsagePayload(result.body ?? result.bodyText);
+  t: TFunction,
+  refresh = false
+): Promise<{
+  windows: ClaudeQuotaWindow[];
+  extraUsage?: ClaudeExtraUsage | null;
+  planType?: string | null;
+  lastRefreshedAt?: string;
+  nextRefreshAt?: string;
+}> => {
+  const entry = await loadCoreQuotaEntry(file, 'claude', refresh);
+  const payload = parseClaudeUsagePayload(entry.snapshot?.usage);
   if (!payload) {
     throw new Error(t('claude_quota.empty_windows'));
   }
 
   const windows = buildClaudeQuotaWindows(payload, t);
-  const planType =
-    profileResult.status === 'fulfilled' &&
-    profileResult.value.statusCode >= 200 &&
-    profileResult.value.statusCode < 300
-      ? resolveClaudePlanType(
-          parseClaudeProfilePayload(profileResult.value.body ?? profileResult.value.bodyText)
-        )
-      : null;
+  const profilePlanType = resolveClaudePlanType(parseClaudeProfilePayload(entry.snapshot?.profile));
+  const snapshotPlanType = normalizePlanType(entry.plan_type);
+  const planType = profilePlanType ?? (snapshotPlanType ? `plan_${snapshotPlanType}` : null);
 
-  return { windows, extraUsage: payload.extra_usage, planType };
+  return {
+    windows,
+    extraUsage: payload.extra_usage,
+    planType,
+    lastRefreshedAt: entry.last_refreshed_at,
+    nextRefreshAt: entry.next_refresh_at,
+  };
 };
+
+const refreshClaudeQuota = (file: AuthFileItem, t: TFunction) => fetchClaudeQuota(file, t, true);
 
 const renderClaudeItems = (
   quota: ClaudeQuotaState,
@@ -1042,6 +1103,11 @@ const renderClaudeItems = (
   const windows = quota.windows ?? [];
   const extraUsage = quota.extraUsage ?? null;
   const planType = quota.planType ?? null;
+  const snapshotLabel = formatCoreQuotaSnapshotLabel(
+    quota.lastRefreshedAt,
+    quota.nextRefreshAt,
+    t
+  );
   const nodes: ReactNode[] = [];
 
   if (planType) {
@@ -1051,6 +1117,17 @@ const renderClaudeItems = (
         { key: 'plan', className: styleMap.codexPlan },
         h('span', { className: styleMap.codexPlanLabel }, t('claude_quota.plan_label')),
         h('span', { className: styleMap.codexPlanValue }, t(`claude_quota.${planType}`))
+      )
+    );
+  }
+
+  if (snapshotLabel) {
+    nodes.push(
+      h(
+        'div',
+        { key: 'snapshot', className: styleMap.codexPlan },
+        h('span', { className: styleMap.codexPlanLabel }, t('quota_management.snapshot_label')),
+        h('span', { className: styleMap.codexPlanValue }, snapshotLabel)
       )
     );
   }
@@ -1110,13 +1187,20 @@ const renderClaudeItems = (
 
 export const CLAUDE_CONFIG: QuotaConfig<
   ClaudeQuotaState,
-  { windows: ClaudeQuotaWindow[]; extraUsage?: ClaudeExtraUsage | null; planType?: string | null }
+  {
+    windows: ClaudeQuotaWindow[];
+    extraUsage?: ClaudeExtraUsage | null;
+    planType?: string | null;
+    lastRefreshedAt?: string;
+    nextRefreshAt?: string;
+  }
 > = {
   type: 'claude',
   i18nPrefix: 'claude_quota',
   cardIdleMessageKey: 'quota_management.card_idle_hint',
   filterFn: (file) => isClaudeFile(file) && !isDisabledAuthFile(file),
   fetchQuota: fetchClaudeQuota,
+  refreshQuota: refreshClaudeQuota,
   storeSelector: (state) => state.claudeQuota,
   storeSetter: 'setClaudeQuota',
   buildLoadingState: () => ({ status: 'loading', windows: [] }),
@@ -1125,6 +1209,8 @@ export const CLAUDE_CONFIG: QuotaConfig<
     windows: data.windows,
     extraUsage: data.extraUsage,
     planType: data.planType,
+    lastRefreshedAt: data.lastRefreshedAt,
+    nextRefreshAt: data.nextRefreshAt,
   }),
   buildErrorState: (message, status) => ({
     status: 'error',
@@ -1164,13 +1250,19 @@ export const ANTIGRAVITY_CONFIG: QuotaConfig<AntigravityQuotaState, AntigravityQ
 
 export const CODEX_CONFIG: QuotaConfig<
   CodexQuotaState,
-  { planType: string | null; windows: CodexQuotaWindow[] }
+  {
+    planType: string | null;
+    windows: CodexQuotaWindow[];
+    lastRefreshedAt?: string;
+    nextRefreshAt?: string;
+  }
 > = {
   type: 'codex',
   i18nPrefix: 'codex_quota',
   cardIdleMessageKey: 'quota_management.card_idle_hint',
   filterFn: (file) => isCodexFile(file) && !isDisabledAuthFile(file),
   fetchQuota: fetchCodexQuota,
+  refreshQuota: refreshCodexQuota,
   storeSelector: (state) => state.codexQuota,
   storeSetter: 'setCodexQuota',
   buildLoadingState: () => ({ status: 'loading', windows: [] }),
@@ -1178,6 +1270,8 @@ export const CODEX_CONFIG: QuotaConfig<
     status: 'success',
     windows: data.windows,
     planType: data.planType,
+    lastRefreshedAt: data.lastRefreshedAt,
+    nextRefreshAt: data.nextRefreshAt,
   }),
   buildErrorState: (message, status) => ({
     status: 'error',

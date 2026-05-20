@@ -63,6 +63,7 @@ export interface UsagePricingSnapshot {
 
 export interface UsagePricingResponse {
   pricing?: UsagePricingSnapshot;
+  warning?: string;
 }
 
 export interface PricingOverridePayload {

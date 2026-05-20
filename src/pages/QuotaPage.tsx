@@ -1,12 +1,12 @@
 /**
- * Quota management page - coordinates the three quota sections.
+ * Quota management page - coordinates quota sections.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
 import { useAuthStore } from '@/stores';
-import { authFilesApi, configFileApi } from '@/services/api';
+import { authFilesApi, configFileApi, quotaApi } from '@/services/api';
 import {
   QuotaSection,
   ANTIGRAVITY_CONFIG,
@@ -17,25 +17,6 @@ import {
 } from '@/components/quota';
 import type { AuthFileItem } from '@/types';
 import styles from './QuotaPage.module.scss';
-
-const AUTO_REFRESH_ENABLED_KEY = 'quotaAutoRefreshEnabled';
-const AUTO_REFRESH_INTERVAL_KEY = 'quotaAutoRefreshIntervalMs';
-const DEFAULT_AUTO_REFRESH_INTERVAL_MS = 60_000;
-const AUTO_REFRESH_INTERVAL_OPTIONS = [60_000, 300_000, 900_000];
-
-const readStoredAutoRefreshEnabled = () => {
-  if (typeof window === 'undefined') return true;
-  const stored = window.localStorage.getItem(AUTO_REFRESH_ENABLED_KEY);
-  if (stored === null) return true;
-  return stored === 'true';
-};
-
-const readStoredAutoRefreshInterval = () => {
-  if (typeof window === 'undefined') return DEFAULT_AUTO_REFRESH_INTERVAL_MS;
-  const stored = Number(window.localStorage.getItem(AUTO_REFRESH_INTERVAL_KEY));
-  if (AUTO_REFRESH_INTERVAL_OPTIONS.includes(stored)) return stored;
-  return DEFAULT_AUTO_REFRESH_INTERVAL_MS;
-};
 
 const formatRefreshTime = (value: Date | null) => {
   if (!value) return '';
@@ -56,10 +37,6 @@ export function QuotaPage() {
   const [quotaRefreshSignal, setQuotaRefreshSignal] = useState(0);
   const [pageRefreshInFlight, setPageRefreshInFlight] = useState(false);
   const [lastPageRefreshAt, setLastPageRefreshAt] = useState<Date | null>(null);
-  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(readStoredAutoRefreshEnabled);
-  const [autoRefreshIntervalMs, setAutoRefreshIntervalMs] = useState(
-    readStoredAutoRefreshInterval
-  );
   const pageRefreshInFlightRef = useRef(false);
 
   const disableControls = connectionStatus !== 'connected';
@@ -98,39 +75,31 @@ export function QuotaPage() {
 
     pageRefreshInFlightRef.current = true;
     setPageRefreshInFlight(true);
+    setError('');
     try {
-      await handleHeaderRefresh();
+      await Promise.all([handleHeaderRefresh(), quotaApi.refresh({})]);
       setQuotaRefreshSignal((value) => value + 1);
       setLastPageRefreshAt(new Date());
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : t('notification.refresh_failed');
+      setError(errorMessage);
     } finally {
       pageRefreshInFlightRef.current = false;
       setPageRefreshInFlight(false);
     }
-  }, [disableControls, handleHeaderRefresh]);
+  }, [disableControls, handleHeaderRefresh, t]);
 
   useEffect(() => {
-    loadFiles();
-    loadConfig();
+    let cancelled = false;
+    void Promise.all([loadFiles(), loadConfig()]).finally(() => {
+      if (!cancelled) {
+        setQuotaRefreshSignal((value) => value + 1);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [loadFiles, loadConfig]);
-
-  useEffect(() => {
-    window.localStorage.setItem(AUTO_REFRESH_ENABLED_KEY, String(autoRefreshEnabled));
-  }, [autoRefreshEnabled]);
-
-  useEffect(() => {
-    window.localStorage.setItem(AUTO_REFRESH_INTERVAL_KEY, String(autoRefreshIntervalMs));
-  }, [autoRefreshIntervalMs]);
-
-  useEffect(() => {
-    if (!autoRefreshEnabled || disableControls) return;
-
-    void refreshPageQuota();
-    const timer = window.setInterval(() => {
-      void refreshPageQuota();
-    }, autoRefreshIntervalMs);
-
-    return () => window.clearInterval(timer);
-  }, [autoRefreshEnabled, autoRefreshIntervalMs, disableControls, refreshPageQuota]);
 
   return (
     <div className={styles.container}>
@@ -153,30 +122,6 @@ export function QuotaPage() {
           </div>
         </div>
         <div className={styles.autoRefreshControls}>
-          <label className={styles.autoRefreshToggle}>
-            <input
-              data-testid="quota-auto-refresh-toggle"
-              type="checkbox"
-              checked={autoRefreshEnabled}
-              disabled={disableControls}
-              onChange={(event) => setAutoRefreshEnabled(event.currentTarget.checked)}
-            />
-            <span>{t('quota_management.auto_refresh_enabled')}</span>
-          </label>
-          <select
-            data-testid="quota-auto-refresh-interval"
-            className={styles.autoRefreshSelect}
-            value={autoRefreshIntervalMs}
-            disabled={disableControls || !autoRefreshEnabled}
-            onChange={(event) => setAutoRefreshIntervalMs(Number(event.currentTarget.value))}
-            aria-label={t('quota_management.auto_refresh_interval')}
-          >
-            {AUTO_REFRESH_INTERVAL_OPTIONS.map((option) => (
-              <option key={option} value={option}>
-                {t(`quota_management.auto_refresh_interval_${option}`)}
-              </option>
-            ))}
-          </select>
           <button
             data-testid="quota-refresh-now"
             className={styles.autoRefreshButton}
@@ -205,7 +150,6 @@ export function QuotaPage() {
         files={files}
         loading={loading}
         disabled={disableControls}
-        quotaRefreshSignal={quotaRefreshSignal}
       />
       <QuotaSection
         config={CODEX_CONFIG}
@@ -219,14 +163,12 @@ export function QuotaPage() {
         files={files}
         loading={loading}
         disabled={disableControls}
-        quotaRefreshSignal={quotaRefreshSignal}
       />
       <QuotaSection
         config={KIMI_CONFIG}
         files={files}
         loading={loading}
         disabled={disableControls}
-        quotaRefreshSignal={quotaRefreshSignal}
       />
     </div>
   );

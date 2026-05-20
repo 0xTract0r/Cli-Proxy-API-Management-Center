@@ -189,6 +189,8 @@ export interface ClaudeQuotaState {
   windows: ClaudeQuotaWindow[];
   extraUsage?: ClaudeExtraUsage | null;
   planType?: string | null;
+  lastRefreshedAt?: string;
+  nextRefreshAt?: string;
   error?: string;
   errorStatus?: number;
 }
@@ -242,6 +244,8 @@ export interface CodexQuotaState {
   status: 'idle' | 'loading' | 'success' | 'error';
   windows: CodexQuotaWindow[];
   planType?: string | null;
+  lastRefreshedAt?: string;
+  nextRefreshAt?: string;
   error?: string;
   errorStatus?: number;
 }

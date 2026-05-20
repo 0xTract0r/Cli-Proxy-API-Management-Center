@@ -81,7 +81,7 @@ npm run build
   - Ampcode 集成（上游地址/密钥、强制映射、模型映射表）。
 - **认证文件**：上传/下载/删除 JSON 凭据，筛选/搜索/分页，标记 runtime-only；查看单个凭据可用模型（依赖后端支持）；管理 OAuth 排除模型（支持 `*` 通配符）；配置 OAuth 模型别名映射。
 - **OAuth**：对支持的提供商发起 OAuth/设备码流程，轮询状态；可选提交回调 `redirect_url`；包含 iFlow Cookie 导入。
-- **配额管理**：管理 Claude、Antigravity、Codex、Gemini CLI 等提供商的配额上限与使用情况。
+- **配额管理**：管理 Claude、Antigravity、Codex、Gemini CLI 等提供商的配额上限与使用情况；Codex/Claude 额度由 core 统一定时刷新并持久化，页面进入时只读取最近快照，手动“立即刷新”会通过 core 的 `/v0/management/quota/refresh` 触发刷新。
 - **使用统计**：按小时/天图表、按 API 与按模型统计、缓存/推理 Token 拆分、RPM/TPM 时间窗、可选本地保存的模型价格用于费用估算。
 - **配置文件**：浏览器内编辑 `/config.yaml`（YAML 高亮 + 搜索），保存/重载。
 - **日志**：增量拉取日志、自动刷新、搜索、隐藏管理端流量、清空日志；下载请求错误日志文件。

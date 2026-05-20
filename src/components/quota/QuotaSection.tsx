@@ -239,7 +239,8 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
       }));
 
       try {
-        const data = await config.fetchQuota(file, t);
+        const refresh = config.refreshQuota ?? config.fetchQuota;
+        const data = await refresh(file, t);
         setQuota((prev) => ({
           ...prev,
           [file.name]: config.buildSuccessState(data)

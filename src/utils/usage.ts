@@ -74,6 +74,7 @@ export interface UsageDetail {
     cache_write_input_tokens?: number;
     cache_creation_input_tokens?: number;
     total_tokens: number;
+    billable_tokens?: number;
   };
   failed: boolean;
   __modelName?: string;
@@ -106,6 +107,7 @@ export interface ModelStatsSummary {
   successCount: number;
   failureCount: number;
   tokens: number;
+  billableTokens: number;
   cacheHitRequests: number;
   cacheTotalRequests: number;
   cacheHitRate: number | null;
@@ -766,6 +768,21 @@ export function extractTotalTokens(detail: unknown): number {
   return inputTokens + outputTokens + reasoningTokens + cacheReadTokens + cacheWriteTokens;
 }
 
+export function extractBillableTokens(detail: unknown): number {
+  const tokens = getUsageTokensRecord(detail);
+  const explicit = toFiniteNumber(tokens.billable_tokens);
+  if (explicit !== null && explicit >= 0) {
+    return explicit;
+  }
+  const totalTokens =
+    typeof tokens.total_tokens === 'number'
+      ? toTokenNumber(tokens.total_tokens)
+      : toTokenNumber(tokens.input_tokens) +
+        toTokenNumber(tokens.output_tokens) +
+        toTokenNumber(tokens.reasoning_tokens);
+  return totalTokens + extractCacheReadTokens(detail) + extractCacheWriteTokens(detail);
+}
+
 /**
  * 计算耗时统计
  */
@@ -1189,6 +1206,7 @@ export function getModelStats(
       successCount: number;
       failureCount: number;
       tokens: number;
+      billableTokens: number;
       cacheHitRequests: number;
       cacheTotalRequests: number;
       cost: number;
@@ -1209,6 +1227,7 @@ export function getModelStats(
         successCount: 0,
         failureCount: 0,
         tokens: 0,
+        billableTokens: 0,
         cacheHitRequests: 0,
         cacheTotalRequests: 0,
         cost: 0,
@@ -1216,6 +1235,10 @@ export function getModelStats(
       };
       existing.requests += Number(modelData.total_requests) || 0;
       existing.tokens += Number(modelData.total_tokens) || 0;
+      const explicitBillableTokens = toFiniteNumber(modelData.total_billable_tokens);
+      if (explicitBillableTokens !== null && explicitBillableTokens >= 0) {
+        existing.billableTokens += explicitBillableTokens;
+      }
 
       const details = Array.isArray(modelData.details) ? modelData.details : [];
       let modelCostDerived = false;
@@ -1244,6 +1267,9 @@ export function getModelStats(
           addLatencySample(existing.latency, latencyMs);
 
           if (detailRecord) {
+            if (explicitBillableTokens === null) {
+              existing.billableTokens += extractBillableTokens(detailRecord);
+            }
             existing.cacheTotalRequests += 1;
             if (extractCacheReadTokens(detailRecord) > 0) {
               existing.cacheHitRequests += 1;
@@ -1276,6 +1302,7 @@ export function getModelStats(
         successCount: stats.successCount,
         failureCount: stats.failureCount,
         tokens: stats.tokens,
+        billableTokens: stats.billableTokens > 0 ? stats.billableTokens : stats.tokens,
         cacheHitRequests: stats.cacheHitRequests,
         cacheTotalRequests: stats.cacheTotalRequests,
         cacheHitRate:

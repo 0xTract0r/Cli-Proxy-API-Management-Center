@@ -21,7 +21,7 @@ export interface ModelStatsCardProps {
 type SortKey =
   | 'model'
   | 'requests'
-  | 'tokens'
+  | 'billableTokens'
   | 'cacheHitRate'
   | 'cost'
   | 'successRate'
@@ -110,14 +110,14 @@ export function ModelStatsCard({ modelStats, loading, hasPrices }: ModelStatsCar
                         {arrow('requests')}
                       </button>
                     </th>
-                    <th className={styles.sortableHeader} aria-sort={ariaSort('tokens')}>
+                    <th className={styles.sortableHeader} aria-sort={ariaSort('billableTokens')}>
                       <button
                         type="button"
                         className={styles.sortHeaderButton}
-                        onClick={() => handleSort('tokens')}
+                        onClick={() => handleSort('billableTokens')}
                       >
-                        {t('usage_stats.tokens_count')}
-                        {arrow('tokens')}
+                        {t('usage_stats.billable_tokens_count')}
+                        {arrow('billableTokens')}
                       </button>
                     </th>
                     <th className={styles.sortableHeader} aria-sort={ariaSort('cacheHitRate')}>
@@ -196,7 +196,7 @@ export function ModelStatsCard({ modelStats, loading, hasPrices }: ModelStatsCar
                           </span>
                         </span>
                       </td>
-                      <td>{formatCompactNumber(stat.tokens)}</td>
+                      <td>{formatCompactNumber(stat.billableTokens)}</td>
                       <td title={cacheHitHint}>
                         {stat.cacheHitRate === null ? (
                           '--'
