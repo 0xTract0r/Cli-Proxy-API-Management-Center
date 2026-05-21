@@ -125,6 +125,144 @@ function setIntFromStringInDoc(doc: YamlDocument, path: YamlPath, value: unknown
   }
 }
 
+function readRecordValue(record: Record<string, unknown> | null | undefined, keys: string[]) {
+  if (!record) return undefined;
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(record, key)) return record[key];
+  }
+  return undefined;
+}
+
+function readBooleanConfigValue(
+  record: Record<string, unknown> | null | undefined,
+  keys: string[],
+  fallback: boolean
+): boolean {
+  const value = readRecordValue(record, keys);
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true') return true;
+    if (normalized === 'false') return false;
+  }
+  return fallback;
+}
+
+function normalizeQuotaSnapshotDurationInput(raw: string): string {
+  const value = raw.trim().toLowerCase();
+  const replacements = [
+    ['minutes', 'm'],
+    ['minute', 'm'],
+    ['mins', 'm'],
+    ['min', 'm'],
+    ['hours', 'h'],
+    ['hour', 'h'],
+    ['hrs', 'h'],
+    ['hr', 'h'],
+  ] as const;
+
+  for (const [oldSuffix, newSuffix] of replacements) {
+    if (value.endsWith(oldSuffix)) {
+      return `${value.slice(0, -oldSuffix.length).trim()}${newSuffix}`;
+    }
+  }
+  return value;
+}
+
+function formatMinuteValue(value: number): string {
+  if (Number.isInteger(value)) return String(value);
+  return String(Number(value.toFixed(6)));
+}
+
+function parseDurationStringToMinutes(raw: string): string | undefined {
+  const normalized = normalizeQuotaSnapshotDurationInput(raw);
+  if (!normalized) return '';
+  if (/^-?\d+$/.test(normalized)) return normalized;
+
+  const tokenPattern = /([+-]?(?:\d+(?:\.\d*)?|\.\d+))(ns|us|ms|s|m|h)/g;
+  let index = 0;
+  let totalMinutes = 0;
+
+  while (index < normalized.length) {
+    tokenPattern.lastIndex = index;
+    const match = tokenPattern.exec(normalized);
+    if (!match || match.index !== index) return undefined;
+
+    const amount = Number(match[1]);
+    if (!Number.isFinite(amount)) return undefined;
+
+    switch (match[2]) {
+      case 'h':
+        totalMinutes += amount * 60;
+        break;
+      case 'm':
+        totalMinutes += amount;
+        break;
+      case 's':
+        totalMinutes += amount / 60;
+        break;
+      case 'ms':
+        totalMinutes += amount / 60_000;
+        break;
+      case 'us':
+        totalMinutes += amount / 60_000_000;
+        break;
+      case 'ns':
+        totalMinutes += amount / 60_000_000_000;
+        break;
+      default:
+        return undefined;
+    }
+
+    index = tokenPattern.lastIndex;
+  }
+
+  return formatMinuteValue(totalMinutes);
+}
+
+function readDurationMinutesConfigValue(
+  record: Record<string, unknown> | null | undefined,
+  keys: string[],
+  fallback: string
+): string {
+  const value = readRecordValue(record, keys);
+  if (value === undefined || value === null) return fallback;
+  if (typeof value === 'number' && Number.isFinite(value)) return formatMinuteValue(value);
+  if (typeof value !== 'string') return String(value);
+
+  const trimmed = value.trim();
+  const minutes = parseDurationStringToMinutes(trimmed);
+  return minutes === undefined ? value : minutes;
+}
+
+function setDurationFromMinutesStringInDoc(
+  doc: YamlDocument,
+  path: YamlPath,
+  value: unknown
+): void {
+  const safe = typeof value === 'string' ? value : '';
+  const trimmed = safe.trim();
+  if (trimmed === '') {
+    if (docHas(doc, path)) doc.deleteIn(path);
+    return;
+  }
+
+  if (!/^-?\d+$/.test(trimmed)) {
+    return;
+  }
+
+  const parsed = Number(trimmed);
+  if (Number.isFinite(parsed)) {
+    doc.setIn(path, `${parsed}m`);
+  }
+}
+
+function deleteDocPaths(doc: YamlDocument, paths: YamlPath[]): void {
+  for (const path of paths) {
+    if (docHas(doc, path)) doc.deleteIn(path);
+  }
+}
+
 function getNonNegativeIntegerError(value: string): 'non_negative_integer' | undefined {
   const trimmed = value.trim();
   if (!trimmed) return undefined;
@@ -149,6 +287,11 @@ export function getVisualConfigValidationErrors(
     requestRetry: getNonNegativeIntegerError(values.requestRetry),
     maxRetryCredentials: getNonNegativeIntegerError(values.maxRetryCredentials),
     maxRetryInterval: getNonNegativeIntegerError(values.maxRetryInterval),
+    quotaRefreshIntervalMinutes: getNonNegativeIntegerError(values.quotaRefreshIntervalMinutes),
+    quotaRefreshJitterMinutes: getNonNegativeIntegerError(values.quotaRefreshJitterMinutes),
+    quotaRefreshStartupMaxStalenessMinutes: getNonNegativeIntegerError(
+      values.quotaRefreshStartupMaxStalenessMinutes
+    ),
     'streaming.keepaliveSeconds': getNonNegativeIntegerError(values.streaming.keepaliveSeconds),
     'streaming.bootstrapRetries': getNonNegativeIntegerError(values.streaming.bootstrapRetries),
     'streaming.nonstreamKeepaliveInterval': getNonNegativeIntegerError(
@@ -653,6 +796,37 @@ function getNextDirtyFields(
       nextValues.quotaAntigravityCredits === baselineValues.quotaAntigravityCredits
     );
   }
+  if (Object.prototype.hasOwnProperty.call(patch, 'quotaRefreshEnabled')) {
+    updateDirty(
+      'quotaRefreshEnabled',
+      nextValues.quotaRefreshEnabled === baselineValues.quotaRefreshEnabled
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'quotaRefreshIntervalMinutes')) {
+    updateDirty(
+      'quotaRefreshIntervalMinutes',
+      nextValues.quotaRefreshIntervalMinutes === baselineValues.quotaRefreshIntervalMinutes
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'quotaRefreshJitterMinutes')) {
+    updateDirty(
+      'quotaRefreshJitterMinutes',
+      nextValues.quotaRefreshJitterMinutes === baselineValues.quotaRefreshJitterMinutes
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'quotaRefreshStartupCatchUp')) {
+    updateDirty(
+      'quotaRefreshStartupCatchUp',
+      nextValues.quotaRefreshStartupCatchUp === baselineValues.quotaRefreshStartupCatchUp
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'quotaRefreshStartupMaxStalenessMinutes')) {
+    updateDirty(
+      'quotaRefreshStartupMaxStalenessMinutes',
+      nextValues.quotaRefreshStartupMaxStalenessMinutes ===
+        baselineValues.quotaRefreshStartupMaxStalenessMinutes
+    );
+  }
   if (Object.prototype.hasOwnProperty.call(patch, 'routingStrategy')) {
     updateDirty('routingStrategy', nextValues.routingStrategy === baselineValues.routingStrategy);
   }
@@ -790,6 +964,7 @@ export function useVisualConfig() {
       const tls = asRecord(parsed.tls);
       const remoteManagement = asRecord(parsed['remote-management']);
       const quotaExceeded = asRecord(parsed['quota-exceeded']);
+      const quotaSnapshotRefresh = asRecord(parsed['quota-snapshot-refresh']);
       const routing = asRecord(parsed.routing);
       const payload = asRecord(parsed.payload);
       const streaming = asRecord(parsed.streaming);
@@ -834,6 +1009,36 @@ export function useVisualConfig() {
         quotaSwitchProject: Boolean(quotaExceeded?.['switch-project'] ?? true),
         quotaSwitchPreviewModel: Boolean(quotaExceeded?.['switch-preview-model'] ?? true),
         quotaAntigravityCredits: Boolean(quotaExceeded?.['antigravity-credits'] ?? true),
+        quotaRefreshEnabled: readBooleanConfigValue(
+          quotaSnapshotRefresh,
+          ['enabled'],
+          DEFAULT_VISUAL_VALUES.quotaRefreshEnabled
+        ),
+        quotaRefreshIntervalMinutes: readDurationMinutesConfigValue(
+          quotaSnapshotRefresh,
+          ['interval', 'interval-minutes', 'interval_minutes'],
+          DEFAULT_VISUAL_VALUES.quotaRefreshIntervalMinutes
+        ),
+        quotaRefreshJitterMinutes: readDurationMinutesConfigValue(
+          quotaSnapshotRefresh,
+          ['jitter', 'jitter-minutes', 'jitter_minutes'],
+          DEFAULT_VISUAL_VALUES.quotaRefreshJitterMinutes
+        ),
+        quotaRefreshStartupCatchUp: readBooleanConfigValue(
+          quotaSnapshotRefresh,
+          ['startup-catch-up', 'startup_catch_up'],
+          DEFAULT_VISUAL_VALUES.quotaRefreshStartupCatchUp
+        ),
+        quotaRefreshStartupMaxStalenessMinutes: readDurationMinutesConfigValue(
+          quotaSnapshotRefresh,
+          [
+            'startup-max-staleness',
+            'startup_max_staleness',
+            'startup-max-staleness-minutes',
+            'startup_max_staleness_minutes',
+          ],
+          DEFAULT_VISUAL_VALUES.quotaRefreshStartupMaxStalenessMinutes
+        ),
 
         routingStrategy: routing?.strategy === 'fill-first' ? 'fill-first' : 'round-robin',
 
@@ -942,11 +1147,53 @@ export function useVisualConfig() {
           ensureMapInDoc(doc, ['quota-exceeded']);
           doc.setIn(['quota-exceeded', 'switch-project'], values.quotaSwitchProject);
           doc.setIn(['quota-exceeded', 'switch-preview-model'], values.quotaSwitchPreviewModel);
-          doc.setIn(
-            ['quota-exceeded', 'antigravity-credits'],
-            values.quotaAntigravityCredits
-          );
+          doc.setIn(['quota-exceeded', 'antigravity-credits'], values.quotaAntigravityCredits);
           deleteIfMapEmpty(doc, ['quota-exceeded']);
+        }
+
+        const quotaSnapshotRefreshDefined =
+          docHas(doc, ['quota-snapshot-refresh']) ||
+          values.quotaRefreshEnabled !== DEFAULT_VISUAL_VALUES.quotaRefreshEnabled ||
+          values.quotaRefreshIntervalMinutes.trim() !==
+            DEFAULT_VISUAL_VALUES.quotaRefreshIntervalMinutes ||
+          values.quotaRefreshJitterMinutes.trim() !==
+            DEFAULT_VISUAL_VALUES.quotaRefreshJitterMinutes ||
+          values.quotaRefreshStartupCatchUp !== DEFAULT_VISUAL_VALUES.quotaRefreshStartupCatchUp ||
+          values.quotaRefreshStartupMaxStalenessMinutes.trim() !== '';
+
+        if (quotaSnapshotRefreshDefined) {
+          ensureMapInDoc(doc, ['quota-snapshot-refresh']);
+          doc.setIn(['quota-snapshot-refresh', 'enabled'], values.quotaRefreshEnabled);
+          setDurationFromMinutesStringInDoc(
+            doc,
+            ['quota-snapshot-refresh', 'interval'],
+            values.quotaRefreshIntervalMinutes
+          );
+          setDurationFromMinutesStringInDoc(
+            doc,
+            ['quota-snapshot-refresh', 'jitter'],
+            values.quotaRefreshJitterMinutes
+          );
+          doc.setIn(
+            ['quota-snapshot-refresh', 'startup-catch-up'],
+            values.quotaRefreshStartupCatchUp
+          );
+          setDurationFromMinutesStringInDoc(
+            doc,
+            ['quota-snapshot-refresh', 'startup-max-staleness'],
+            values.quotaRefreshStartupMaxStalenessMinutes
+          );
+          deleteDocPaths(doc, [
+            ['quota-snapshot-refresh', 'interval-minutes'],
+            ['quota-snapshot-refresh', 'interval_minutes'],
+            ['quota-snapshot-refresh', 'jitter-minutes'],
+            ['quota-snapshot-refresh', 'jitter_minutes'],
+            ['quota-snapshot-refresh', 'startup_catch_up'],
+            ['quota-snapshot-refresh', 'startup_max_staleness'],
+            ['quota-snapshot-refresh', 'startup-max-staleness-minutes'],
+            ['quota-snapshot-refresh', 'startup_max_staleness_minutes'],
+          ]);
+          deleteIfMapEmpty(doc, ['quota-snapshot-refresh']);
         }
 
         if (docHas(doc, ['routing']) || values.routingStrategy !== 'round-robin') {

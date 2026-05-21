@@ -1,6 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
+import { useSearchParams } from 'react-router-dom';
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
 import { parse as parseYaml, parseDocument } from 'yaml';
 import { usePageTransitionLayer } from '@/components/common/PageTransitionLayer';
@@ -13,7 +14,7 @@ import {
   IconRefreshCw,
   IconSearch,
 } from '@/components/ui/icons';
-import { VisualConfigEditor } from '@/components/config/VisualConfigEditor';
+import { VisualConfigEditor, type VisualSectionId } from '@/components/config/VisualConfigEditor';
 import { DiffModal } from '@/components/config/DiffModal';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useVisualConfig } from '@/hooks/useVisualConfig';
@@ -37,6 +38,7 @@ function readCommercialModeFromYaml(yamlContent: string): boolean {
 
 export function ConfigPage() {
   const { t } = useTranslation();
+  const [searchParams] = useSearchParams();
   const pageTransitionLayer = usePageTransitionLayer();
   const isCurrentLayer = pageTransitionLayer ? pageTransitionLayer.isCurrentLayer : true;
   const showNotification = useNotificationStore((state) => state.showNotification);
@@ -44,6 +46,8 @@ export function ConfigPage() {
   const connectionStatus = useAuthStore((state) => state.connectionStatus);
   const resolvedTheme = useThemeStore((state) => state.resolvedTheme);
   const isMobile = useMediaQuery('(max-width: 768px)');
+  const requestedVisualSection: VisualSectionId | null =
+    searchParams.get('section') === 'quota' ? 'quota' : null;
 
   const {
     visualValues,
@@ -122,6 +126,12 @@ export function ConfigPage() {
       'error'
     );
   }, [activeTab, showNotification, t, visualParseError]);
+
+  useEffect(() => {
+    if (!requestedVisualSection || activeTab === 'visual' || visualParseError) return;
+    setActiveTab('visual');
+    localStorage.setItem('config-management:tab', 'visual');
+  }, [activeTab, requestedVisualSection, visualParseError]);
 
   const handleConfirmSave = async () => {
     setSaving(true);
@@ -555,6 +565,7 @@ export function ConfigPage() {
               values={visualValues}
               validationErrors={visualValidationErrors}
               hasPayloadValidationErrors={visualHasPayloadValidationErrors}
+              initialSectionId={requestedVisualSection}
               disabled={disableControls || loading}
               onChange={setVisualValues}
             />

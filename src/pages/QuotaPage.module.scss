@@ -88,12 +88,11 @@
   padding: $spacing-md;
   border: 1px solid var(--border-color);
   border-radius: $radius-lg;
-  background:
-    linear-gradient(
-      135deg,
-      color-mix(in srgb, var(--primary-color) 8%, var(--bg-primary)),
-      var(--bg-primary)
-    );
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--primary-color) 8%, var(--bg-primary)),
+    var(--bg-primary)
+  );
 
   @include mobile {
     flex-direction: column;
@@ -105,6 +104,7 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+  flex: 1 1 auto;
   min-width: 0;
 }
 
@@ -117,6 +117,40 @@
 .autoRefreshStatus {
   font-size: 13px;
   color: var(--text-secondary);
+}
+
+.autoRefreshMetaGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px 12px;
+  margin-top: 8px;
+}
+
+.autoRefreshMetaItem {
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 72%, transparent);
+  border-radius: $radius-md;
+  background: color-mix(in srgb, var(--bg-secondary) 62%, transparent);
+}
+
+.autoRefreshMetaLabel,
+.autoRefreshMetaValue {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.autoRefreshMetaLabel {
+  margin-bottom: 2px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.autoRefreshMetaValue {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
 .autoRefreshControls {
@@ -181,6 +215,9 @@
 }
 
 .autoRefreshButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-height: 38px;
   padding: 0 14px;
   border: 1px solid color-mix(in srgb, var(--primary-color) 28%, var(--border-color));
@@ -190,7 +227,9 @@
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
+  text-decoration: none;
   white-space: nowrap;
+  box-sizing: border-box;
 
   &:hover:not(:disabled) {
     background: color-mix(in srgb, var(--primary-color) 18%, var(--bg-secondary));
@@ -374,33 +413,23 @@
 
 // 卡片渐变背景 — 基于 TYPE_COLORS light.bg 转 rgba
 .claudeCard {
-  background-image: linear-gradient(180deg,
-      rgba(251, 236, 228, 0.18),
-      rgba(251, 236, 228, 0));
+  background-image: linear-gradient(180deg, rgba(251, 236, 228, 0.18), rgba(251, 236, 228, 0));
 }
 
 .antigravityCard {
-  background-image: linear-gradient(180deg,
-      rgba(224, 247, 250, 0.12),
-      rgba(224, 247, 250, 0));
+  background-image: linear-gradient(180deg, rgba(224, 247, 250, 0.12), rgba(224, 247, 250, 0));
 }
 
 .codexCard {
-  background-image: linear-gradient(180deg,
-      rgba(234, 231, 255, 0.18),
-      rgba(234, 231, 255, 0));
+  background-image: linear-gradient(180deg, rgba(234, 231, 255, 0.18), rgba(234, 231, 255, 0));
 }
 
 .geminiCliCard {
-  background-image: linear-gradient(180deg,
-      rgba(224, 232, 255, 0.2),
-      rgba(224, 232, 255, 0));
+  background-image: linear-gradient(180deg, rgba(224, 232, 255, 0.2), rgba(224, 232, 255, 0));
 }
 
 .kimiCard {
-  background-image: linear-gradient(180deg,
-      rgba(220, 232, 255, 0.2),
-      rgba(220, 232, 255, 0));
+  background-image: linear-gradient(180deg, rgba(220, 232, 255, 0.2), rgba(220, 232, 255, 0));
 }
 
 .quotaSection {
@@ -726,7 +755,10 @@
   display: flex;
   flex-direction: column;
   gap: $spacing-sm;
-  transition: transform $transition-fast, box-shadow $transition-fast, border-color $transition-fast;
+  transition:
+    transform $transition-fast,
+    box-shadow $transition-fast,
+    border-color $transition-fast;
 
   &:hover {
     transform: translateY(-2px);
