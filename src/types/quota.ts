@@ -185,7 +185,7 @@ export interface ClaudeQuotaWindow {
 }
 
 export interface ClaudeQuotaState {
-  status: 'idle' | 'loading' | 'success' | 'error';
+  status: 'idle' | 'loading' | 'success' | 'error' | 'reauth_required' | 'refresh_disabled';
   windows: ClaudeQuotaWindow[];
   extraUsage?: ClaudeExtraUsage | null;
   planType?: string | null;
@@ -241,7 +241,7 @@ export interface CodexQuotaWindow {
 }
 
 export interface CodexQuotaState {
-  status: 'idle' | 'loading' | 'success' | 'error';
+  status: 'idle' | 'loading' | 'success' | 'error' | 'reauth_required' | 'refresh_disabled';
   windows: CodexQuotaWindow[];
   planType?: string | null;
   lastRefreshedAt?: string;

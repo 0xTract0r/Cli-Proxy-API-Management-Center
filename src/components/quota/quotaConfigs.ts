@@ -82,6 +82,11 @@ import styles from '@/pages/QuotaPage.module.scss';
 type QuotaUpdater<T> = T | ((prev: T) => T);
 
 type QuotaType = 'antigravity' | 'claude' | 'codex' | 'gemini-cli' | 'kimi';
+type CoreQuotaReauthStatus = 'reauth_required';
+type CoreQuotaRefreshDisabledStatus = 'refresh_disabled';
+
+const CORE_QUOTA_REAUTH_REQUIRED_STATUS: CoreQuotaReauthStatus = 'reauth_required';
+const CORE_QUOTA_REFRESH_DISABLED_STATUS: CoreQuotaRefreshDisabledStatus = 'refresh_disabled';
 
 const DEFAULT_ANTIGRAVITY_PROJECT_ID = 'bamboo-precept-lgxtn';
 const QUOTA_PROGRESS_HIGH_THRESHOLD = 70;
@@ -123,6 +128,27 @@ export interface QuotaConfig<TState, TData> {
   controlClassName: string;
   gridClassName: string;
   renderQuotaItems: (quota: TState, t: TFunction, helpers: QuotaRenderHelpers) => ReactNode;
+}
+
+interface ClaudeQuotaFetchResult {
+  windows: ClaudeQuotaWindow[];
+  extraUsage?: ClaudeExtraUsage | null;
+  planType?: string | null;
+  lastRefreshedAt?: string;
+  nextRefreshAt?: string;
+  reauthRequired?: boolean;
+  refreshDisabled?: boolean;
+  error?: string;
+}
+
+interface CodexQuotaFetchResult {
+  planType: string | null;
+  windows: CodexQuotaWindow[];
+  lastRefreshedAt?: string;
+  nextRefreshAt?: string;
+  reauthRequired?: boolean;
+  refreshDisabled?: boolean;
+  error?: string;
 }
 
 const resolveAuthFileID = (file: AuthFileItem): string | null =>
@@ -169,7 +195,7 @@ const loadCoreQuotaEntry = async (
     throw createStatusError(entry.error || 'Quota snapshot refresh failed', 502);
   }
   if (!entry.snapshot) {
-    throw new Error('Quota snapshot is empty');
+    return { ...entry, snapshot: { usage: {} } };
   }
   return entry;
 };
@@ -479,21 +505,36 @@ const fetchCodexQuota = async (
   file: AuthFileItem,
   t: TFunction,
   refresh = false
-): Promise<{
-  planType: string | null;
-  windows: CodexQuotaWindow[];
-  lastRefreshedAt?: string;
-  nextRefreshAt?: string;
-}> => {
+): Promise<CodexQuotaFetchResult> => {
   const planTypeFromFile = resolveCodexPlanType(file);
   const entry = await loadCoreQuotaEntry(file, 'codex', refresh);
+  const planTypeFromSnapshot = normalizePlanType(entry.plan_type);
+  if (entry.status === CORE_QUOTA_REAUTH_REQUIRED_STATUS) {
+    return {
+      reauthRequired: true,
+      error: entry.error || t('common.quota_reauth_required'),
+      planType: planTypeFromSnapshot ?? planTypeFromFile,
+      windows: [],
+      lastRefreshedAt: entry.last_refreshed_at,
+      nextRefreshAt: entry.next_refresh_at,
+    };
+  }
+  if (entry.status === CORE_QUOTA_REFRESH_DISABLED_STATUS) {
+    return {
+      refreshDisabled: true,
+      planType: planTypeFromSnapshot ?? planTypeFromFile,
+      windows: [],
+      lastRefreshedAt: entry.last_refreshed_at,
+      nextRefreshAt: entry.next_refresh_at,
+    };
+  }
+
   const payload = parseCodexUsagePayload(entry.snapshot?.usage);
   if (!payload) {
     throw new Error(t('codex_quota.empty_windows'));
   }
 
   const planTypeFromUsage = normalizePlanType(payload.plan_type ?? payload.planType);
-  const planTypeFromSnapshot = normalizePlanType(entry.plan_type);
   const windows = buildCodexQuotaWindows(payload, t);
   return {
     planType: planTypeFromUsage ?? planTypeFromSnapshot ?? planTypeFromFile,
@@ -1064,14 +1105,31 @@ const fetchClaudeQuota = async (
   file: AuthFileItem,
   t: TFunction,
   refresh = false
-): Promise<{
-  windows: ClaudeQuotaWindow[];
-  extraUsage?: ClaudeExtraUsage | null;
-  planType?: string | null;
-  lastRefreshedAt?: string;
-  nextRefreshAt?: string;
-}> => {
+): Promise<ClaudeQuotaFetchResult> => {
   const entry = await loadCoreQuotaEntry(file, 'claude', refresh);
+  const snapshotPlanType = normalizePlanType(entry.plan_type);
+  if (entry.status === CORE_QUOTA_REAUTH_REQUIRED_STATUS) {
+    return {
+      reauthRequired: true,
+      error: entry.error || t('common.quota_reauth_required'),
+      windows: [],
+      extraUsage: null,
+      planType: snapshotPlanType ? `plan_${snapshotPlanType}` : null,
+      lastRefreshedAt: entry.last_refreshed_at,
+      nextRefreshAt: entry.next_refresh_at,
+    };
+  }
+  if (entry.status === CORE_QUOTA_REFRESH_DISABLED_STATUS) {
+    return {
+      refreshDisabled: true,
+      windows: [],
+      extraUsage: null,
+      planType: snapshotPlanType ? `plan_${snapshotPlanType}` : null,
+      lastRefreshedAt: entry.last_refreshed_at,
+      nextRefreshAt: entry.next_refresh_at,
+    };
+  }
+
   const payload = parseClaudeUsagePayload(entry.snapshot?.usage);
   if (!payload) {
     throw new Error(t('claude_quota.empty_windows'));
@@ -1079,7 +1137,6 @@ const fetchClaudeQuota = async (
 
   const windows = buildClaudeQuotaWindows(payload, t);
   const profilePlanType = resolveClaudePlanType(parseClaudeProfilePayload(entry.snapshot?.profile));
-  const snapshotPlanType = normalizePlanType(entry.plan_type);
   const planType = profilePlanType ?? (snapshotPlanType ? `plan_${snapshotPlanType}` : null);
 
   return {
@@ -1187,13 +1244,7 @@ const renderClaudeItems = (
 
 export const CLAUDE_CONFIG: QuotaConfig<
   ClaudeQuotaState,
-  {
-    windows: ClaudeQuotaWindow[];
-    extraUsage?: ClaudeExtraUsage | null;
-    planType?: string | null;
-    lastRefreshedAt?: string;
-    nextRefreshAt?: string;
-  }
+  ClaudeQuotaFetchResult
 > = {
   type: 'claude',
   i18nPrefix: 'claude_quota',
@@ -1205,12 +1256,13 @@ export const CLAUDE_CONFIG: QuotaConfig<
   storeSetter: 'setClaudeQuota',
   buildLoadingState: () => ({ status: 'loading', windows: [] }),
   buildSuccessState: (data) => ({
-    status: 'success',
+    status: data.reauthRequired ? 'reauth_required' : data.refreshDisabled ? 'refresh_disabled' : 'success',
     windows: data.windows,
     extraUsage: data.extraUsage,
     planType: data.planType,
     lastRefreshedAt: data.lastRefreshedAt,
     nextRefreshAt: data.nextRefreshAt,
+    error: data.error,
   }),
   buildErrorState: (message, status) => ({
     status: 'error',
@@ -1250,12 +1302,7 @@ export const ANTIGRAVITY_CONFIG: QuotaConfig<AntigravityQuotaState, AntigravityQ
 
 export const CODEX_CONFIG: QuotaConfig<
   CodexQuotaState,
-  {
-    planType: string | null;
-    windows: CodexQuotaWindow[];
-    lastRefreshedAt?: string;
-    nextRefreshAt?: string;
-  }
+  CodexQuotaFetchResult
 > = {
   type: 'codex',
   i18nPrefix: 'codex_quota',
@@ -1267,11 +1314,12 @@ export const CODEX_CONFIG: QuotaConfig<
   storeSetter: 'setCodexQuota',
   buildLoadingState: () => ({ status: 'loading', windows: [] }),
   buildSuccessState: (data) => ({
-    status: 'success',
+    status: data.reauthRequired ? 'reauth_required' : data.refreshDisabled ? 'refresh_disabled' : 'success',
     windows: data.windows,
     planType: data.planType,
     lastRefreshedAt: data.lastRefreshedAt,
     nextRefreshAt: data.nextRefreshAt,
+    error: data.error,
   }),
   buildErrorState: (message, status) => ({
     status: 'error',

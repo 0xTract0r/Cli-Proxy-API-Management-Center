@@ -40,6 +40,8 @@
     "unknown_error": "Unknown error",
     "quota_update_required": "Please update the CPA version or check for updates",
     "quota_check_credential": "Please check the credential status",
+    "quota_reauth_required": "Credential needs reauthentication",
+    "quota_refresh_disabled": "Quota refresh is disabled for this credential",
     "copy": "Copy",
     "readonly": "Read only",
     "expand": "Expand",

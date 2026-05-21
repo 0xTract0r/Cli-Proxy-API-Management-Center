@@ -40,6 +40,8 @@
     "unknown_error": "未知错误",
     "quota_update_required": "请更新 CPA 版本或检查更新",
     "quota_check_credential": "请检查凭证状态",
+    "quota_reauth_required": "凭证需重新认证",
+    "quota_refresh_disabled": "此凭证已关闭额度刷新",
     "copy": "复制",
     "readonly": "只读",
     "expand": "展开",

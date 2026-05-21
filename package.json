@@ -11,7 +11,8 @@
     "format": "prettier --write \"src/**/*.{ts,tsx,css,scss}\"",
     "type-check": "tsc --noEmit",
     "smoke:auth-files-ui": "bash ./scripts/smoke-auth-files-ui.sh",
-    "smoke:quota-ui": "bash ./scripts/smoke-quota-ui.sh"
+    "smoke:quota-ui": "bash ./scripts/smoke-quota-ui.sh",
+    "smoke:quota-live-ui": "bash ./scripts/smoke-quota-live-ui.sh"
   },
   "dependencies": {
     "@codemirror/lang-json": "^6.0.2",

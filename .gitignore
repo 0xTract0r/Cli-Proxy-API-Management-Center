@@ -18,6 +18,8 @@ style.md
 node_modules
 dist
 dist-ssr
+build
+test-results
 *.local
 skills
 

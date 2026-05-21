@@ -1,12 +1,19 @@
 import { apiClient } from './client';
 
+export type CoreQuotaSnapshotStatus =
+  | 'ok'
+  | 'error'
+  | 'reauth_required'
+  | 'refresh_disabled'
+  | (string & {});
+
 export interface CoreQuotaSnapshotEntry {
   auth_id?: string;
   auth_index?: string;
   name?: string;
   provider?: string;
   label?: string;
-  status?: string;
+  status?: CoreQuotaSnapshotStatus;
   error?: string;
   plan_type?: string;
   last_refreshed_at?: string;

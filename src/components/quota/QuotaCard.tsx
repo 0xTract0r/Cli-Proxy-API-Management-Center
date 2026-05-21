@@ -9,7 +9,7 @@ import type { AuthFileItem, ResolvedTheme, ThemeColors } from '@/types';
 import { TYPE_COLORS } from '@/utils/quota';
 import styles from '@/pages/QuotaPage.module.scss';
 
-type QuotaStatus = 'idle' | 'loading' | 'success' | 'error';
+type QuotaStatus = 'idle' | 'loading' | 'success' | 'error' | 'reauth_required' | 'refresh_disabled';
 
 export interface QuotaStatusState {
   status: QuotaStatus;
@@ -89,6 +89,7 @@ export function QuotaCard<TState extends QuotaStatusState>({
     resolvedTheme === 'dark' && typeColorSet.dark ? typeColorSet.dark : typeColorSet.light;
 
   const quotaStatus = quota?.status ?? 'idle';
+  const quotaReauthMessage = resolveQuotaReauthMessage(t, quota?.error);
   const quotaErrorMessage = resolveQuotaErrorMessage(
     t,
     quota?.errorStatus,
@@ -136,6 +137,14 @@ export function QuotaCard<TState extends QuotaStatusState>({
           ) : (
             <div className={styles.quotaMessage}>{t(idleMessageKey)}</div>
           )
+        ) : quotaStatus === 'reauth_required' || quota?.errorStatus === 401 ? (
+          <div className={styles.quotaMessage} role="status">
+            {quotaReauthMessage}
+          </div>
+        ) : quotaStatus === 'refresh_disabled' ? (
+          <div className={styles.quotaMessage} role="status">
+            {t('common.quota_refresh_disabled')}
+          </div>
         ) : quotaStatus === 'error' ? (
           <div className={styles.quotaError}>
             {t(`${i18nPrefix}.load_failed`, {
@@ -160,4 +169,12 @@ const resolveQuotaErrorMessage = (
   if (status === 404) return t('common.quota_update_required');
   if (status === 403) return t('common.quota_check_credential');
   return fallback;
+};
+
+const resolveQuotaReauthMessage = (t: TFunction, detail?: string): string => {
+  const baseMessage = t('common.quota_reauth_required');
+  if (!detail || /(?:\b401\b|authentication_error|Invalid authentication credentials)/i.test(detail)) {
+    return baseMessage;
+  }
+  return `${baseMessage}: ${detail}`;
 };
