@@ -70,6 +70,7 @@ interface VisualConfigEditorProps {
   initialSectionId?: VisualSectionId | null;
   disabled?: boolean;
   onChange: (values: Partial<VisualConfigValues>) => void;
+  onApiKeysPersist?: (apiKeysText: string, previousApiKeysText: string) => Promise<string | void> | string | void;
 }
 
 function getValidationMessage(
@@ -178,6 +179,7 @@ export function VisualConfigEditor({
   initialSectionId = null,
   disabled = false,
   onChange,
+  onApiKeysPersist,
 }: VisualConfigEditorProps) {
   const { t } = useTranslation();
   const pageTransitionLayer = usePageTransitionLayer();
@@ -783,6 +785,7 @@ export function VisualConfigEditor({
                   value={values.apiKeysText}
                   disabled={disabled}
                   onChange={handleApiKeysTextChange}
+                  onPersist={onApiKeysPersist}
                 />
               </div>
             </SectionStack>

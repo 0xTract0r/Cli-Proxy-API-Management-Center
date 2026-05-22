@@ -321,7 +321,7 @@ export function UsagePage() {
         loading={loading}
         modelPrices={modelPrices}
         hasCostData={hasCostData}
-        nowMs={nowMs}
+        rateWindowMinutes={hourWindowHours === undefined ? undefined : hourWindowHours * 60}
         sparklines={{
           requests: requestsSparkline,
           tokens: tokensSparkline,

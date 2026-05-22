@@ -190,6 +190,13 @@ function collectDetails(usage) {
   return details;
 }
 
+function calculateRangeWindowMinutes(range, windowMs, filtered) {
+  if (range !== 'all') return windowMs / 60000;
+  const timestamps = filtered.map((detail) => detail.timestampMs).filter((value) => value > 0);
+  if (!timestamps.length) return 1;
+  return Math.max(1, (Math.max(...timestamps) - Math.min(...timestamps)) / 60000);
+}
+
 function summarizeUsage(payload, modelPrices, sensitiveRawEndpoints = new Set()) {
   const usage = unwrapUsage(payload);
   const apis = isRecord(usage.apis) ? usage.apis : {};
@@ -235,6 +242,8 @@ function summarizeUsage(payload, modelPrices, sensitiveRawEndpoints = new Set())
         })
         .slice(0, 5);
     const cacheHitRequests = filtered.filter((detail) => detail.cacheReadTokens > 0).length;
+    const tokenCount = filtered.reduce((sum, detail) => sum + detail.totalTokens, 0);
+    const rateWindowMinutes = calculateRangeWindowMinutes(range, windowMs, filtered);
     for (const detail of filtered) {
       if (detail.costUsd === null && !modelPrices[detail.model]) {
         missingCostWithoutPrice.push({
@@ -249,7 +258,7 @@ function summarizeUsage(payload, modelPrices, sensitiveRawEndpoints = new Set())
       request_count_from_details: filtered.length,
       success_count_from_details: filtered.filter((detail) => !detail.failed).length,
       failure_count_from_details: filtered.filter((detail) => detail.failed).length,
-      token_count_from_details: filtered.reduce((sum, detail) => sum + detail.totalTokens, 0),
+      token_count_from_details: tokenCount,
       billable_token_count_from_details: filtered.reduce((sum, detail) => sum + detail.billableTokens, 0),
       cache_read_token_count_from_details: filtered.reduce((sum, detail) => sum + detail.cacheReadTokens, 0),
       cache_write_token_count_from_details: filtered.reduce((sum, detail) => sum + detail.cacheWriteTokens, 0),
@@ -259,6 +268,9 @@ function summarizeUsage(payload, modelPrices, sensitiveRawEndpoints = new Set())
         (sum, detail) => sum + calculateDetailCost(detail, modelPrices),
         0
       ),
+      rate_window_minutes: rateWindowMinutes,
+      rpm_from_details: filtered.length / rateWindowMinutes,
+      tpm_from_details: tokenCount / rateWindowMinutes,
       top_models: top(byModel),
       top_endpoints: top(byEndpoint, { endpoint: true }),
     };
@@ -604,10 +616,10 @@ test('production usage page data items match management usage API', async ({ pag
       assertApproxCompact(uiByRange[range].parsed.cacheWriteTokens, expected.cache_write_token_count_from_details, `${range} UI cache-write tokens`);
       assertApproxCompact(uiByRange[range].parsed.reasoningTokens, expected.reasoning_token_count_from_details, `${range} UI reasoning tokens`);
       assertApproxPercent(uiByRange[range].parsed.cacheHitRatePercent, expected.cache_hit_rate_percent, `${range} UI cache hit rate`);
-      assertApproxCompact(uiByRange[range].parsed.rpmRequests, usageSummary.rate_30m.request_count, `${range} UI RPM request window`);
-      assertApproxCompact(uiByRange[range].parsed.tpmTokens, usageSummary.rate_30m.token_count, `${range} UI TPM token window`);
-      assertApproxRate(uiByRange[range].parsed.rpm, usageSummary.rate_30m.rpm, `${range} UI RPM value`);
-      assertApproxRate(uiByRange[range].parsed.tpm, usageSummary.rate_30m.tpm, `${range} UI TPM value`);
+      assertApproxCompact(uiByRange[range].parsed.rpmRequests, expected.request_count_from_details, `${range} UI RPM request total`);
+      assertApproxCompact(uiByRange[range].parsed.tpmTokens, expected.token_count_from_details, `${range} UI TPM token total`);
+      assertApproxRate(uiByRange[range].parsed.rpm, expected.rpm_from_details, `${range} UI RPM value`);
+      assertApproxRate(uiByRange[range].parsed.tpm, expected.tpm_from_details, `${range} UI TPM value`);
       assertApproxMoney(uiByRange[range].parsed.costUsd, expected.total_cost_usd_from_details, `${range} UI cost total`);
       if (range === 'all' && usageSummary.root.total_cost_usd > 0) {
         assertApproxMoney(
@@ -634,6 +646,16 @@ test('production usage page data items match management usage API', async ({ pag
         /Billable Tokens|计费Token数量|Cache Hit Rate|缓存命中率/i
       );
       await page.screenshot({ path: path.join(smokeOutDir, `usage-${range}.png`), fullPage: true });
+    }
+
+    const expectedRateBuckets = new Set(
+      ranges.map((range) => `${usageSummary.ranges[range].rpm_from_details.toFixed(4)}:${usageSummary.ranges[range].tpm_from_details.toFixed(2)}`)
+    );
+    if (expectedRateBuckets.size > 1) {
+      const actualRateBuckets = new Set(
+        ranges.map((range) => `${uiByRange[range].parsed.rpm.toFixed(4)}:${uiByRange[range].parsed.tpm.toFixed(2)}`)
+      );
+      expect(actualRateBuckets.size, 'RPM/TPM cards should change when selected usage ranges have different rates').toBeGreaterThan(1);
     }
 
     fs.writeFileSync(path.join(smokeOutDir, 'usage-ui-summary.json'), `${JSON.stringify(uiByRange, null, 2)}\n`);

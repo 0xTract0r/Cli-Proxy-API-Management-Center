@@ -43,7 +43,7 @@ export interface StatCardsProps {
   loading: boolean;
   modelPrices: Record<string, ModelPrice>;
   hasCostData: boolean;
-  nowMs: number;
+  rateWindowMinutes?: number;
   sparklines: {
     requests: SparklineBundle | null;
     tokens: SparklineBundle | null;
@@ -58,7 +58,7 @@ export function StatCards({
   loading,
   modelPrices,
   hasCostData,
-  nowMs,
+  rateWindowMinutes,
   sparklines
 }: StatCardsProps) {
   const { t } = useTranslation();
@@ -79,7 +79,7 @@ export function StatCards({
         hitRate: 0,
         reasoningTokens: 0
       },
-      rateStats: { rpm: 0, tpm: 0, windowMinutes: 30, requestCount: 0, tokenCount: 0 },
+      rateStats: { rpm: 0, tpm: 0, windowMinutes: 0, requestCount: 0, tokenCount: 0 },
       totalCost: 0,
       latencyStats: {
         averageMs: null as number | null,
@@ -98,12 +98,10 @@ export function StatCards({
     let reasoningTokens = 0;
     let totalCost = 0;
 
-    const now = nowMs;
-    const windowMinutes = 30;
-    const windowStart = now - windowMinutes * 60 * 1000;
     let requestCount = 0;
     let tokenCount = 0;
-    const hasValidNow = Number.isFinite(now) && now > 0;
+    let minTimestamp = Number.POSITIVE_INFINITY;
+    let maxTimestamp = 0;
 
     details.forEach((detail) => {
       const tokens = detail.tokens;
@@ -111,21 +109,25 @@ export function StatCards({
         reasoningTokens += tokens.reasoning_tokens;
       }
 
+      requestCount += 1;
+      tokenCount += extractTotalTokens(detail);
+
       const timestamp = detail.__timestampMs ?? 0;
-      if (
-        hasValidNow &&
-        Number.isFinite(timestamp) &&
-        timestamp >= windowStart &&
-        timestamp <= now
-      ) {
-        requestCount += 1;
-        tokenCount += extractTotalTokens(detail);
+      if (Number.isFinite(timestamp) && timestamp > 0) {
+        minTimestamp = Math.min(minTimestamp, timestamp);
+        maxTimestamp = Math.max(maxTimestamp, timestamp);
       }
 
       totalCost += calculateCost(detail, modelPrices);
     });
 
-    const denominator = windowMinutes > 0 ? windowMinutes : 1;
+    const derivedWindowMinutes =
+      Number.isFinite(rateWindowMinutes) && Number(rateWindowMinutes) > 0
+        ? Number(rateWindowMinutes)
+        : minTimestamp !== Number.POSITIVE_INFINITY && maxTimestamp > 0
+          ? Math.max(1, (maxTimestamp - minTimestamp) / 60000)
+          : 1;
+    const denominator = derivedWindowMinutes > 0 ? derivedWindowMinutes : 1;
     return {
       tokenBreakdown: {
         cachedTokens: cacheMetrics.cacheReadTokens,
@@ -139,14 +141,14 @@ export function StatCards({
       rateStats: {
         rpm: requestCount / denominator,
         tpm: tokenCount / denominator,
-        windowMinutes,
+        windowMinutes: denominator,
         requestCount,
         tokenCount,
       },
       totalCost,
       latencyStats,
     };
-  }, [modelPrices, nowMs, usage]);
+  }, [modelPrices, rateWindowMinutes, usage]);
 
   const statsCards: StatCardData[] = [
     {

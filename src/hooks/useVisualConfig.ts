@@ -656,6 +656,10 @@ type VisualConfigAction =
   | {
       type: 'set_values';
       values: Partial<VisualConfigValues>;
+    }
+  | {
+      type: 'mark_persisted';
+      values: Partial<VisualConfigValues>;
     };
 
 function createInitialVisualConfigState(): VisualConfigState {
@@ -918,6 +922,19 @@ function visualConfigReducer(
       return {
         ...state,
         visualValues: nextValues,
+        dirtyFields: nextDirtyFields,
+      };
+    }
+    case 'mark_persisted': {
+      const nextValues = mergeVisualConfigValues(state.visualValues, action.values);
+      const nextBaselineValues = mergeVisualConfigValues(state.baselineValues, action.values);
+      const nextDirtyFields = new Set(state.dirtyFields);
+      Object.keys(action.values).forEach((key) => nextDirtyFields.delete(key));
+
+      return {
+        ...state,
+        visualValues: nextValues,
+        baselineValues: nextBaselineValues,
         dirtyFields: nextDirtyFields,
       };
     }
@@ -1290,6 +1307,10 @@ export function useVisualConfig() {
     dispatch({ type: 'set_values', values: newValues });
   }, []);
 
+  const markVisualValuesPersisted = useCallback((newValues: Partial<VisualConfigValues>) => {
+    dispatch({ type: 'mark_persisted', values: newValues });
+  }, []);
+
   return {
     visualValues,
     visualDirty,
@@ -1299,6 +1320,7 @@ export function useVisualConfig() {
     loadVisualValuesFromYaml,
     applyVisualChangesToYaml,
     setVisualValues,
+    markVisualValuesPersisted,
   };
 }
 

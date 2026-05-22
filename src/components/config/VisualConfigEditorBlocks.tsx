@@ -162,10 +162,12 @@ export const ApiKeysCardEditor = memo(function ApiKeysCardEditor({
   value,
   disabled,
   onChange,
+  onPersist,
 }: {
   value: string;
   disabled?: boolean;
   onChange: (nextValue: string) => void;
+  onPersist?: (nextValue: string, previousValue: string) => Promise<string | void> | string | void;
 }) {
   const { t } = useTranslation();
   const showNotification = useNotificationStore((state) => state.showNotification);
@@ -194,6 +196,7 @@ export const ApiKeysCardEditor = memo(function ApiKeysCardEditor({
   const [editingApiKeyId, setEditingApiKeyId] = useState<string | null>(null);
   const [inputValue, setInputValue] = useState('');
   const [formError, setFormError] = useState('');
+  const [persisting, setPersisting] = useState(false);
 
   function generateSecureApiKey(): string {
     const charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -228,14 +231,47 @@ export const ApiKeysCardEditor = memo(function ApiKeysCardEditor({
     onChange(nextKeys.join('\n'));
   };
 
-  const handleDelete = (apiKeyId: string) => {
-    const index = renderApiKeyIds.findIndex((id) => id === apiKeyId);
-    if (index < 0) return;
-    setApiKeyIds(renderApiKeyIds.filter((id) => id !== apiKeyId));
-    updateApiKeys(apiKeys.filter((_, i) => i !== index));
+  const getPersistErrorMessage = (err: unknown) =>
+    err instanceof Error ? err.message : typeof err === 'string' ? err : t('notification.save_failed');
+
+  const persistApiKeys = async (nextKeys: string[]) => {
+    const nextValue = nextKeys.join('\n');
+    let persistedValue = nextValue;
+    if (onPersist) {
+      setPersisting(true);
+      try {
+        const result = await onPersist(nextValue, value);
+        if (typeof result === 'string') {
+          persistedValue = result;
+        }
+      } finally {
+        setPersisting(false);
+      }
+    }
+    const persistedKeys = persistedValue
+      .split('\n')
+      .map((key) => key.trim())
+      .filter(Boolean);
+    updateApiKeys(persistedKeys);
+    return persistedKeys;
   };
 
-  const handleSave = () => {
+  const handleDelete = async (apiKeyId: string) => {
+    const index = renderApiKeyIds.findIndex((id) => id === apiKeyId);
+    if (index < 0) return;
+    const nextKeys = apiKeys.filter((_, i) => i !== index);
+    try {
+      const persistedKeys = await persistApiKeys(nextKeys);
+      setApiKeyIds(persistedKeys.map((_, idx) => renderApiKeyIds[idx] ?? makeClientId()));
+    } catch (err: unknown) {
+      showNotification(
+        `${t('config_management.visual.api_keys.persist_failed')}: ${getPersistErrorMessage(err)}`,
+        'error'
+      );
+    }
+  };
+
+  const handleSave = async () => {
     const trimmed = inputValue.trim();
     if (!trimmed) {
       setFormError(t('config_management.visual.api_keys.error_empty'));
@@ -253,11 +289,15 @@ export const ApiKeysCardEditor = memo(function ApiKeysCardEditor({
       editingApiKeyId === null
         ? [...apiKeys, trimmed]
         : apiKeys.map((key, idx) => (idx === editingIndex ? trimmed : key));
-    if (editingApiKeyId === null) {
-      setApiKeyIds([...renderApiKeyIds, makeClientId()]);
+    try {
+      const persistedKeys = await persistApiKeys(nextKeys);
+      setApiKeyIds(persistedKeys.map((_, idx) => renderApiKeyIds[idx] ?? makeClientId()));
+      closeModal();
+    } catch (err: unknown) {
+      setFormError(
+        `${t('config_management.visual.api_keys.persist_failed')}: ${getPersistErrorMessage(err)}`
+      );
     }
-    updateApiKeys(nextKeys);
-    closeModal();
   };
 
   const handleCopy = async (apiKey: string) => {
@@ -277,7 +317,12 @@ export const ApiKeysCardEditor = memo(function ApiKeysCardEditor({
     <div className="form-group" style={{ marginBottom: 0 }}>
       <div className={styles.blockHeaderRow}>
         <label style={{ margin: 0 }}>{t('config_management.visual.api_keys.label')}</label>
-        <Button size="sm" onClick={openAddModal} disabled={disabled}>
+        <Button
+          size="sm"
+          onClick={openAddModal}
+          disabled={disabled || persisting}
+          data-testid="config-api-key-add"
+        >
           {t('config_management.visual.api_keys.add')}
         </Button>
       </div>
@@ -285,9 +330,13 @@ export const ApiKeysCardEditor = memo(function ApiKeysCardEditor({
       {apiKeys.length === 0 ? (
         <div className={styles.emptyState}>{t('config_management.visual.api_keys.empty')}</div>
       ) : (
-        <div className="item-list" style={{ marginTop: 4 }}>
+        <div className="item-list" style={{ marginTop: 4 }} data-testid="config-api-key-list">
           {apiKeys.map((key, index) => (
-            <div key={renderApiKeyIds[index] ?? `${key}-${index}`} className="item-row">
+            <div
+              key={renderApiKeyIds[index] ?? `${key}-${index}`}
+              className="item-row"
+              data-testid="config-api-key-row"
+            >
               <div className="item-meta">
                 <div className="pill">#{index + 1}</div>
                 <div className="item-title">
@@ -301,6 +350,7 @@ export const ApiKeysCardEditor = memo(function ApiKeysCardEditor({
                   size="sm"
                   onClick={() => handleCopy(key)}
                   disabled={disabled}
+                  data-testid="config-api-key-copy"
                 >
                   {t('common.copy')}
                 </Button>
@@ -309,6 +359,7 @@ export const ApiKeysCardEditor = memo(function ApiKeysCardEditor({
                   size="sm"
                   onClick={() => openEditModal(renderApiKeyIds[index] ?? '')}
                   disabled={disabled}
+                  data-testid="config-api-key-edit"
                 >
                   {t('config_management.visual.common.edit')}
                 </Button>
@@ -316,7 +367,8 @@ export const ApiKeysCardEditor = memo(function ApiKeysCardEditor({
                   variant="danger"
                   size="sm"
                   onClick={() => handleDelete(renderApiKeyIds[index] ?? '')}
-                  disabled={disabled}
+                  disabled={disabled || persisting}
+                  data-testid="config-api-key-delete"
                 >
                   {t('config_management.visual.common.delete')}
                 </Button>
@@ -331,6 +383,7 @@ export const ApiKeysCardEditor = memo(function ApiKeysCardEditor({
       <Modal
         open={modalOpen}
         onClose={closeModal}
+        closeDisabled={persisting}
         title={
           editingApiKeyId !== null
             ? t('config_management.visual.api_keys.edit_title')
@@ -338,10 +391,10 @@ export const ApiKeysCardEditor = memo(function ApiKeysCardEditor({
         }
         footer={
           <>
-            <Button variant="secondary" onClick={closeModal} disabled={disabled}>
+            <Button variant="secondary" onClick={closeModal} disabled={disabled || persisting}>
               {t('config_management.visual.common.cancel')}
             </Button>
-            <Button onClick={handleSave} disabled={disabled}>
+            <Button onClick={handleSave} disabled={disabled || persisting} loading={persisting}>
               {editingApiKeyId !== null
                 ? t('config_management.visual.common.update')
                 : t('config_management.visual.common.add')}
@@ -360,7 +413,7 @@ export const ApiKeysCardEditor = memo(function ApiKeysCardEditor({
               placeholder={t('config_management.visual.api_keys.input_placeholder')}
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
-              disabled={disabled}
+              disabled={disabled || persisting}
               aria-describedby={formError ? `${apiKeyErrorId} ${apiKeyHintId}` : apiKeyHintId}
               aria-invalid={Boolean(formError)}
             />
@@ -369,7 +422,7 @@ export const ApiKeysCardEditor = memo(function ApiKeysCardEditor({
               variant="secondary"
               size="sm"
               onClick={handleGenerate}
-              disabled={disabled}
+              disabled={disabled || persisting}
             >
               {t('config_management.visual.api_keys.generate')}
             </Button>

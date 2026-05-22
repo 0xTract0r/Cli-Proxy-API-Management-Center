@@ -15,6 +15,7 @@
     "smoke:quota-ui": "bash ./scripts/smoke-quota-ui.sh",
     "smoke:quota-live-ui": "bash ./scripts/smoke-quota-live-ui.sh",
     "smoke:usage-live-data-ui": "bash ./scripts/smoke-usage-live-data-ui.sh",
+    "smoke:config-api-key-persistence-ui": "bash ./scripts/smoke-config-api-key-persistence-ui.sh",
     "smoke:management-live-pages-ui": "bash ./scripts/smoke-management-live-pages-ui.sh"
   },
   "dependencies": {
