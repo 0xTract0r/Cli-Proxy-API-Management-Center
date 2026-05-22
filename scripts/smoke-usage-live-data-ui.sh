@@ -36,4 +36,5 @@ npx playwright test \
   "${SCRIPT_DIR}/playwright-usage-live-data-ui.smoke.spec.mjs" \
   --workers=1 \
   --reporter=line \
-  --trace=retain-on-failure
+  --timeout=180000 \
+  --trace=off

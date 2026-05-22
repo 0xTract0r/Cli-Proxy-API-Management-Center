@@ -12,7 +12,7 @@ const smokeOutDir =
 const ignoreHTTPSErrors = /^(1|true|yes|on)$/i.test(
   process.env.PLAYWRIGHT_IGNORE_HTTPS_ERRORS || process.env.MANAGEMENT_UI_IGNORE_HTTPS_ERRORS || ''
 );
-const triggerRefresh = !/^(0|false|no|off)$/i.test(process.env.LIVE_QUOTA_TRIGGER_REFRESH || '1');
+const triggerRefresh = !/^(0|false|no|off)$/i.test(process.env.LIVE_QUOTA_TRIGGER_REFRESH || '0');
 const configuredMaxOkRefreshAgeHours = Number(process.env.LIVE_QUOTA_MAX_OK_AGE_HOURS || '24');
 const maxOkRefreshAgeHours =
   Number.isFinite(configuredMaxOkRefreshAgeHours) && configuredMaxOkRefreshAgeHours > 0
@@ -28,6 +28,9 @@ const supportedProviders = new Set(
 
 const targetUrl = `${managementUiBase}${managementUiRoute}`;
 const apiBase = process.env.MANAGEMENT_API_BASE || (managementUiBase ? new URL(managementUiBase).origin : '');
+const productionTargetPattern = /(?::18317\b|cpa\.wisedata\.co)/i;
+const productionLookingTarget =
+  productionTargetPattern.test(managementUiBase) || productionTargetPattern.test(apiBase);
 
 const forbiddenTextPatterns = [
   /额度获取失败/i,
@@ -126,6 +129,126 @@ const authLabelForEntry = (entry, index) => {
   return sanitizeAuthLabel(value, `entry#${index + 1}`);
 };
 
+const rawAuthCandidatesForEntry = (entry) =>
+  [
+    entry?.name,
+    entry?.auth_name,
+    entry?.auth_file,
+    entry?.auth_file_name,
+    entry?.file_name,
+    entry?.filename,
+    entry?.display_name,
+    entry?.credential_name,
+    entry?.id,
+  ]
+    .map((value) => (value === undefined || value === null ? '' : String(value).trim()))
+    .filter(Boolean)
+    .map((value) => (value.includes('/') ? path.basename(value) : value));
+
+const unique = (values) => Array.from(new Set(values.filter(Boolean)));
+
+const normalizeFlagValue = (value) => {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value !== 0;
+  if (typeof value === 'string') {
+    const trimmed = value.trim().toLowerCase();
+    if (['true', '1', 'yes', 'y', 'on'].includes(trimmed)) return true;
+    if (['false', '0', 'no', 'n', 'off'].includes(trimmed)) return false;
+  }
+  return undefined;
+};
+
+const normalizePlanKey = (value) => {
+  const raw = String(value || '').trim().toLowerCase();
+  if (!raw) return '';
+  return raw.replace(/^plan_/, '').replace(/[_\s-]+/g, '_');
+};
+
+const derivePlanKeyForEntry = (entry) => {
+  const rawPlan = normalizePlanKey(
+    entry?.plan_type || entry?.planType || entry?.snapshot?.usage?.plan_type || entry?.snapshot?.usage?.planType
+  );
+  if (rawPlan) return rawPlan;
+
+  const provider = String(entry?.provider || '').toLowerCase();
+  const profile = entry?.snapshot?.profile;
+  const account = profile?.account || {};
+  if (provider === 'claude') {
+    if (normalizeFlagValue(account.has_claude_max) === true) return 'max';
+    if (normalizeFlagValue(account.has_claude_pro) === true) return 'pro';
+    if (
+      normalizeFlagValue(account.has_claude_max) === false &&
+      normalizeFlagValue(account.has_claude_pro) === false
+    ) {
+      return 'free';
+    }
+  }
+  return '';
+};
+
+const planDisplayCandidatesForEntry = (entry, summaryEntry) => {
+  const candidates = [];
+  const provider = String(summaryEntry?.provider || entry?.provider || '').toLowerCase();
+  const rawPlan = normalizePlanKey(summaryEntry?.plan) || derivePlanKeyForEntry(entry);
+  const profile = entry?.snapshot?.profile;
+  const account = profile?.account || {};
+  const organization = profile?.organization || {};
+
+  if (provider === 'codex') {
+    if (rawPlan === 'plus') candidates.push('Plus');
+    if (rawPlan === 'pro') candidates.push('Pro 20x');
+    if (['prolite', 'pro-lite', 'pro_lite'].includes(rawPlan)) candidates.push('Pro 5x');
+    if (rawPlan === 'team') candidates.push('Team');
+    if (rawPlan === 'free') candidates.push('Free');
+  } else if (provider === 'claude') {
+    if (normalizeFlagValue(account.has_claude_max) === true) candidates.push('Max');
+    if (normalizeFlagValue(account.has_claude_pro) === true) candidates.push('Pro');
+    if (rawPlan === 'max') candidates.push('Max');
+    if (rawPlan === 'pro') candidates.push('Pro');
+    if (rawPlan === 'free') candidates.push('Free');
+    if (organization.rate_limit_tier) candidates.push(String(organization.rate_limit_tier));
+  }
+
+  if (rawPlan) candidates.push(rawPlan);
+  return unique(candidates);
+};
+
+const textContainsAny = (text, candidates) =>
+  candidates.some((candidate) => candidate && text.toLowerCase().includes(candidate.toLowerCase()));
+
+const escapeRegExp = (value) => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const timestampDisplayCandidates = (value) => {
+  const timestamp = Date.parse(String(value || ''));
+  if (!Number.isFinite(timestamp)) return [];
+  const date = new Date(timestamp);
+  const withLeadingHour = new Intl.DateTimeFormat(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+  const withoutLeadingHour = withLeadingHour.replace(/^0(\d:)/, '$1');
+  return unique([withLeadingHour, withoutLeadingHour]);
+};
+
+const findQuotaCardForEntry = async (page, entry, rawEntry) => {
+  const authCandidates = rawAuthCandidatesForEntry(rawEntry);
+  const cards = page.locator('[class*="fileCard"]');
+  const providerPattern = new RegExp(escapeRegExp(entry.provider), 'i');
+
+  for (const candidate of authCandidates) {
+    const card = cards.filter({ hasText: candidate }).filter({ hasText: providerPattern }).first();
+    if ((await card.count()) > 0) {
+      return { card, matchedAuth: candidate };
+    }
+  }
+
+  const sanitizedCandidates = authCandidates.map((value) => sanitizeAuthLabel(value, '<redacted>')).join(', ');
+  throw new Error(
+    `quota card not found for provider=${entry.provider} auth=${entry.auth}; candidates=${sanitizedCandidates}`
+  );
+};
+
 const policyFor = (value) => value?.policy ?? value?.refresh_policy ?? null;
 
 const policyEntriesFor = (value) => {
@@ -221,11 +344,12 @@ const summarizeQuotaPayload = (payload) => {
       const snapshotKeys =
         entry?.snapshot && typeof entry.snapshot === 'object' ? Object.keys(entry.snapshot).sort() : [];
       return {
+        source_index: index,
         provider: String(entry?.provider || '').toLowerCase(),
         auth: authLabelForEntry(entry, index),
         disabled: entry?.disabled === true,
         status: entry?.status || '',
-        plan: entry?.plan_type || entry?.planType || '',
+        plan: derivePlanKeyForEntry(entry),
         has_snapshot: hasUsableSnapshot(entry),
         snapshot_keys: snapshotKeys,
         last_refreshed_at: lastRefreshedAt,
@@ -347,7 +471,7 @@ const assertEvidenceSanitized = (payload) => {
   ).not.toMatch(/\b401\b|authentication_error|Invalid authentication credentials/i);
 };
 
-const assertUiShowsQuotaData = async (page, snapshot) => {
+const assertUiShowsQuotaData = async (page, rawPayload, snapshot, uiAssertions) => {
   const bodyText = await assertNoForbiddenText(page);
   for (const pattern of emptyTextPatterns) {
     expect(bodyText, `quota page must not show empty/no-data state ${pattern}`).not.toMatch(pattern);
@@ -361,6 +485,84 @@ const assertUiShowsQuotaData = async (page, snapshot) => {
     providerPattern.test(bodyText),
     `quota page should render at least one supported provider from API: ${providerNames.join(', ')}`
   ).toBe(true);
+
+  const rawEntries = Array.isArray(rawPayload?.entries) ? rawPayload.entries : [];
+  const activeEntries = (snapshot.entries || [])
+    .map((entry, index) => ({ entry, index }))
+    .filter(({ entry }) => supportedProviders.has(entry.provider) && entry.disabled !== true);
+  for (const { entry, index } of activeEntries) {
+    const rawEntry = rawEntries[index] || {};
+    const { card, matchedAuth } = await findQuotaCardForEntry(page, entry, rawEntry);
+    const cardText = await card.innerText();
+    const planCandidates = planDisplayCandidatesForEntry(rawEntry, entry);
+    const assertionRecord = {
+      provider: entry.provider,
+      auth: entry.auth,
+      status: entry.status,
+      plan_candidates: planCandidates,
+      snapshot_keys: entry.snapshot_keys || [],
+      matched_auth: sanitizeAuthLabel(matchedAuth, '<redacted>'),
+      last_refreshed_at: entry.last_refreshed_at,
+      next_refresh_at: entry.next_refresh_at,
+    };
+    uiAssertions?.push(assertionRecord);
+
+    expect(cardText, `quota card should render provider ${entry.provider}`).toMatch(
+      new RegExp(escapeRegExp(entry.provider), 'i')
+    );
+    expect(
+      textContainsAny(cardText, [matchedAuth]),
+      `quota card should render auth label for ${entry.provider} ${entry.auth}`
+    ).toBe(true);
+    expect(entry.status, `active quota entry should be ok for ${entry.provider} ${entry.auth}`).toBe('ok');
+    expect(cardText, `quota card should not show loading/error state for ${entry.provider} ${entry.auth}`).not.toMatch(
+      /Loading quota|正在加载额度|load failed|获取失败|reauth|重新认证|refresh disabled|已禁用/i
+    );
+
+    if (entry.status === 'ok') {
+      expect(cardText, `ok quota card should render snapshot label for ${entry.provider} ${entry.auth}`).toMatch(
+        /Snapshot|快照/i
+      );
+      expect(cardText, `ok quota card should render refreshed time for ${entry.provider} ${entry.auth}`).toMatch(
+        /Refreshed|刷新于/i
+      );
+      expect(
+        textContainsAny(cardText, timestampDisplayCandidates(entry.last_refreshed_at)),
+        `quota card should render last_refreshed_at for ${entry.provider} ${entry.auth}: ${entry.last_refreshed_at}`
+      ).toBe(true);
+      if (entry.next_refresh_at) {
+        expect(
+          textContainsAny(cardText, timestampDisplayCandidates(entry.next_refresh_at)),
+          `quota card should render next_refresh_at for ${entry.provider} ${entry.auth}: ${entry.next_refresh_at}`
+        ).toBe(true);
+      }
+
+      expect(
+        planCandidates.length,
+        `quota plan candidates should be derivable for ${entry.provider} ${entry.auth}; snapshot keys=${(entry.snapshot_keys || []).join(',')}`
+      ).toBeGreaterThan(0);
+      expect(cardText, `quota card should render plan label for ${entry.provider} ${entry.auth}`).toMatch(
+        /Plan|套餐/i
+      );
+      expect(
+        textContainsAny(cardText, planCandidates),
+        `quota card should render plan for ${entry.provider} ${entry.auth}; candidates=${planCandidates.join(', ')}`
+      ).toBe(true);
+
+      if ((entry.snapshot_keys || []).includes('usage')) {
+        expect(
+          cardText,
+          `quota card should render usage-derived quota rows for ${entry.provider} ${entry.auth}`
+        ).toMatch(/%|limit|限额|额度/i);
+      }
+      if ((entry.snapshot_keys || []).includes('profile')) {
+        expect(
+          textContainsAny(cardText, planCandidates),
+          `quota card should represent profile snapshot through plan display for ${entry.provider} ${entry.auth}`
+        ).toBe(true);
+      }
+    }
+  }
 };
 
 const assertReadOnlyDidNotRefresh = (observedQuotaResponses, blockedRefreshRequests) => {
@@ -388,6 +590,9 @@ test('live quota page reads core snapshots and refreshes without visible failure
   if (!managementKey) {
     throw new Error('MANAGEMENT_KEY is required for live quota UI smoke');
   }
+  if (productionLookingTarget && triggerRefresh && process.env.ALLOW_PRODUCTION_QUOTA_REFRESH !== '1') {
+    throw new Error('Refusing to refresh quota on production-looking target without ALLOW_PRODUCTION_QUOTA_REFRESH=1');
+  }
 
   fs.mkdirSync(smokeOutDir, { recursive: true });
 
@@ -398,6 +603,7 @@ test('live quota page reads core snapshots and refreshes without visible failure
   const blockedRefreshRequests = [];
   const snapshots = {};
   const uiChecks = {};
+  const uiAssertions = [];
   let apiContext;
   let traceStarted = false;
 
@@ -465,7 +671,8 @@ test('live quota page reads core snapshots and refreshes without visible failure
       },
     });
 
-    snapshots.before = summarizeQuotaPayload(await fetchQuotaSnapshots(apiContext));
+    const rawBefore = await fetchQuotaSnapshots(apiContext);
+    snapshots.before = summarizeQuotaPayload(rawBefore);
     assertQuotaBusinessState(snapshots.before, 'before');
     assertEvidenceSanitized(snapshots.before);
 
@@ -495,7 +702,7 @@ test('live quota page reads core snapshots and refreshes without visible failure
     });
 
     await waitForQuotaSettled(page);
-    await assertUiShowsQuotaData(page, snapshots.before);
+    await assertUiShowsQuotaData(page, rawBefore, snapshots.before, uiAssertions);
 
     if (triggerRefresh) {
       const refreshResponsePromise = page.waitForResponse(
@@ -513,9 +720,10 @@ test('live quota page reads core snapshots and refreshes without visible failure
       await waitForQuotaSettled(page);
     }
     assertReadOnlyDidNotRefresh(observedQuotaResponses, blockedRefreshRequests);
-    await assertUiShowsQuotaData(page, snapshots.before);
+    await assertUiShowsQuotaData(page, rawBefore, snapshots.before, uiAssertions);
 
-    snapshots.after = summarizeQuotaPayload(await fetchQuotaSnapshots(apiContext));
+    const rawAfter = await fetchQuotaSnapshots(apiContext);
+    snapshots.after = summarizeQuotaPayload(rawAfter);
     assertQuotaBusinessState(snapshots.after, 'after');
     assertEvidenceSanitized(snapshots.after);
 
@@ -566,6 +774,7 @@ test('live quota page reads core snapshots and refreshes without visible failure
       snapshots,
       diagnostics: {
         ui_checks: uiChecks,
+        ui_assertions: uiAssertions,
         console_messages: consoleMessages,
         request_failures: requestFailures,
         failed_responses: failedResponses,

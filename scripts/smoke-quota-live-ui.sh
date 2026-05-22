@@ -7,7 +7,7 @@ PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 export OUT_DIR="${OUT_DIR:-${PROJECT_DIR}/build/playwright-quota-live-smoke}"
 export MANAGEMENT_UI_ROUTE="${MANAGEMENT_UI_ROUTE:-#/quota}"
 export PLAYWRIGHT_IGNORE_HTTPS_ERRORS="${PLAYWRIGHT_IGNORE_HTTPS_ERRORS:-${MANAGEMENT_UI_IGNORE_HTTPS_ERRORS:-}}"
-export LIVE_QUOTA_TRIGGER_REFRESH="${LIVE_QUOTA_TRIGGER_REFRESH:-1}"
+export LIVE_QUOTA_TRIGGER_REFRESH="${LIVE_QUOTA_TRIGGER_REFRESH:-0}"
 export LIVE_QUOTA_MAX_OK_AGE_HOURS="${LIVE_QUOTA_MAX_OK_AGE_HOURS:-24}"
 export LIVE_QUOTA_SUPPORTED_PROVIDERS="${LIVE_QUOTA_SUPPORTED_PROVIDERS:-codex,claude}"
 
@@ -18,17 +18,24 @@ quota_refresh_enabled() {
   esac
 }
 
+production_target() {
+  case "${1:-}" in
+    *":18317"*|*"cpa.wisedata.co"*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 if [[ -z "${MANAGEMENT_UI_BASE:-}" ]]; then
   echo "smoke-quota-live-ui: MANAGEMENT_UI_BASE is required, for example http://10.1.1.201:18417/management.html" >&2
   exit 1
 fi
 
-if [[ "${MANAGEMENT_UI_BASE}" == *":18317"* && "${ALLOW_PRODUCTION_UI_SMOKE:-0}" != "1" ]]; then
+if (production_target "${MANAGEMENT_UI_BASE}" || production_target "${MANAGEMENT_API_BASE:-}") && [[ "${ALLOW_PRODUCTION_UI_SMOKE:-0}" != "1" ]]; then
   echo "smoke-quota-live-ui: refusing to run against production-looking :18317 target without ALLOW_PRODUCTION_UI_SMOKE=1" >&2
   exit 1
 fi
 
-if [[ "${MANAGEMENT_UI_BASE}" == *":18317"* ]] && quota_refresh_enabled && [[ "${ALLOW_PRODUCTION_QUOTA_REFRESH:-0}" != "1" ]]; then
+if (production_target "${MANAGEMENT_UI_BASE}" || production_target "${MANAGEMENT_API_BASE:-}") && quota_refresh_enabled && [[ "${ALLOW_PRODUCTION_QUOTA_REFRESH:-0}" != "1" ]]; then
   echo "smoke-quota-live-ui: refusing to refresh production-looking :18317 target; set LIVE_QUOTA_TRIGGER_REFRESH=0 for read-only smoke" >&2
   exit 1
 fi
