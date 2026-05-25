@@ -680,7 +680,7 @@
     "account_settings_claude_header_strategy_hint": "Claude does not pin one managed version on the account page. Multiple clients may use the same CPA instance, so concrete versions are shown below as recent current-process observations.",
     "account_settings_claude_client_observations": "Recent Claude client observations",
     "account_settings_claude_client_observations_runtime_title": "Observed by the current core process",
-    "account_settings_claude_client_observations_count": "{{count}} versions",
+    "account_settings_claude_client_observations_count": "{{count}} observations",
     "account_settings_claude_client_version": "Version",
     "account_settings_claude_client_user_agent": "User-Agent",
     "account_settings_claude_client_last_seen": "Last seen",

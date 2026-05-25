@@ -680,7 +680,7 @@
     "account_settings_claude_header_strategy_hint": "Claude 不在账号页固定展示某一个托管版本。多个客户端可能同时经过同一个 CPA，具体版本只在下方按当前 core 进程的近期观测列出。",
     "account_settings_claude_client_observations": "近期 Claude 客户端版本观测",
     "account_settings_claude_client_observations_runtime_title": "当前 core 进程观察到",
-    "account_settings_claude_client_observations_count": "{{count}} 个版本",
+    "account_settings_claude_client_observations_count": "{{count}} 条观测",
     "account_settings_claude_client_version": "版本",
     "account_settings_claude_client_user_agent": "User-Agent",
     "account_settings_claude_client_last_seen": "最近观察",
