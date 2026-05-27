@@ -211,8 +211,11 @@ export function AuthFileCard(props: AuthFileCardProps) {
   const cyberPolicyMarkerTitle =
     cyberPolicyFlagCount > 0
       ? lastCyberPolicyDisplay
-        ? `Cyber policy flagged ${cyberPolicyFlagCount} times · last ${lastCyberPolicyDisplay}`
-        : `Cyber policy flagged ${cyberPolicyFlagCount} times`
+        ? t('auth_files.cyber_policy_marker_with_last', {
+            count: cyberPolicyFlagCount,
+            last: lastCyberPolicyDisplay,
+          })
+        : t('auth_files.cyber_policy_marker', { count: cyberPolicyFlagCount })
       : '';
 
   const priorityValue = parsePriorityValue(file.priority ?? file['priority']);

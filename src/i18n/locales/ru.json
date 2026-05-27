@@ -478,6 +478,8 @@
     "health_status_disabled": "Отключено",
     "health_status_unknown": "Неизвестно",
     "health_status_no_message": "Нет сообщения о статусе",
+    "cyber_policy_marker": "Сработала политика безопасности: {{count}} раз",
+    "cyber_policy_marker_with_last": "Сработала политика безопасности: {{count}} раз · последний {{last}}",
     "status_refresh_button": "Обновить статус",
     "status_refresh_hint": "Повторно проверить текущее состояние авторизации и по возможности убрать устаревшие предупреждения.",
     "status_refresh_success": "Текущее состояние \"{{name}}\" обновлено",

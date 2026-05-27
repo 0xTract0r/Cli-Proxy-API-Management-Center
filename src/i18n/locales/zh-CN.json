@@ -479,6 +479,8 @@
     "health_status_disabled": "已停用",
     "health_status_unknown": "未知",
     "health_status_no_message": "暂无状态说明",
+    "cyber_policy_marker": "内容被网络安全策略命中 {{count}} 次",
+    "cyber_policy_marker_with_last": "内容被网络安全策略命中 {{count}} 次 · 最近 {{last}}",
     "status_refresh_button": "刷新状态",
     "status_refresh_hint": "重新检查当前认证状态，能清掉的旧警告会自动清掉。",
     "status_refresh_success": "已刷新 \"{{name}}\" 的当前状态",

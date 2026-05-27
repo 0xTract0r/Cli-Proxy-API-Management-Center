@@ -479,6 +479,8 @@
     "health_status_disabled": "Disabled",
     "health_status_unknown": "Unknown",
     "health_status_no_message": "No status message",
+    "cyber_policy_marker": "Cyber policy flagged {{count}} times",
+    "cyber_policy_marker_with_last": "Cyber policy flagged {{count}} times · last {{last}}",
     "status_refresh_button": "Refresh status",
     "status_refresh_hint": "Re-check the current auth state and clear stale warnings when possible.",
     "status_refresh_success": "Refreshed current status for \"{{name}}\"",
