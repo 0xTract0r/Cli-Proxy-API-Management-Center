@@ -162,6 +162,8 @@ export interface AuthFileItem {
   accountSettings?: AuthFileAccountSettings;
   reauth_history?: AuthFileReauthHistoryEntry[];
   status_history?: AuthFileStatusHistoryEntry[];
+  cyber_policy_flag_count?: number;
+  last_cyber_policy_at?: string;
   [key: string]: unknown;
 }
 

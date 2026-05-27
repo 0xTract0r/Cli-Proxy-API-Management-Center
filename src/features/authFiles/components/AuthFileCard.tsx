@@ -196,6 +196,25 @@ export function AuthFileCard(props: AuthFileCardProps) {
     ? `${t('auth_files.reauth_failed_badge', { defaultValue: 'Re-authentication failed' })}: ${reauthState.error}`
     : '';
 
+  // Cyber policy alert marker: surface when upstream has flagged this auth.
+  // 复用 StatusMarker variant="warning"，与既有 file status / reauth marker 并列。
+  const cyberPolicyFlagCount =
+    typeof file.cyber_policy_flag_count === 'number' && file.cyber_policy_flag_count > 0
+      ? file.cyber_policy_flag_count
+      : 0;
+  const lastCyberPolicyDisplay = (() => {
+    const raw = file.last_cyber_policy_at;
+    if (typeof raw !== 'string' || raw.trim() === '') return '';
+    const parsed = new Date(raw);
+    return Number.isNaN(parsed.getTime()) ? '' : parsed.toLocaleString();
+  })();
+  const cyberPolicyMarkerTitle =
+    cyberPolicyFlagCount > 0
+      ? lastCyberPolicyDisplay
+        ? `Cyber policy flagged ${cyberPolicyFlagCount} times · last ${lastCyberPolicyDisplay}`
+        : `Cyber policy flagged ${cyberPolicyFlagCount} times`
+      : '';
+
   const priorityValue = parsePriorityValue(file.priority ?? file['priority']);
   const noteValue = typeof file.note === 'string' ? file.note.trim() : '';
   const stateLabel = isRuntimeOnly
@@ -281,11 +300,15 @@ export function AuthFileCard(props: AuthFileCardProps) {
                   {stateLabel}
                 </span>
                 {(fileStatusMarkerTitle ||
+                  cyberPolicyMarkerTitle ||
                   reauthState?.status === 'polling' ||
                   (reauthState?.status === 'error' && reauthErrorTitle)) && (
                   <span className={styles.cardStatusMarkers}>
                     {fileStatusMarkerTitle && (
                       <StatusMarker variant="warning" tooltip={fileStatusMarkerTitle} />
+                    )}
+                    {cyberPolicyMarkerTitle && (
+                      <StatusMarker variant="warning" tooltip={cyberPolicyMarkerTitle} />
                     )}
                     {reauthState?.status === 'polling' && (
                       <StatusMarker variant="pending" tooltip={reauthPollingTitle} />
