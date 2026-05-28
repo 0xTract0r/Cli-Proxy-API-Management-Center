@@ -82,13 +82,24 @@ const resolveQuotaType = (file: AuthFileItem): QuotaProviderType | null => {
 
 type StatusMarkerVariant = 'warning' | 'pending' | 'error';
 
-function StatusMarker({ variant, tooltip }: { variant: StatusMarkerVariant; tooltip: string }) {
+function StatusMarker({
+  variant,
+  tooltip,
+  badge,
+}: {
+  variant: StatusMarkerVariant;
+  tooltip: string;
+  badge?: string | number;
+}) {
   const variantClass =
     variant === 'warning'
       ? styles.statusMarkerWarning
       : variant === 'pending'
         ? styles.statusMarkerPending
         : styles.statusMarkerError;
+
+  // badge 显式给值（非空字符串、非 0）才渲染数字徽标，否则回退到空心点视觉。
+  const hasBadge = badge !== undefined && badge !== '' && badge !== 0;
 
   return (
     <span
@@ -97,7 +108,11 @@ function StatusMarker({ variant, tooltip }: { variant: StatusMarkerVariant; tool
       tabIndex={0}
       data-testid={`auth-file-status-marker-${variant}`}
     >
-      <span className={styles.statusMarkerDot} />
+      {hasBadge ? (
+        <span className={styles.statusMarkerBadge}>{badge}</span>
+      ) : (
+        <span className={styles.statusMarkerDot} />
+      )}
       <span
         className={styles.statusMarkerTooltip}
         role="tooltip"
@@ -311,7 +326,11 @@ export function AuthFileCard(props: AuthFileCardProps) {
                       <StatusMarker variant="warning" tooltip={fileStatusMarkerTitle} />
                     )}
                     {cyberPolicyMarkerTitle && (
-                      <StatusMarker variant="warning" tooltip={cyberPolicyMarkerTitle} />
+                      <StatusMarker
+                        variant="warning"
+                        tooltip={cyberPolicyMarkerTitle}
+                        badge={cyberPolicyFlagCount}
+                      />
                     )}
                     {reauthState?.status === 'polling' && (
                       <StatusMarker variant="pending" tooltip={reauthPollingTitle} />

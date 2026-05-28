@@ -970,6 +970,17 @@
   background: currentColor;
 }
 
+.statusMarkerBadge {
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  color: currentColor;
+  text-align: center;
+  min-width: 7px;
+  padding: 0 2px;
+  font-variant-numeric: tabular-nums;
+}
+
 .statusMarkerTooltip {
   position: absolute;
   left: 50%;

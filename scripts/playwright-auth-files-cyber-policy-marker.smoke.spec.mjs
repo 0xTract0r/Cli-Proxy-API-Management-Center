@@ -260,6 +260,13 @@ test('flagged auth card renders cyber_policy warning marker with count + last ti
       .textContent()) || '';
   expect(tooltipText.trim()).toBe(ariaLabel.trim());
 
+  // cyber_policy 徽标里应可见数字 count，与原有空心点视觉区分。
+  // 用 evaluate 拿 marker root 自身文本（含 tooltip 文本），再断言含 count 字符串。
+  const flaggedMarkerText = await cyberMarker.evaluate(
+    (el) => el.textContent?.trim() || ''
+  );
+  expect(flaggedMarkerText).toContain(String(flaggedCount));
+
   // 截图：flagged card 局部 + 全页
   await flaggedCard.screenshot({
     path: path.join(smokeOutDir, 'flagged-card.png'),
