@@ -80,7 +80,7 @@ const resolveQuotaType = (file: AuthFileItem): QuotaProviderType | null => {
   return provider as QuotaProviderType;
 };
 
-type StatusMarkerVariant = 'warning' | 'pending' | 'error';
+type StatusMarkerVariant = 'warning' | 'pending' | 'error' | 'cyber';
 
 function StatusMarker({
   variant,
@@ -96,7 +96,9 @@ function StatusMarker({
       ? styles.statusMarkerWarning
       : variant === 'pending'
         ? styles.statusMarkerPending
-        : styles.statusMarkerError;
+        : variant === 'cyber'
+          ? styles.statusMarkerCyber
+          : styles.statusMarkerError;
 
   // badge 显式给值（非空字符串、非 0）才渲染数字徽标，否则回退到空心点视觉。
   const hasBadge = badge !== undefined && badge !== '' && badge !== 0;
@@ -212,7 +214,7 @@ export function AuthFileCard(props: AuthFileCardProps) {
     : '';
 
   // Cyber policy alert marker: surface when upstream has flagged this auth.
-  // 复用 StatusMarker variant="warning"，与既有 file status / reauth marker 并列。
+  // 使用 StatusMarker variant="cyber"（橙色），与 health warning（红色）区分。
   const cyberPolicyFlagCount =
     typeof file.cyber_policy_flag_count === 'number' && file.cyber_policy_flag_count > 0
       ? file.cyber_policy_flag_count
@@ -327,7 +329,7 @@ export function AuthFileCard(props: AuthFileCardProps) {
                     )}
                     {cyberPolicyMarkerTitle && (
                       <StatusMarker
-                        variant="warning"
+                        variant="cyber"
                         tooltip={cyberPolicyMarkerTitle}
                         badge={cyberPolicyFlagCount}
                       />

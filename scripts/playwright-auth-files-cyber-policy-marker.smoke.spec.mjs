@@ -3,7 +3,7 @@ import path from 'path';
 import { test, expect } from '@playwright/test';
 
 // Mock-driven Playwright smoke 验证 cyber_policy 徽标渲染：
-// 1) flag_count > 0 的卡片渲染 StatusMarker variant="warning"，且 tooltip 含
+// 1) flag_count > 0 的卡片渲染 StatusMarker variant="cyber"（橙色），且 tooltip 含
 //    `命中` + 数字 count + （可选）`最近 <时间>`；
 // 2) flag_count = 0 的卡片不渲染该徽标；
 // 3) 截图保留到 OUT_DIR 供 lead 复看。
@@ -199,13 +199,13 @@ async function loginIfNeeded(page) {
 }
 
 // 给定 card scope 与 expected tooltip substring，定位 cyber_policy marker
-// （StatusMarker variant="warning" 且 tooltip 含目标 substring）。
+// （StatusMarker variant="cyber" 且 tooltip 含目标 substring）。
 function locateCyberPolicyMarker(cardLocator, substring) {
   return cardLocator
-    .locator('[data-testid="auth-file-status-marker-warning"]')
+    .locator('[data-testid="auth-file-status-marker-cyber"]')
     .filter({
       has: cardLocator.page().locator(
-        `[data-testid="auth-file-status-tooltip-warning"]:has-text("${substring}")`
+        `[data-testid="auth-file-status-tooltip-cyber"]:has-text("${substring}")`
       ),
     });
 }
@@ -217,7 +217,7 @@ test.beforeEach(async ({ page }) => {
   await page.setViewportSize({ width: viewport.width, height: viewport.height });
 });
 
-test('flagged auth card renders cyber_policy warning marker with count + last time tooltip', async ({
+test('flagged auth card renders cyber_policy cyber marker with count + last time tooltip', async ({
   page,
 }) => {
   const consoleErrors = [];
@@ -234,14 +234,19 @@ test('flagged auth card renders cyber_policy warning marker with count + last ti
   const flaggedCard = cards.filter({ hasText: flaggedAuthFile.name });
   await expect(flaggedCard).toHaveCount(1);
 
-  // 在 flagged card 范围内查找 warning marker。
+  // 在 flagged card 范围内查找 cyber marker（橙色 variant，与 health warning 红色区分）。
+  const cyberMarkers = flaggedCard.locator(
+    '[data-testid="auth-file-status-marker-cyber"]'
+  );
+  await expect(cyberMarkers).toHaveCount(1);
+
+  // mock 未提供 status_message，所以也不应出现任何 warning marker。
   const warningMarkers = flaggedCard.locator(
     '[data-testid="auth-file-status-marker-warning"]'
   );
-  // mock 未提供 status_message，所以应该只有一个 warning marker（即 cyber_policy）。
-  await expect(warningMarkers).toHaveCount(1);
+  await expect(warningMarkers).toHaveCount(0);
 
-  const cyberMarker = warningMarkers.first();
+  const cyberMarker = cyberMarkers.first();
   await expect(cyberMarker).toBeVisible();
 
   // aria-label = tooltip 完整文案。tooltip element 自身因 CSS 可能不可见，
@@ -256,7 +261,7 @@ test('flagged auth card renders cyber_policy warning marker with count + last ti
   // tooltip element 文本应当与 aria-label 完全一致。
   const tooltipText =
     (await cyberMarker
-      .locator('[data-testid="auth-file-status-tooltip-warning"]')
+      .locator('[data-testid="auth-file-status-tooltip-cyber"]')
       .textContent()) || '';
   expect(tooltipText.trim()).toBe(ariaLabel.trim());
 
@@ -266,6 +271,10 @@ test('flagged auth card renders cyber_policy warning marker with count + last ti
     (el) => el.textContent?.trim() || ''
   );
   expect(flaggedMarkerText).toContain(String(flaggedCount));
+
+  // cyber_policy marker 应携带 cyber variant class（颜色 = 橙色，区别于 warning 红）。
+  const cyberClass = await cyberMarker.evaluate((el) => el.className);
+  expect(cyberClass).toMatch(/statusMarkerCyber/);
 
   // 截图：flagged card 局部 + 全页
   await flaggedCard.screenshot({
@@ -295,7 +304,7 @@ test('flagged auth card renders cyber_policy warning marker with count + last ti
   // 但记录到 summary 便于 lead 复查。
 });
 
-test('clean auth card does not render cyber_policy warning marker', async ({ page }) => {
+test('clean auth card does not render cyber_policy cyber marker', async ({ page }) => {
   await loginIfNeeded(page);
 
   const cards = page.locator('[data-testid="auth-file-card"]');
@@ -304,8 +313,13 @@ test('clean auth card does not render cyber_policy warning marker', async ({ pag
   const cleanCard = cards.filter({ hasText: cleanAuthFile.name });
   await expect(cleanCard).toHaveCount(1);
 
-  // clean card 内不应该有任何 warning marker（mock 没 file status warning，
-  // 没 reauth state，cyber_policy_flag_count = 0）。
+  // clean card 内不应该有任何 cyber marker（cyber_policy_flag_count = 0），
+  // 同时也不应有 warning marker（mock 没 file status warning，没 reauth state）。
+  const cyberMarkers = cleanCard.locator(
+    '[data-testid="auth-file-status-marker-cyber"]'
+  );
+  await expect(cyberMarkers).toHaveCount(0);
+
   const warningMarkers = cleanCard.locator(
     '[data-testid="auth-file-status-marker-warning"]'
   );

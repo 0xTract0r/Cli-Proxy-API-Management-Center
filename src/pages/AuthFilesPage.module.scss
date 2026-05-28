@@ -1034,6 +1034,12 @@
   border-color: color-mix(in srgb, var(--warning-border, #fbbf24) 60%, transparent);
 }
 
+.statusMarkerCyber {
+  color: #ea580c;
+  background: color-mix(in srgb, #fed7aa 70%, transparent);
+  border-color: color-mix(in srgb, #ea580c 28%, transparent);
+}
+
 .statusMarkerPending .statusMarkerDot {
   animation: auth-status-marker-pulse 1.15s ease-in-out infinite;
 }
