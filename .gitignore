@@ -34,3 +34,6 @@ settings.local.json
 *.njsproj
 *.sln
 *.sw?
+
+# AI agent runtime metadata (auto-written by claude-code hooks)
+.ai/
