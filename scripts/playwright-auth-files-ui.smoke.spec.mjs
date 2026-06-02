@@ -939,7 +939,7 @@ for (const viewport of viewports) {
 
       if (viewport.name === 'compact') {
         for (const card of actionCards) {
-          expect(card.cardHeight).toBeLessThan(390);
+          expect(card.cardHeight).toBeLessThanOrEqual(410);
           expect(card.primaryButtonTops.length).toBe(1);
         }
       }

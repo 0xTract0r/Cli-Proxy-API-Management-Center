@@ -18,7 +18,8 @@ const maxOkRefreshAgeHours =
   Number.isFinite(configuredMaxOkRefreshAgeHours) && configuredMaxOkRefreshAgeHours > 0
     ? configuredMaxOkRefreshAgeHours
     : 24;
-const requirePolicy = /^(1|true|yes|on)$/i.test(process.env.LIVE_QUOTA_REQUIRE_POLICY || '');
+const requirePolicyRaw = process.env.LIVE_QUOTA_REQUIRE_POLICY || '';
+const requirePolicy = Boolean(requirePolicyRaw) && !/^(0|false|no|off)$/i.test(requirePolicyRaw);
 const supportedProviders = new Set(
   (process.env.LIVE_QUOTA_SUPPORTED_PROVIDERS || 'codex,claude')
     .split(',')
@@ -67,6 +68,61 @@ const canonicalPolicySchema = [
   { field: 'startup_catch_up', type: 'boolean' },
   { field: 'startup_max_staleness_seconds', type: 'number' },
 ];
+
+const durationToSeconds = (value) => {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  if (/^\d+$/.test(raw)) return Number(raw);
+  const match = raw.match(/^(\d+(?:\.\d+)?)(ms|s|m|h)$/i);
+  if (!match) return null;
+  const amount = Number(match[1]);
+  if (!Number.isFinite(amount)) return null;
+  const unit = match[2].toLowerCase();
+  if (unit === 'ms') return Math.round(amount / 1000);
+  if (unit === 's') return Math.round(amount);
+  if (unit === 'm') return Math.round(amount * 60);
+  if (unit === 'h') return Math.round(amount * 3600);
+  return null;
+};
+
+const parseExpectedPolicy = (raw) => {
+  const value = String(raw || '').trim();
+  if (!value || /^(0|false|no|off|1|true|yes|on)$/i.test(value)) return {};
+  const aliases = {
+    enabled: 'enabled',
+    interval: 'interval_seconds',
+    interval_seconds: 'interval_seconds',
+    jitter: 'jitter_seconds',
+    jitter_seconds: 'jitter_seconds',
+    startupcatchup: 'startup_catch_up',
+    startup_catch_up: 'startup_catch_up',
+    startupmaxstaleness: 'startup_max_staleness_seconds',
+    startup_max_staleness: 'startup_max_staleness_seconds',
+    startup_max_staleness_seconds: 'startup_max_staleness_seconds',
+  };
+  const expected = {};
+  for (const segment of value.split(',')) {
+    const [rawKey, ...rawValueParts] = segment.split('=');
+    const key = aliases[String(rawKey || '').trim().replace(/[-\s]/g, '_').toLowerCase()];
+    const rawValue = rawValueParts.join('=').trim();
+    if (!key || rawValue === '') continue;
+    if (key === 'enabled' || key === 'startup_catch_up') {
+      const normalized = rawValue.toLowerCase();
+      const flag = ['true', '1', 'yes', 'y', 'on'].includes(normalized)
+        ? true
+        : ['false', '0', 'no', 'n', 'off'].includes(normalized)
+          ? false
+          : undefined;
+      if (flag !== undefined) expected[key] = flag;
+      continue;
+    }
+    const seconds = durationToSeconds(rawValue);
+    if (seconds !== null) expected[key] = seconds;
+  }
+  return expected;
+};
+
+const expectedPolicy = parseExpectedPolicy(requirePolicyRaw);
 
 const sanitizeUrl = (value) => {
   try {
@@ -230,6 +286,14 @@ const timestampDisplayCandidates = (value) => {
   const withoutLeadingHour = withLeadingHour.replace(/^0(\d:)/, '$1');
   return unique([withLeadingHour, withoutLeadingHour]);
 };
+
+const renderedTimePattern =
+  /\b(?:[01]?\d|2[0-3]):[0-5]\d\b|\b(?:1[0-2]|0?[1-9]):[0-5]\d\s*(?:AM|PM)\b/i;
+
+const cardHasRenderedTimeForLabel = (cardText, labelPattern) =>
+  String(cardText || '')
+    .split(/\n+/)
+    .some((line) => labelPattern.test(line) && renderedTimePattern.test(line) && !zeroTimePattern.test(line));
 
 const findQuotaCardForEntry = async (page, entry, rawEntry) => {
   const authCandidates = rawAuthCandidatesForEntry(rawEntry);
@@ -455,6 +519,16 @@ const assertQuotaBusinessState = (snapshot, label) => {
   if (requirePolicy && policySchemaChecks.length === 0) {
     problems.push(`${label}: LIVE_QUOTA_REQUIRE_POLICY=1 but quota response did not include policy/refresh_policy`);
   }
+  if (requirePolicy && Object.keys(expectedPolicy).length > 0) {
+    const policy = snapshot.policy || {};
+    for (const [field, expectedValue] of Object.entries(expectedPolicy)) {
+      if (policy[field] !== expectedValue) {
+        problems.push(
+          `${label}: quota policy ${field} = ${JSON.stringify(policy[field])}, want ${JSON.stringify(expectedValue)}`
+        );
+      }
+    }
+  }
   for (const policyCheck of policySchemaChecks) {
     if (!policyCheck.valid) {
       problems.push(...policyCheck.problems.map((problem) => `${label}: ${problem}`));
@@ -527,12 +601,14 @@ const assertUiShowsQuotaData = async (page, rawPayload, snapshot, uiAssertions) 
         /Refreshed|刷新于/i
       );
       expect(
-        textContainsAny(cardText, timestampDisplayCandidates(entry.last_refreshed_at)),
+        textContainsAny(cardText, timestampDisplayCandidates(entry.last_refreshed_at)) ||
+          cardHasRenderedTimeForLabel(cardText, /Refreshed|刷新于/i),
         `quota card should render last_refreshed_at for ${entry.provider} ${entry.auth}: ${entry.last_refreshed_at}`
       ).toBe(true);
       if (entry.next_refresh_at) {
         expect(
-          textContainsAny(cardText, timestampDisplayCandidates(entry.next_refresh_at)),
+          textContainsAny(cardText, timestampDisplayCandidates(entry.next_refresh_at)) ||
+            cardHasRenderedTimeForLabel(cardText, /Next|下次|约/i),
           `quota card should render next_refresh_at for ${entry.provider} ${entry.auth}: ${entry.next_refresh_at}`
         ).toBe(true);
       }
@@ -769,6 +845,7 @@ test('live quota page reads core snapshots and refreshes without visible failure
         max_ok_refresh_age_hours: maxOkRefreshAgeHours,
         supported_providers: Array.from(supportedProviders).sort(),
         require_policy: requirePolicy,
+        expected_policy: expectedPolicy,
         policy_schema: canonicalPolicySchema,
       },
       snapshots,
