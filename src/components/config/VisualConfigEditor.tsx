@@ -44,7 +44,7 @@ import {
 } from './VisualConfigEditorBlocks';
 import styles from './VisualConfigEditor.module.scss';
 
-type VisualSectionId =
+export type VisualSectionId =
   | 'server'
   | 'tls'
   | 'remote'
@@ -67,8 +67,10 @@ interface VisualConfigEditorProps {
   values: VisualConfigValues;
   validationErrors?: VisualConfigValidationErrors;
   hasPayloadValidationErrors?: boolean;
+  initialSectionId?: VisualSectionId | null;
   disabled?: boolean;
   onChange: (values: Partial<VisualConfigValues>) => void;
+  onApiKeysPersist?: (apiKeysText: string, previousApiKeysText: string) => Promise<string | void> | string | void;
 }
 
 function getValidationMessage(
@@ -174,8 +176,10 @@ export function VisualConfigEditor({
   values,
   validationErrors,
   hasPayloadValidationErrors = false,
+  initialSectionId = null,
   disabled = false,
   onChange,
+  onApiKeysPersist,
 }: VisualConfigEditorProps) {
   const { t } = useTranslation();
   const pageTransitionLayer = usePageTransitionLayer();
@@ -191,7 +195,9 @@ export function VisualConfigEditor({
   const nonstreamKeepaliveInputId = useId();
   const nonstreamKeepaliveHintId = `${nonstreamKeepaliveInputId}-hint`;
   const nonstreamKeepaliveErrorId = `${nonstreamKeepaliveInputId}-error`;
-  const [activeSectionId, setActiveSectionId] = useState<VisualSectionId>('server');
+  const [activeSectionId, setActiveSectionId] = useState<VisualSectionId>(
+    initialSectionId ?? 'server'
+  );
   const workspaceRef = useRef<HTMLDivElement | null>(null);
   const sidebarAnchorRef = useRef<HTMLElement | null>(null);
   const floatingSidebarRef = useRef<HTMLDivElement | null>(null);
@@ -200,6 +206,7 @@ export function VisualConfigEditor({
   const mobileNavButtonRefs = useRef<Partial<Record<VisualSectionId, HTMLButtonElement | null>>>(
     {}
   );
+  const initialSectionAppliedRef = useRef<VisualSectionId | null>(null);
 
   const isKeepaliveDisabled =
     values.streaming.keepaliveSeconds === '' || values.streaming.keepaliveSeconds === '0';
@@ -212,6 +219,18 @@ export function VisualConfigEditor({
   const requestRetryError = getValidationMessage(t, validationErrors?.requestRetry);
   const maxRetryCredentialsError = getValidationMessage(t, validationErrors?.maxRetryCredentials);
   const maxRetryIntervalError = getValidationMessage(t, validationErrors?.maxRetryInterval);
+  const quotaRefreshIntervalError = getValidationMessage(
+    t,
+    validationErrors?.quotaRefreshIntervalMinutes
+  );
+  const quotaRefreshJitterError = getValidationMessage(
+    t,
+    validationErrors?.quotaRefreshJitterMinutes
+  );
+  const quotaRefreshStartupMaxStalenessError = getValidationMessage(
+    t,
+    validationErrors?.quotaRefreshStartupMaxStalenessMinutes
+  );
   const keepaliveError = getValidationMessage(t, validationErrors?.['streaming.keepaliveSeconds']);
   const bootstrapRetriesError = getValidationMessage(
     t,
@@ -302,7 +321,11 @@ export function VisualConfigEditor({
         title: t('config_management.visual.sections.quota.title'),
         description: t('config_management.visual.sections.quota.description'),
         icon: IconTimer,
-        errorCount: 0,
+        errorCount: countErrors([
+          'quotaRefreshIntervalMinutes',
+          'quotaRefreshJitterMinutes',
+          'quotaRefreshStartupMaxStalenessMinutes',
+        ]),
       },
       {
         id: 'streaming',
@@ -329,7 +352,8 @@ export function VisualConfigEditor({
   const hasValidationIssues =
     sections.some((section) => section.errorCount > 0) || hasPayloadValidationErrors;
   const focusSections = useMemo(
-    () => sections.filter((section) => ['server', 'network', 'payload'].includes(section.id)),
+    () =>
+      sections.filter((section) => ['server', 'network', 'quota', 'payload'].includes(section.id)),
     [sections]
   );
 
@@ -386,6 +410,15 @@ export function VisualConfigEditor({
     sectionRefs.current[sectionId]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, []);
 
+  useEffect(() => {
+    if (!initialSectionId || !isCurrentLayer) return undefined;
+    if (initialSectionAppliedRef.current === initialSectionId) return undefined;
+
+    initialSectionAppliedRef.current = initialSectionId;
+    const frame = window.requestAnimationFrame(() => handleSectionJump(initialSectionId));
+    return () => window.cancelAnimationFrame(frame);
+  }, [handleSectionJump, initialSectionId, isCurrentLayer]);
+
   useLayoutEffect(() => {
     const floatingElement = floatingSidebarRef.current;
     const anchorElement = sidebarAnchorRef.current;
@@ -440,7 +473,8 @@ export function VisualConfigEditor({
         220
       );
       const maxHeight = Math.max(window.innerHeight - top - viewportPadding, 160);
-      const isVisible = workspaceRect.bottom > stickyTop + 24 && anchorRect.top < window.innerHeight;
+      const isVisible =
+        workspaceRect.bottom > stickyTop + 24 && anchorRect.top < window.innerHeight;
 
       floatingElement.style.transform = `translate3d(${left}px, ${top}px, 0)`;
       floatingElement.style.width = `${width}px`;
@@ -751,6 +785,7 @@ export function VisualConfigEditor({
                   value={values.apiKeysText}
                   disabled={disabled}
                   onChange={handleApiKeysTextChange}
+                  onPersist={onApiKeysPersist}
                 />
               </div>
             </SectionStack>
@@ -921,31 +956,107 @@ export function VisualConfigEditor({
             title={t('config_management.visual.sections.quota.title')}
             description={t('config_management.visual.sections.quota.description')}
           >
-            <SectionGrid>
-              <ToggleRow
-                title={t('config_management.visual.sections.quota.switch_project')}
-                description={t('config_management.visual.sections.quota.switch_project_desc')}
-                checked={values.quotaSwitchProject}
-                disabled={disabled}
-                onChange={(quotaSwitchProject) => onChange({ quotaSwitchProject })}
-              />
-              <ToggleRow
-                title={t('config_management.visual.sections.quota.switch_preview_model')}
-                description={t('config_management.visual.sections.quota.switch_preview_model_desc')}
-                checked={values.quotaSwitchPreviewModel}
-                disabled={disabled}
-                onChange={(quotaSwitchPreviewModel) => onChange({ quotaSwitchPreviewModel })}
-              />
-              <ToggleRow
-                title={t('config_management.visual.sections.quota.antigravity_credits')}
-                description={t(
-                  'config_management.visual.sections.quota.antigravity_credits_desc'
-                )}
-                checked={values.quotaAntigravityCredits}
-                disabled={disabled}
-                onChange={(quotaAntigravityCredits) => onChange({ quotaAntigravityCredits })}
-              />
-            </SectionGrid>
+            <SectionStack>
+              <SectionSubsection
+                title={t('config_management.visual.sections.quota.refresh_title')}
+                description={t('config_management.visual.sections.quota.refresh_desc')}
+              >
+                <SectionGrid>
+                  <ToggleRow
+                    title={t('config_management.visual.sections.quota.refresh_enabled')}
+                    description={t('config_management.visual.sections.quota.refresh_enabled_desc')}
+                    checked={values.quotaRefreshEnabled}
+                    disabled={disabled}
+                    onChange={(quotaRefreshEnabled) => onChange({ quotaRefreshEnabled })}
+                  />
+                  <Input
+                    label={t('config_management.visual.sections.quota.refresh_interval_minutes')}
+                    type="number"
+                    min="0"
+                    placeholder="45"
+                    value={values.quotaRefreshIntervalMinutes}
+                    onChange={(e) => onChange({ quotaRefreshIntervalMinutes: e.target.value })}
+                    disabled={disabled}
+                    error={quotaRefreshIntervalError}
+                  />
+                  <Input
+                    label={t('config_management.visual.sections.quota.refresh_jitter_minutes')}
+                    type="number"
+                    min="0"
+                    placeholder="10"
+                    value={values.quotaRefreshJitterMinutes}
+                    onChange={(e) => onChange({ quotaRefreshJitterMinutes: e.target.value })}
+                    disabled={disabled}
+                    error={quotaRefreshJitterError}
+                  />
+                  <ToggleRow
+                    title={t('config_management.visual.sections.quota.refresh_startup_catch_up')}
+                    description={t(
+                      'config_management.visual.sections.quota.refresh_startup_catch_up_desc'
+                    )}
+                    checked={values.quotaRefreshStartupCatchUp}
+                    disabled={disabled}
+                    onChange={(quotaRefreshStartupCatchUp) =>
+                      onChange({ quotaRefreshStartupCatchUp })
+                    }
+                  />
+                  <Input
+                    label={t(
+                      'config_management.visual.sections.quota.refresh_startup_max_staleness'
+                    )}
+                    type="number"
+                    min="0"
+                    placeholder={t(
+                      'config_management.visual.sections.quota.refresh_startup_max_staleness_placeholder'
+                    )}
+                    value={values.quotaRefreshStartupMaxStalenessMinutes}
+                    onChange={(e) =>
+                      onChange({ quotaRefreshStartupMaxStalenessMinutes: e.target.value })
+                    }
+                    disabled={disabled}
+                    hint={t(
+                      'config_management.visual.sections.quota.refresh_startup_max_staleness_hint'
+                    )}
+                    error={quotaRefreshStartupMaxStalenessError}
+                  />
+                </SectionGrid>
+              </SectionSubsection>
+
+              <Divider />
+
+              <SectionSubsection
+                title={t('config_management.visual.sections.quota.fallback_title')}
+                description={t('config_management.visual.sections.quota.fallback_desc')}
+              >
+                <SectionGrid>
+                  <ToggleRow
+                    title={t('config_management.visual.sections.quota.switch_project')}
+                    description={t('config_management.visual.sections.quota.switch_project_desc')}
+                    checked={values.quotaSwitchProject}
+                    disabled={disabled}
+                    onChange={(quotaSwitchProject) => onChange({ quotaSwitchProject })}
+                  />
+                  <ToggleRow
+                    title={t('config_management.visual.sections.quota.switch_preview_model')}
+                    description={t(
+                      'config_management.visual.sections.quota.switch_preview_model_desc'
+                    )}
+                    checked={values.quotaSwitchPreviewModel}
+                    disabled={disabled}
+                    onChange={(quotaSwitchPreviewModel) => onChange({ quotaSwitchPreviewModel })}
+                  />
+                  <ToggleRow
+                    title={t('config_management.visual.sections.quota.antigravity_credits')}
+                    description={t(
+                      'config_management.visual.sections.quota.antigravity_credits_desc'
+                    )}
+                    checked={values.quotaAntigravityCredits}
+                    disabled={disabled}
+                    onChange={(quotaAntigravityCredits) => onChange({ quotaAntigravityCredits })}
+                  />
+                </SectionGrid>
+              </SectionSubsection>
+            </SectionStack>
           </ConfigSection>
 
           <ConfigSection

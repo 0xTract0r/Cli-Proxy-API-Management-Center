@@ -554,6 +554,15 @@ export function formatPerMinuteValue(value: number): string {
     return '0.00';
   }
   const abs = Math.abs(num);
+  if (abs > 0 && abs < 0.01) {
+    if (abs >= 0.001) {
+      return num.toFixed(4).replace(/0+$/, '').replace(/\.$/, '');
+    }
+    if (abs >= 0.0001) {
+      return num.toFixed(5).replace(/0+$/, '').replace(/\.$/, '');
+    }
+    return num.toFixed(6).replace(/0+$/, '').replace(/\.$/, '');
+  }
   if (abs >= 1000) {
     return Math.round(num).toLocaleString();
   }

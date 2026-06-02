@@ -1,6 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
+import { useSearchParams } from 'react-router-dom';
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
 import { parse as parseYaml, parseDocument } from 'yaml';
 import { usePageTransitionLayer } from '@/components/common/PageTransitionLayer';
@@ -13,11 +14,12 @@ import {
   IconRefreshCw,
   IconSearch,
 } from '@/components/ui/icons';
-import { VisualConfigEditor } from '@/components/config/VisualConfigEditor';
+import { VisualConfigEditor, type VisualSectionId } from '@/components/config/VisualConfigEditor';
 import { DiffModal } from '@/components/config/DiffModal';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useVisualConfig } from '@/hooks/useVisualConfig';
 import { useNotificationStore, useAuthStore, useThemeStore, useConfigStore } from '@/stores';
+import { apiKeysApi } from '@/services/api';
 import { configFileApi } from '@/services/api/configFile';
 import styles from './ConfigPage.module.scss';
 
@@ -35,8 +37,22 @@ function readCommercialModeFromYaml(yamlContent: string): boolean {
   }
 }
 
+function normalizeApiKeysText(value: string): string {
+  return value
+    .split('\n')
+    .map((key) => key.trim())
+    .filter(Boolean)
+    .join('\n');
+}
+
+function parseApiKeysText(value: string): string[] {
+  const normalized = normalizeApiKeysText(value);
+  return normalized ? normalized.split('\n') : [];
+}
+
 export function ConfigPage() {
   const { t } = useTranslation();
+  const [searchParams] = useSearchParams();
   const pageTransitionLayer = usePageTransitionLayer();
   const isCurrentLayer = pageTransitionLayer ? pageTransitionLayer.isCurrentLayer : true;
   const showNotification = useNotificationStore((state) => state.showNotification);
@@ -44,6 +60,8 @@ export function ConfigPage() {
   const connectionStatus = useAuthStore((state) => state.connectionStatus);
   const resolvedTheme = useThemeStore((state) => state.resolvedTheme);
   const isMobile = useMediaQuery('(max-width: 768px)');
+  const requestedVisualSection: VisualSectionId | null =
+    searchParams.get('section') === 'quota' ? 'quota' : null;
 
   const {
     visualValues,
@@ -54,6 +72,7 @@ export function ConfigPage() {
     loadVisualValuesFromYaml,
     applyVisualChangesToYaml,
     setVisualValues,
+    markVisualValuesPersisted,
   } = useVisualConfig();
 
   const [activeTab, setActiveTab] = useState<ConfigEditorTab>(() => {
@@ -123,6 +142,12 @@ export function ConfigPage() {
     );
   }, [activeTab, showNotification, t, visualParseError]);
 
+  useEffect(() => {
+    if (!requestedVisualSection || activeTab === 'visual' || visualParseError) return;
+    setActiveTab('visual');
+    localStorage.setItem('config-management:tab', 'visual');
+  }, [activeTab, requestedVisualSection, visualParseError]);
+
   const handleConfirmSave = async () => {
     setSaving(true);
     try {
@@ -167,6 +192,57 @@ export function ConfigPage() {
       setSaving(false);
     }
   };
+
+  const handleApiKeysPersist = useCallback(
+    async (apiKeysText: string, previousApiKeysText: string) => {
+      if (dirty) {
+        throw new Error(t('config_management.visual.api_keys.persist_blocked_unsaved_source'));
+      }
+
+      const previousKeys = parseApiKeysText(previousApiKeysText);
+      const desiredKeys = parseApiKeysText(apiKeysText);
+      const latestKeys = await apiKeysApi.list();
+      const additions = desiredKeys.filter((key) => !previousKeys.includes(key));
+      const removals = previousKeys.filter((key) => !desiredKeys.includes(key));
+      const mergedKeys = latestKeys.filter((key) => !removals.includes(key));
+      for (const key of additions) {
+        if (!mergedKeys.includes(key)) {
+          mergedKeys.push(key);
+        }
+      }
+      const normalized = mergedKeys.join('\n');
+
+      await apiKeysApi.replace(mergedKeys);
+      const latestContent = await configFileApi.fetchConfigYaml();
+
+      setContent(latestContent);
+      setServerYaml(latestContent);
+      setMergedYaml(latestContent);
+      setDiffModalOpen(false);
+      setDirty(false);
+      markVisualValuesPersisted({ apiKeysText: normalized });
+
+      try {
+        useConfigStore.getState().clearCache();
+        await useConfigStore.getState().fetchConfig(undefined, true);
+      } catch (refreshError: unknown) {
+        const message =
+          refreshError instanceof Error
+            ? refreshError.message
+            : typeof refreshError === 'string'
+              ? refreshError
+              : '';
+        showNotification(
+          `${t('notification.refresh_failed')}${message ? `: ${message}` : ''}`,
+          'error'
+        );
+      }
+
+      showNotification(t('config_management.visual.api_keys.persist_success'), 'success');
+      return normalized;
+    },
+    [dirty, markVisualValuesPersisted, showNotification, t]
+  );
 
   const handleSave = async () => {
     if (activeTab === 'visual' && visualParseError) {
@@ -555,8 +631,10 @@ export function ConfigPage() {
               values={visualValues}
               validationErrors={visualValidationErrors}
               hasPayloadValidationErrors={visualHasPayloadValidationErrors}
+              initialSectionId={requestedVisualSection}
               disabled={disableControls || loading}
               onChange={setVisualValues}
+              onApiKeysPersist={handleApiKeysPersist}
             />
           ) : (
             <div className={styles.sourceWorkspace}>

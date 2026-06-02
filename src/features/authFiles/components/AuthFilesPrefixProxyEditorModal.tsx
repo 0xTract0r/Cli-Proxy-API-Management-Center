@@ -303,6 +303,11 @@ function ClaudeClientVersionObservationsPanel({
     }
     return '';
   };
+  const userAgentContext = (userAgent?: string) => {
+    const value = userAgent?.trim() || '';
+    const match = value.match(/\(([^)]+)\)\s*$/);
+    return match?.[1] || '';
+  };
 
   return (
     <div className="form-group">
@@ -329,7 +334,7 @@ function ClaudeClientVersionObservationsPanel({
           </span>
         </div>
         {rows.length > 0 ? (
-          <table className={styles.managedHeaderTable}>
+          <table className={`${styles.managedHeaderTable} ${styles.clientObservationTable}`}>
             <thead>
               <tr>
                 <th>
@@ -369,11 +374,22 @@ function ClaudeClientVersionObservationsPanel({
                     </span>
                   </th>
                   <td>
-                    <code className={styles.managedHeaderValue} title={observation.user_agent}>
+                    <code
+                      className={`${styles.managedHeaderValue} ${styles.clientObservationUserAgent}`}
+                      data-testid="account-settings-claude-client-user-agent"
+                      title={observation.user_agent}
+                      aria-label={observation.user_agent || undefined}
+                      tabIndex={0}
+                    >
                       {observation.user_agent || '-'}
                     </code>
                     <span className={styles.clientObservationSubtext}>
-                      {[observation.os, observation.arch, sourceLabel(observation.source)]
+                      {[
+                        userAgentContext(observation.user_agent),
+                        observation.os,
+                        observation.arch,
+                        sourceLabel(observation.source),
+                      ]
                         .filter(Boolean)
                         .join(' · ') || '-'}
                     </span>

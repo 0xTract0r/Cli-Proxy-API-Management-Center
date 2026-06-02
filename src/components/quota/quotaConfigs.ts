@@ -33,6 +33,7 @@ import {
   apiCallApi,
   authFilesApi,
   getApiCallErrorMessage,
+  parseCoreQuotaTimestamp,
   quotaApi,
   type CoreQuotaSnapshotEntry,
 } from '@/services/api';
@@ -201,9 +202,8 @@ const loadCoreQuotaEntry = async (
 };
 
 const formatCoreQuotaSnapshotTime = (value?: string | null): string | null => {
-  if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
+  const date = parseCoreQuotaTimestamp(value);
+  if (!date) return null;
   return new Intl.DateTimeFormat(undefined, {
     hour: '2-digit',
     minute: '2-digit',

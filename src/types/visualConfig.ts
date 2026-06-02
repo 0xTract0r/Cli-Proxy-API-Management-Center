@@ -10,6 +10,9 @@ export type VisualConfigFieldPath =
   | 'requestRetry'
   | 'maxRetryCredentials'
   | 'maxRetryInterval'
+  | 'quotaRefreshIntervalMinutes'
+  | 'quotaRefreshJitterMinutes'
+  | 'quotaRefreshStartupMaxStalenessMinutes'
   | 'streaming.keepaliveSeconds'
   | 'streaming.bootstrapRetries'
   | 'streaming.nonstreamKeepaliveInterval';
@@ -76,6 +79,11 @@ export type VisualConfigValues = {
   quotaSwitchProject: boolean;
   quotaSwitchPreviewModel: boolean;
   quotaAntigravityCredits: boolean;
+  quotaRefreshEnabled: boolean;
+  quotaRefreshIntervalMinutes: string;
+  quotaRefreshJitterMinutes: string;
+  quotaRefreshStartupCatchUp: boolean;
+  quotaRefreshStartupMaxStalenessMinutes: string;
   routingStrategy: 'round-robin' | 'fill-first';
   wsAuth: boolean;
   payloadDefaultRules: PayloadRule[];
@@ -116,6 +124,11 @@ export const DEFAULT_VISUAL_VALUES: VisualConfigValues = {
   quotaSwitchProject: true,
   quotaSwitchPreviewModel: true,
   quotaAntigravityCredits: true,
+  quotaRefreshEnabled: true,
+  quotaRefreshIntervalMinutes: '45',
+  quotaRefreshJitterMinutes: '10',
+  quotaRefreshStartupCatchUp: true,
+  quotaRefreshStartupMaxStalenessMinutes: '',
   routingStrategy: 'round-robin',
   wsAuth: false,
   payloadDefaultRules: [],

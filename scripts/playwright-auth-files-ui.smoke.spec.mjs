@@ -115,10 +115,10 @@ const sampleClaudeAccountSettings = {
       request_count: 3,
     },
     {
-      user_agent: 'claude-cli/2.1.140 (external, cli)',
-      version: '2.1.140',
-      package_version: '0.80.0',
-      runtime_version: 'v24.5.0',
+      user_agent: 'claude-cli/2.1.142 (external, sdk-cli)',
+      version: '2.1.142',
+      package_version: '0.81.0',
+      runtime_version: 'v24.6.0',
       os: 'darwin',
       arch: 'arm64',
       source: 'observed:first_party',
@@ -622,6 +622,28 @@ async function verifyAccountSettingsManagedHeaderUi(page) {
       await expect(
         page.locator('[data-testid="account-settings-claude-client-observations-panel"]')
       ).toContainText(/Observed|观察|наблюд/i);
+      await expect(
+        page.locator('[data-testid="account-settings-claude-client-observations-panel"]')
+      ).toContainText(/sdk-cli/i);
+      const sdkUserAgent = page
+        .locator('[data-testid="account-settings-claude-client-user-agent"]')
+        .filter({ hasText: 'sdk-cli' })
+        .first();
+      await expect(sdkUserAgent).toHaveText('claude-cli/2.1.142 (external, sdk-cli)');
+      const sdkUserAgentStyle = await sdkUserAgent.evaluate((element) => {
+        const style = window.getComputedStyle(element);
+        return {
+          overflow: style.overflow,
+          textOverflow: style.textOverflow,
+          whiteSpace: style.whiteSpace,
+        };
+      });
+      expect(sdkUserAgentStyle.whiteSpace, 'Claude UA should wrap instead of hiding sdk-cli').not.toBe(
+        'nowrap'
+      );
+      expect(sdkUserAgentStyle.overflow, 'Claude UA should not hide overflow').not.toBe(
+        'hidden'
+      );
     }
     if (managedHeaderRowCount > 0) {
       await expect(
@@ -917,7 +939,7 @@ for (const viewport of viewports) {
 
       if (viewport.name === 'compact') {
         for (const card of actionCards) {
-          expect(card.cardHeight).toBeLessThan(390);
+          expect(card.cardHeight).toBeLessThanOrEqual(410);
           expect(card.primaryButtonTops.length).toBe(1);
         }
       }

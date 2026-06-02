@@ -16,6 +16,8 @@ const ignoreHTTPSErrors = /^(1|true|yes|on)$/i.test(
 const hasZeroTimeText = (text) =>
   /0001-01-01|1\/1\/1|0001\/1\/1|0001年|一月\s*1,\s*1/i.test(text || '');
 
+const escapeRegExp = (value) => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 async function setupManagementSession(page) {
   await page.addInitScript(
     ({ base, key }) => {
@@ -90,14 +92,13 @@ test('201 usage acceptance data is visible in management UI and APIs', async ({ 
   await page.screenshot({ path: path.join(smokeOutDir, 'usage-acceptance.png'), fullPage: true });
 
   await page.goto(`${managementUiBase}#/quota`, { waitUntil: 'domcontentloaded' });
-  await expect(page.locator('body')).toContainText(/claude-bcd898-test-access-only\.json/i, {
-    timeout: 20000,
-  });
-
   const quota = await fetchManagementJSON(page, '/v0/management/quota/snapshots');
   fs.writeFileSync(path.join(smokeOutDir, 'quota.json'), `${JSON.stringify(quota, null, 2)}\n`);
   const claudeEntry = (quota.entries || []).find((entry) => entry.provider === 'claude');
   expect(claudeEntry, 'claude quota entry should exist').toBeTruthy();
+  await expect(page.locator('body')).toContainText(new RegExp(escapeRegExp(claudeEntry.name), 'i'), {
+    timeout: 20000,
+  });
   expect(claudeEntry.status, 'claude quota entry should be seeded as ok').toBe('ok');
   expect(claudeEntry.snapshot?.usage, 'claude quota snapshot usage should exist').toBeTruthy();
   expect(hasZeroTimeText(claudeEntry.last_refreshed_at), 'quota last refresh must not be zero time').toBe(false);
@@ -122,7 +123,18 @@ test('201 usage acceptance data is visible in management UI and APIs', async ({ 
     );
     fs.writeFileSync(path.join(smokeOutDir, 'models.json'), `${JSON.stringify(models, null, 2)}\n`);
     const ids = (models.data || []).map((model) => model.id);
-    expect(ids, 'Codex Spark must not be exposed without a Pro Codex credential').not.toContain('gpt-5.3-codex-spark');
+    const hasCodexPro = (quota.entries || []).some(
+      (entry) => entry.provider === 'codex' && /pro/i.test(String(entry.plan_type || entry.plan || ''))
+    );
+    if (hasCodexPro) {
+      expect(ids, 'Codex Spark should be exposed when a Pro Codex credential exists').toContain(
+        'gpt-5.3-codex-spark'
+      );
+    } else {
+      expect(ids, 'Codex Spark must not be exposed without a Pro Codex credential').not.toContain(
+        'gpt-5.3-codex-spark'
+      );
+    }
     expect(ids, 'Claude Opus 1M must not be exposed for a Pro Claude account without extra usage').not.toContain('claude-opus-4-7');
   }
 
