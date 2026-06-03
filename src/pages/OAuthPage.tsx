@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { useNotificationStore, useThemeStore } from '@/stores';
-import { oauthApi, type OAuthProvider, type IFlowCookieAuthResponse } from '@/services/api/oauth';
+import { oauthApi, type OAuthProvider } from '@/services/api/oauth';
 import { authFilesApi } from '@/services/api/authFiles';
 import type { AuthFileItem } from '@/types/authFile';
 import { vertexApi, type VertexImportResponse } from '@/services/api/vertex';
@@ -17,9 +17,9 @@ import iconAntigravity from '@/assets/icons/antigravity.svg';
 import iconGemini from '@/assets/icons/gemini.svg';
 import iconKimiLight from '@/assets/icons/kimi-light.svg';
 import iconKimiDark from '@/assets/icons/kimi-dark.svg';
-import iconQwen from '@/assets/icons/qwen.svg';
-import iconIflow from '@/assets/icons/iflow.svg';
 import iconVertex from '@/assets/icons/vertex.svg';
+import iconGrok from '@/assets/icons/grok.svg';
+import iconGrokDark from '@/assets/icons/grok-dark.svg';
 
 type OAuthFlowStep = 'generate_link' | 'wait_callback' | 'submit_callback' | 'exchange_token' | 'saved';
 
@@ -50,14 +50,6 @@ interface ProviderState {
   callbackError?: string;
   authFilesBeforeStart?: string[];
   successResult?: OAuthSuccessResult;
-}
-
-interface IFlowCookieState {
-  cookie: string;
-  loading: boolean;
-  result?: IFlowCookieAuthResponse;
-  error?: string;
-  errorType?: 'error' | 'warning';
 }
 
 interface VertexImportResult {
@@ -134,18 +126,11 @@ const PROVIDERS: {
     icon: { light: iconKimiLight, dark: iconKimiDark },
   },
   {
-    id: 'qwen',
-    titleKey: 'auth_login.qwen_oauth_title',
-    hintKey: 'auth_login.qwen_oauth_hint',
-    urlLabelKey: 'auth_login.qwen_oauth_url_label',
-    icon: iconQwen,
-  },
-  {
-    id: 'iflow',
-    titleKey: 'auth_login.iflow_oauth_title',
-    hintKey: 'auth_login.iflow_oauth_hint',
-    urlLabelKey: 'auth_login.iflow_oauth_url_label',
-    icon: iconIflow,
+    id: 'xai',
+    titleKey: 'auth_login.xai_oauth_title',
+    hintKey: 'auth_login.xai_oauth_hint',
+    urlLabelKey: 'auth_login.xai_oauth_url_label',
+    icon: { light: iconGrok, dark: iconGrokDark },
   },
 ];
 
@@ -154,8 +139,9 @@ const CALLBACK_SUPPORTED: OAuthProvider[] = [
   'anthropic',
   'antigravity',
   'gemini-cli',
-  'iflow',
+  'xai',
 ];
+const XAI_CALLBACK_URL = 'http://127.0.0.1:56121/callback';
 const getProviderI18nPrefix = (provider: OAuthProvider) => provider.replace('-', '_');
 const getAuthKey = (provider: OAuthProvider, suffix: string) =>
   `auth_login.${getProviderI18nPrefix(provider)}_${suffix}`;
@@ -188,20 +174,15 @@ const FINGERPRINT_PRESETS: Record<
     tls: 'provider-default',
     headers: 'Provider OAuth defaults with account proxy isolation',
   },
-  iflow: {
-    profile: 'iflow_oauth_proxy_bound_v1',
-    tls: 'provider-default',
-    headers: 'Provider OAuth defaults with account proxy isolation',
-  },
   kimi: {
     profile: 'kimi_device_flow_proxy_bound_v1',
     tls: 'provider-default',
     headers: 'Device-flow defaults with account proxy isolation',
   },
-  qwen: {
-    profile: 'qwen_device_flow_proxy_bound_v1',
+  xai: {
+    profile: 'xai_oauth_proxy_bound_v1',
     tls: 'provider-default',
-    headers: 'Device-flow defaults with account proxy isolation',
+    headers: 'Provider OAuth defaults with account proxy isolation',
   },
 };
 
@@ -240,9 +221,8 @@ const PROVIDER_MATCHERS: Record<OAuthProvider, string[]> = {
   anthropic: ['anthropic', 'claude'],
   antigravity: ['antigravity'],
   'gemini-cli': ['gemini-cli', 'gemini_cli', 'gemini'],
-  iflow: ['iflow'],
   kimi: ['kimi'],
-  qwen: ['qwen'],
+  xai: ['xai', 'grok'],
 };
 
 const normalizeComparable = (value: string) => value.trim().toLowerCase().replace(/[_\s]/g, '-');
@@ -333,6 +313,77 @@ const getOAuthFlowStep = (state: ProviderState): OAuthFlowStep => {
   return 'generate_link';
 };
 
+const isAbsoluteUrl = (value: string): boolean => {
+  try {
+    new URL(value);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const readQueryLikeCallbackInput = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const queryStart = trimmed.indexOf('?');
+  const hashStart = trimmed.indexOf('#');
+  const rawParams =
+    queryStart >= 0
+      ? trimmed.slice(queryStart + 1)
+      : hashStart >= 0
+        ? trimmed.slice(hashStart + 1)
+        : trimmed;
+
+  if (!/(^|[&#?])(code|state|error)=/i.test(rawParams)) return null;
+  return new URLSearchParams(rawParams.replace(/^[?#]/, ''));
+};
+
+const extractDisplayedXaiCode = (value: string): string => {
+  const trimmed = value.trim();
+  const codeMatch = trimmed.match(/\bcode\s*[:=]\s*([^\s&]+)/i);
+  return (codeMatch?.[1] ?? trimmed).trim();
+};
+
+const buildXaiCallbackUrl = (input: string, state?: string): string | null => {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+  if (isAbsoluteUrl(trimmed)) return trimmed;
+
+  const params = readQueryLikeCallbackInput(trimmed);
+  if (params) {
+    const code = params.get('code')?.trim();
+    const error = params.get('error')?.trim();
+    const errorDescription = params.get('error_description')?.trim();
+    const callbackState = params.get('state')?.trim() || state?.trim();
+    if (!callbackState) return null;
+
+    const callbackUrl = new URL(XAI_CALLBACK_URL);
+    callbackUrl.searchParams.set('state', callbackState);
+    if (code) callbackUrl.searchParams.set('code', code);
+    if (error) callbackUrl.searchParams.set('error', error);
+    if (errorDescription) callbackUrl.searchParams.set('error_description', errorDescription);
+    return callbackUrl.toString();
+  }
+
+  const code = extractDisplayedXaiCode(trimmed);
+  const callbackState = state?.trim();
+  if (!code || !callbackState) return null;
+
+  const callbackUrl = new URL(XAI_CALLBACK_URL);
+  callbackUrl.searchParams.set('code', code);
+  callbackUrl.searchParams.set('state', callbackState);
+  return callbackUrl.toString();
+};
+
+const resolveCallbackUrl = (
+  provider: OAuthProvider,
+  input: string,
+  state?: string
+): string | null => {
+  if (provider !== 'xai') return input.trim();
+  return buildXaiCallbackUrl(input, state);
+};
+
 export function OAuthPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -343,7 +394,6 @@ export function OAuthPage() {
   );
   const [activeProvider, setActiveProvider] = useState<OAuthProvider>('codex');
   const [nowMs, setNowMs] = useState(() => Date.now());
-  const [iflowCookie, setIflowCookie] = useState<IFlowCookieState>({ cookie: '', loading: false });
   const [vertexState, setVertexState] = useState<VertexImportState>({
     fileName: '',
     location: '',
@@ -630,9 +680,20 @@ export function OAuthPage() {
   };
 
   const submitCallback = async (provider: OAuthProvider) => {
-    const redirectUrl = (states[provider]?.callbackUrl || '').trim();
+    const rawCallback = (states[provider]?.callbackUrl || '').trim();
+    if (!rawCallback) {
+      showNotification(
+        t(provider === 'xai' ? 'auth_login.xai_callback_required' : 'auth_login.oauth_callback_required'),
+        'warning'
+      );
+      return;
+    }
+    const redirectUrl = resolveCallbackUrl(provider, rawCallback, states[provider]?.state);
     if (!redirectUrl) {
-      showNotification(t('auth_login.oauth_callback_required'), 'warning');
+      showNotification(
+        t(provider === 'xai' ? 'auth_login.xai_callback_state_missing' : 'auth_login.missing_state'),
+        'warning'
+      );
       return;
     }
     updateProviderState(provider, {
@@ -662,57 +723,6 @@ export function OAuthPage() {
         ? `${t('auth_login.oauth_callback_error')} ${errorMessage}`
         : t('auth_login.oauth_callback_error');
       showNotification(notificationMessage, 'error');
-    }
-  };
-
-  const submitIflowCookie = async () => {
-    const cookie = iflowCookie.cookie.trim();
-    if (!cookie) {
-      showNotification(t('auth_login.iflow_cookie_required'), 'warning');
-      return;
-    }
-    setIflowCookie((prev) => ({
-      ...prev,
-      loading: true,
-      error: undefined,
-      errorType: undefined,
-      result: undefined,
-    }));
-    try {
-      const res = await oauthApi.iflowCookieAuth(cookie);
-      if (res.status === 'ok') {
-        setIflowCookie((prev) => ({ ...prev, loading: false, result: res }));
-        showNotification(t('auth_login.iflow_cookie_status_success'), 'success');
-      } else {
-        setIflowCookie((prev) => ({
-          ...prev,
-          loading: false,
-          error: res.error,
-          errorType: 'error',
-        }));
-        showNotification(
-          `${t('auth_login.iflow_cookie_status_error')} ${res.error || ''}`,
-          'error'
-        );
-      }
-    } catch (err: unknown) {
-      if (getErrorStatus(err) === 409) {
-        const message = t('auth_login.iflow_cookie_config_duplicate');
-        setIflowCookie((prev) => ({
-          ...prev,
-          loading: false,
-          error: message,
-          errorType: 'warning',
-        }));
-        showNotification(message, 'warning');
-        return;
-      }
-      const message = getErrorMessage(err);
-      setIflowCookie((prev) => ({ ...prev, loading: false, error: message, errorType: 'error' }));
-      showNotification(
-        `${t('auth_login.iflow_cookie_start_error')}${message ? ` ${message}` : ''}`,
-        'error'
-      );
     }
   };
 
@@ -972,8 +982,16 @@ export function OAuthPage() {
             {canSubmitActiveCallback && (
               <div className={styles.callbackSection}>
                 <Input
-                  label={t('auth_login.oauth_callback_label')}
-                  hint={t('auth_login.oauth_callback_hint')}
+                  label={t(
+                    activeProviderConfig.id === 'xai'
+                      ? 'auth_login.xai_callback_label'
+                      : 'auth_login.oauth_callback_label'
+                  )}
+                  hint={t(
+                    activeProviderConfig.id === 'xai'
+                      ? 'auth_login.xai_callback_hint'
+                      : 'auth_login.oauth_callback_hint'
+                  )}
                   value={activeState.callbackUrl || ''}
                   onChange={(e) =>
                     updateProviderState(activeProviderConfig.id, {
@@ -982,7 +1000,11 @@ export function OAuthPage() {
                       callbackError: undefined,
                     })
                   }
-                  placeholder={t('auth_login.oauth_callback_placeholder')}
+                  placeholder={t(
+                    activeProviderConfig.id === 'xai'
+                      ? 'auth_login.xai_callback_placeholder'
+                      : 'auth_login.oauth_callback_placeholder'
+                  )}
                 />
                 <div className={styles.callbackActions}>
                   <Button
@@ -1175,85 +1197,6 @@ export function OAuthPage() {
                     <div className={styles.keyValueItem}>
                       <span className={styles.keyValueKey}>{t('vertex_import.result_file')}</span>
                       <span className={styles.keyValueValue}>{vertexState.result.authFile}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        </Card>
-
-        {/* iFlow Cookie 登录 */}
-        <Card
-          title={
-            <span className={styles.cardTitle}>
-              <img src={iconIflow} alt="" className={styles.cardTitleIcon} />
-              {t('auth_login.iflow_cookie_title')}
-            </span>
-          }
-          extra={
-            <Button onClick={submitIflowCookie} loading={iflowCookie.loading}>
-              {t('auth_login.iflow_cookie_button')}
-            </Button>
-          }
-        >
-          <div className={styles.cardContent}>
-            <div className={styles.cardHint}>{t('auth_login.iflow_cookie_hint')}</div>
-            <div className={styles.cardHintSecondary}>{t('auth_login.iflow_cookie_key_hint')}</div>
-            <div className={styles.formItem}>
-              <label className={styles.formItemLabel}>{t('auth_login.iflow_cookie_label')}</label>
-              <Input
-                value={iflowCookie.cookie}
-                onChange={(e) => setIflowCookie((prev) => ({ ...prev, cookie: e.target.value }))}
-                placeholder={t('auth_login.iflow_cookie_placeholder')}
-              />
-            </div>
-            {iflowCookie.error && (
-              <div
-                className={`status-badge ${iflowCookie.errorType === 'warning' ? 'warning' : 'error'}`}
-              >
-                {iflowCookie.errorType === 'warning'
-                  ? t('auth_login.iflow_cookie_status_duplicate')
-                  : t('auth_login.iflow_cookie_status_error')}{' '}
-                {iflowCookie.error}
-              </div>
-            )}
-            {iflowCookie.result && iflowCookie.result.status === 'ok' && (
-              <div className={styles.connectionBox}>
-                <div className={styles.connectionLabel}>
-                  {t('auth_login.iflow_cookie_result_title')}
-                </div>
-                <div className={styles.keyValueList}>
-                  {iflowCookie.result.email && (
-                    <div className={styles.keyValueItem}>
-                      <span className={styles.keyValueKey}>
-                        {t('auth_login.iflow_cookie_result_email')}
-                      </span>
-                      <span className={styles.keyValueValue}>{iflowCookie.result.email}</span>
-                    </div>
-                  )}
-                  {iflowCookie.result.expired && (
-                    <div className={styles.keyValueItem}>
-                      <span className={styles.keyValueKey}>
-                        {t('auth_login.iflow_cookie_result_expired')}
-                      </span>
-                      <span className={styles.keyValueValue}>{iflowCookie.result.expired}</span>
-                    </div>
-                  )}
-                  {iflowCookie.result.saved_path && (
-                    <div className={styles.keyValueItem}>
-                      <span className={styles.keyValueKey}>
-                        {t('auth_login.iflow_cookie_result_path')}
-                      </span>
-                      <span className={styles.keyValueValue}>{iflowCookie.result.saved_path}</span>
-                    </div>
-                  )}
-                  {iflowCookie.result.type && (
-                    <div className={styles.keyValueItem}>
-                      <span className={styles.keyValueKey}>
-                        {t('auth_login.iflow_cookie_result_type')}
-                      </span>
-                      <span className={styles.keyValueValue}>{iflowCookie.result.type}</span>
                     </div>
                   )}
                 </div>

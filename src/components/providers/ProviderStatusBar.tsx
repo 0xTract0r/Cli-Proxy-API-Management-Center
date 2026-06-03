@@ -1,7 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { StatusBarData, StatusBlockDetail } from '@/utils/usage';
-import defaultStyles from '@/pages/AiProvidersPage.module.scss';
+import type { StatusBarData, StatusBlockDetail } from '@/utils/recentRequests';
+
+const defaultStyles: Record<string, string> = {};
 
 /**
  * 根据成功率 (0–1) 在三个色标之间做 RGB 线性插值
