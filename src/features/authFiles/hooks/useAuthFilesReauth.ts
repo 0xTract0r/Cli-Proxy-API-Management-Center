@@ -29,9 +29,9 @@ const AUTH_FILE_OAUTH_PROVIDER_MAP: Record<string, OAuthProvider> = {
   antigravity: 'antigravity',
   gemini: 'gemini-cli',
   'gemini-cli': 'gemini-cli',
-  iflow: 'iflow',
   kimi: 'kimi',
-  qwen: 'qwen',
+  xai: 'xai',
+  grok: 'xai',
 };
 
 const AUTH_FILE_CALLBACK_SUPPORTED_PROVIDERS: OAuthProvider[] = [
@@ -39,7 +39,7 @@ const AUTH_FILE_CALLBACK_SUPPORTED_PROVIDERS: OAuthProvider[] = [
   'anthropic',
   'antigravity',
   'gemini-cli',
-  'iflow',
+  'xai',
 ];
 
 function isRecord(value: unknown): value is Record<string, unknown> {

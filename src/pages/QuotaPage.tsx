@@ -16,6 +16,7 @@ import {
   CODEX_CONFIG,
   GEMINI_CLI_CONFIG,
   KIMI_CONFIG,
+  XAI_CONFIG,
 } from '@/components/quota';
 import type { AuthFileItem } from '@/types';
 import styles from './QuotaPage.module.scss';
@@ -359,6 +360,12 @@ export function QuotaPage() {
         loading={loading}
         disabled={disableControls}
         quotaRefreshSignal={quotaRefreshSignal}
+      />
+      <QuotaSection
+        config={XAI_CONFIG}
+        files={files}
+        loading={loading}
+        disabled={disableControls}
       />
       <QuotaSection
         config={GEMINI_CLI_CONFIG}

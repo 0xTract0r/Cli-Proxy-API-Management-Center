@@ -76,12 +76,6 @@ export const configApi = {
     apiClient.put('/quota-exceeded/switch-preview-model', { value: enabled }),
 
   /**
-   * 使用统计开关
-   */
-  updateUsageStatistics: (enabled: boolean) =>
-    apiClient.put('/usage-statistics-enabled', { value: enabled }),
-
-  /**
    * 请求日志开关
    */
   updateRequestLog: (enabled: boolean) => apiClient.put('/request-log', { value: enabled }),
@@ -96,7 +90,7 @@ export const configApi = {
    */
   async getLogsMaxTotalSizeMb(): Promise<number> {
     const data = await apiClient.get<Record<string, unknown>>('/logs-max-total-size-mb');
-    const value = data?.['logs-max-total-size-mb'] ?? data?.logsMaxTotalSizeMb ?? 0;
+    const value = data?.['logs-max-total-size-mb'] ?? 0;
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : 0;
   },
@@ -117,7 +111,7 @@ export const configApi = {
    */
   async getForceModelPrefix(): Promise<boolean> {
     const data = await apiClient.get<Record<string, unknown>>('/force-model-prefix');
-    return Boolean(data?.['force-model-prefix'] ?? data?.forceModelPrefix ?? false);
+    return Boolean(data?.['force-model-prefix'] ?? false);
   },
 
   /**
@@ -130,7 +124,7 @@ export const configApi = {
    */
   async getRoutingStrategy(): Promise<string> {
     const data = await apiClient.get<Record<string, unknown>>('/routing/strategy');
-    const strategy = data?.strategy ?? data?.['routing-strategy'] ?? data?.routingStrategy;
+    const strategy = data?.strategy;
     return typeof strategy === 'string' ? strategy : 'round-robin';
   },
 
