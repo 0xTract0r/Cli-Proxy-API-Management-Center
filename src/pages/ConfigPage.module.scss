@@ -16,7 +16,14 @@
 
 .pageHeader {
   display: flex;
-  align-items: flex-start;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+
+  @include mobile {
+    align-items: stretch;
+  }
 }
 
 .pageHeaderCopy {
@@ -24,7 +31,14 @@
   flex-direction: column;
   gap: 10px;
   min-width: 0;
-  width: min(100%, 360px);
+}
+
+.pageEyebrow {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .pageTitle {
@@ -32,6 +46,46 @@
   font-weight: 700;
   color: var(--text-primary);
   margin: 0;
+}
+
+.description {
+  margin: 0;
+  max-width: 46rem;
+  color: var(--text-secondary);
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.pageMeta {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+  min-width: 0;
+
+  @include mobile {
+    align-items: stretch;
+  }
+}
+
+.statusBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 82%, transparent);
+  background: color-mix(in srgb, var(--bg-primary) 86%, transparent);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+
+  @include mobile {
+    width: 100%;
+  }
 }
 
 .tabBar {
