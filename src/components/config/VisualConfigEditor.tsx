@@ -19,9 +19,7 @@ import {
   IconKey,
   IconSatellite,
   IconSettings,
-  IconShield,
   IconTimer,
-  IconTrendingUp,
   type IconProps,
 } from '@/components/ui/icons';
 import { ConfigSection } from '@/components/config/ConfigSection';
@@ -44,11 +42,8 @@ import styles from './VisualConfigEditor.module.scss';
 
 export type VisualSectionId =
   | 'server'
-  | 'tls'
-  | 'remote'
   | 'auth'
   | 'system'
-  | 'network'
   | 'quota'
   | 'streaming'
   | 'payload';
@@ -303,20 +298,6 @@ export function VisualConfigEditor({
         errorCount: countErrors(['port']),
       },
       {
-        id: 'tls',
-        title: t('config_management.visual.sections.tls.title'),
-        description: t('config_management.visual.sections.tls.description'),
-        icon: IconShield,
-        errorCount: 0,
-      },
-      {
-        id: 'remote',
-        title: t('config_management.visual.sections.remote.title'),
-        description: t('config_management.visual.sections.remote.description'),
-        icon: IconSatellite,
-        errorCount: 0,
-      },
-      {
         id: 'auth',
         title: t('config_management.visual.sections.auth.title'),
         description: t('config_management.visual.sections.auth.description'),
@@ -332,14 +313,6 @@ export function VisualConfigEditor({
           'logsMaxTotalSizeMb',
           'errorLogsMaxFiles',
           'redisUsageQueueRetentionSeconds',
-        ]),
-      },
-      {
-        id: 'network',
-        title: t('config_management.visual.sections.network.title'),
-        description: t('config_management.visual.sections.network.description'),
-        icon: IconTrendingUp,
-        errorCount: countErrors([
           'requestRetry',
           'maxRetryCredentials',
           'maxRetryInterval',
@@ -383,7 +356,7 @@ export function VisualConfigEditor({
     sections.some((section) => section.errorCount > 0) || hasPayloadValidationErrors;
   const focusSections = useMemo(
     () =>
-      sections.filter((section) => ['server', 'network', 'quota', 'payload'].includes(section.id)),
+      sections.filter((section) => ['server', 'system', 'quota', 'payload'].includes(section.id)),
     [sections]
   );
 
@@ -583,111 +556,116 @@ export function VisualConfigEditor({
             title={t('config_management.visual.sections.server.title')}
             description={t('config_management.visual.sections.server.description')}
           >
-            <SectionGrid>
-              <Input
-                label={t('config_management.visual.sections.server.host')}
-                placeholder="0.0.0.0"
-                value={values.host}
-                onChange={(e) => onChange({ host: e.target.value })}
-                disabled={disabled}
-              />
-              <Input
-                label={t('config_management.visual.sections.server.port')}
-                type="number"
-                placeholder="8317"
-                value={values.port}
-                onChange={(e) => onChange({ port: e.target.value })}
-                disabled={disabled}
-                error={portError}
-              />
-            </SectionGrid>
-          </ConfigSection>
-
-          <ConfigSection
-            id="tls"
-            ref={(node) => {
-              sectionRefs.current.tls = node;
-            }}
-            indexLabel="02"
-            icon={<IconShield size={16} />}
-            title={t('config_management.visual.sections.tls.title')}
-            description={t('config_management.visual.sections.tls.description')}
-          >
             <SectionStack>
-              <ToggleRow
-                title={t('config_management.visual.sections.tls.enable')}
-                description={t('config_management.visual.sections.tls.enable_desc')}
-                checked={values.tlsEnable}
-                disabled={disabled}
-                onChange={(tlsEnable) => onChange({ tlsEnable })}
-              />
+              <SectionGrid>
+                <Input
+                  label={t('config_management.visual.sections.server.host')}
+                  placeholder="0.0.0.0"
+                  value={values.host}
+                  onChange={(e) => onChange({ host: e.target.value })}
+                  disabled={disabled}
+                />
+                <Input
+                  label={t('config_management.visual.sections.server.port')}
+                  type="number"
+                  placeholder="8317"
+                  value={values.port}
+                  onChange={(e) => onChange({ port: e.target.value })}
+                  disabled={disabled}
+                  error={portError}
+                />
+              </SectionGrid>
 
-              {values.tlsEnable ? (
-                <>
-                  <Divider />
+              <SectionSubsection
+                title={t('config_management.visual.sections.tls.title')}
+                description={t('config_management.visual.sections.tls.description')}
+              >
+                <SectionStack>
+                  <ToggleRow
+                    title={t('config_management.visual.sections.tls.enable')}
+                    description={t('config_management.visual.sections.tls.enable_desc')}
+                    checked={values.tlsEnable}
+                    disabled={disabled}
+                    onChange={(tlsEnable) => onChange({ tlsEnable })}
+                  />
+
+                  {values.tlsEnable ? (
+                    <>
+                      <Divider />
+                      <SectionGrid>
+                        <Input
+                          label={t('config_management.visual.sections.tls.cert')}
+                          placeholder="/path/to/cert.pem"
+                          value={values.tlsCert}
+                          onChange={(e) => onChange({ tlsCert: e.target.value })}
+                          disabled={disabled}
+                        />
+                        <Input
+                          label={t('config_management.visual.sections.tls.key')}
+                          placeholder="/path/to/key.pem"
+                          value={values.tlsKey}
+                          onChange={(e) => onChange({ tlsKey: e.target.value })}
+                          disabled={disabled}
+                        />
+                      </SectionGrid>
+                    </>
+                  ) : null}
+                </SectionStack>
+              </SectionSubsection>
+
+              <SectionSubsection
+                title={t('config_management.visual.sections.remote.title')}
+                description={t('config_management.visual.sections.remote.description')}
+              >
+                <SectionStack>
+                  <SectionGrid>
+                    <ToggleRow
+                      title={t('config_management.visual.sections.remote.allow_remote')}
+                      description={t('config_management.visual.sections.remote.allow_remote_desc')}
+                      checked={values.rmAllowRemote}
+                      disabled={disabled}
+                      onChange={(rmAllowRemote) => onChange({ rmAllowRemote })}
+                    />
+                    <ToggleRow
+                      title={t('config_management.visual.sections.remote.disable_panel')}
+                      description={t('config_management.visual.sections.remote.disable_panel_desc')}
+                      checked={values.rmDisableControlPanel}
+                      disabled={disabled}
+                      onChange={(rmDisableControlPanel) => onChange({ rmDisableControlPanel })}
+                    />
+                    <ToggleRow
+                      title={t('config_management.visual.sections.remote.disable_auto_update_panel')}
+                      description={t(
+                        'config_management.visual.sections.remote.disable_auto_update_panel_desc'
+                      )}
+                      checked={values.rmDisableAutoUpdatePanel}
+                      disabled={disabled}
+                      onChange={(rmDisableAutoUpdatePanel) =>
+                        onChange({ rmDisableAutoUpdatePanel })
+                      }
+                    />
+                  </SectionGrid>
                   <SectionGrid>
                     <Input
-                      label={t('config_management.visual.sections.tls.cert')}
-                      placeholder="/path/to/cert.pem"
-                      value={values.tlsCert}
-                      onChange={(e) => onChange({ tlsCert: e.target.value })}
+                      label={t('config_management.visual.sections.remote.secret_key')}
+                      type="password"
+                      placeholder={t(
+                        'config_management.visual.sections.remote.secret_key_placeholder'
+                      )}
+                      value={values.rmSecretKey}
+                      onChange={(e) => onChange({ rmSecretKey: e.target.value })}
                       disabled={disabled}
                     />
                     <Input
-                      label={t('config_management.visual.sections.tls.key')}
-                      placeholder="/path/to/key.pem"
-                      value={values.tlsKey}
-                      onChange={(e) => onChange({ tlsKey: e.target.value })}
+                      label={t('config_management.visual.sections.remote.panel_repo')}
+                      placeholder="https://github.com/router-for-me/Cli-Proxy-API-Management-Center"
+                      value={values.rmPanelRepo}
+                      onChange={(e) => onChange({ rmPanelRepo: e.target.value })}
                       disabled={disabled}
                     />
                   </SectionGrid>
-                </>
-              ) : null}
-            </SectionStack>
-          </ConfigSection>
-
-          <ConfigSection
-            id="remote"
-            ref={(node) => {
-              sectionRefs.current.remote = node;
-            }}
-            indexLabel="03"
-            icon={<IconSatellite size={16} />}
-            title={t('config_management.visual.sections.remote.title')}
-            description={t('config_management.visual.sections.remote.description')}
-          >
-            <SectionStack>
-              <ToggleRow
-                title={t('config_management.visual.sections.remote.allow_remote')}
-                description={t('config_management.visual.sections.remote.allow_remote_desc')}
-                checked={values.rmAllowRemote}
-                disabled={disabled}
-                onChange={(rmAllowRemote) => onChange({ rmAllowRemote })}
-              />
-              <ToggleRow
-                title={t('config_management.visual.sections.remote.disable_panel')}
-                description={t('config_management.visual.sections.remote.disable_panel_desc')}
-                checked={values.rmDisableControlPanel}
-                disabled={disabled}
-                onChange={(rmDisableControlPanel) => onChange({ rmDisableControlPanel })}
-              />
-              <SectionGrid>
-                <Input
-                  label={t('config_management.visual.sections.remote.secret_key')}
-                  type="password"
-                  placeholder={t('config_management.visual.sections.remote.secret_key_placeholder')}
-                  value={values.rmSecretKey}
-                  onChange={(e) => onChange({ rmSecretKey: e.target.value })}
-                  disabled={disabled}
-                />
-                <Input
-                  label={t('config_management.visual.sections.remote.panel_repo')}
-                  placeholder="https://github.com/router-for-me/Cli-Proxy-API-Management-Center"
-                  value={values.rmPanelRepo}
-                  onChange={(e) => onChange({ rmPanelRepo: e.target.value })}
-                  disabled={disabled}
-                />
-              </SectionGrid>
+                </SectionStack>
+              </SectionSubsection>
             </SectionStack>
           </ConfigSection>
 
@@ -696,7 +674,7 @@ export function VisualConfigEditor({
             ref={(node) => {
               sectionRefs.current.auth = node;
             }}
-            indexLabel="04"
+            indexLabel="02"
             icon={<IconKey size={16} />}
             title={t('config_management.visual.sections.auth.title')}
             description={t('config_management.visual.sections.auth.description')}
@@ -726,7 +704,7 @@ export function VisualConfigEditor({
             ref={(node) => {
               sectionRefs.current.system = node;
             }}
-            indexLabel="05"
+            indexLabel="03"
             icon={<IconDiamond size={16} />}
             title={t('config_management.visual.sections.system.title')}
             description={t('config_management.visual.sections.system.description')}
@@ -912,178 +890,186 @@ export function VisualConfigEditor({
                   </SectionGrid>
                 </SectionStack>
               </SectionSubsection>
-            </SectionStack>
-          </ConfigSection>
 
-          <ConfigSection
-            id="network"
-            ref={(node) => {
-              sectionRefs.current.network = node;
-            }}
-            indexLabel="06"
-            icon={<IconTrendingUp size={16} />}
-            title={t('config_management.visual.sections.network.title')}
-            description={t('config_management.visual.sections.network.description')}
-          >
-            <SectionStack>
-              <SectionGrid>
-                <Input
-                  label={t('config_management.visual.sections.network.proxy_url')}
-                  placeholder="socks5://user:pass@127.0.0.1:1080/"
-                  value={values.proxyUrl}
-                  onChange={(e) => onChange({ proxyUrl: e.target.value })}
-                  disabled={disabled}
-                />
-                <Input
-                  label={t('config_management.visual.sections.network.request_retry')}
-                  type="number"
-                  placeholder="3"
-                  value={values.requestRetry}
-                  onChange={(e) => onChange({ requestRetry: e.target.value })}
-                  disabled={disabled}
-                  error={requestRetryError}
-                />
-                <Input
-                  label={t('config_management.visual.sections.network.max_retry_credentials')}
-                  type="number"
-                  placeholder="0"
-                  value={values.maxRetryCredentials}
-                  onChange={(e) => onChange({ maxRetryCredentials: e.target.value })}
-                  disabled={disabled}
-                  hint={t('config_management.visual.sections.network.max_retry_credentials_hint')}
-                  error={maxRetryCredentialsError}
-                />
-                <Input
-                  label={t('config_management.visual.sections.network.max_retry_interval')}
-                  type="number"
-                  placeholder="30"
-                  value={values.maxRetryInterval}
-                  onChange={(e) => onChange({ maxRetryInterval: e.target.value })}
-                  disabled={disabled}
-                  error={maxRetryIntervalError}
-                />
-                <Input
-                  label={t('config_management.visual.sections.network.auth_auto_refresh_workers')}
-                  type="number"
-                  placeholder="16"
-                  value={values.authAutoRefreshWorkers}
-                  onChange={(e) => onChange({ authAutoRefreshWorkers: e.target.value })}
-                  disabled={disabled}
-                  hint={t(
-                    'config_management.visual.sections.network.auth_auto_refresh_workers_hint'
-                  )}
-                  error={authAutoRefreshWorkersError}
-                />
-                <FieldShell
-                  label={t('config_management.visual.sections.network.routing_strategy')}
-                  labelId={routingStrategyLabelId}
-                  hint={t('config_management.visual.sections.network.routing_strategy_hint')}
-                  hintId={routingStrategyHintId}
-                >
-                  <Select
-                    value={values.routingStrategy}
-                    options={[
-                      {
-                        value: 'round-robin',
-                        label: t('config_management.visual.sections.network.strategy_round_robin'),
-                      },
-                      {
-                        value: 'fill-first',
-                        label: t('config_management.visual.sections.network.strategy_fill_first'),
-                      },
-                    ]}
-                    id={`${routingStrategyLabelId}-select`}
-                    disabled={disabled}
-                    ariaLabelledBy={routingStrategyLabelId}
-                    ariaDescribedBy={routingStrategyHintId}
-                    onChange={(nextValue) =>
-                      onChange({
-                        routingStrategy: nextValue as VisualConfigValues['routingStrategy'],
-                      })
-                    }
-                  />
-                </FieldShell>
-                <FieldShell
-                  label={t('config_management.visual.sections.network.disable_image_generation')}
-                  labelId={disableImageGenerationLabelId}
-                  hint={t(
-                    'config_management.visual.sections.network.disable_image_generation_hint'
-                  )}
-                  hintId={disableImageGenerationHintId}
-                >
-                  <Select
-                    value={values.disableImageGeneration}
-                    options={disableImageGenerationOptions}
-                    id={`${disableImageGenerationLabelId}-select`}
-                    disabled={disabled}
-                    ariaLabelledBy={disableImageGenerationLabelId}
-                    ariaDescribedBy={disableImageGenerationHintId}
-                    onChange={(nextValue) =>
-                      onChange({
-                        disableImageGeneration:
-                          nextValue as VisualConfigValues['disableImageGeneration'],
-                      })
-                    }
-                  />
-                </FieldShell>
-                <Input
-                  label={t('config_management.visual.sections.network.session_affinity_ttl')}
-                  placeholder="1h"
-                  value={values.routingSessionAffinityTTL}
-                  onChange={(e) => onChange({ routingSessionAffinityTTL: e.target.value })}
-                  disabled={disabled}
-                />
-              </SectionGrid>
+              <SectionSubsection
+                title={t('config_management.visual.sections.network.title')}
+                description={t('config_management.visual.sections.network.description')}
+              >
+                <SectionStack>
+                  <SectionGrid>
+                    <Input
+                      label={t('config_management.visual.sections.network.proxy_url')}
+                      placeholder="socks5://user:pass@127.0.0.1:1080/"
+                      value={values.proxyUrl}
+                      onChange={(e) => onChange({ proxyUrl: e.target.value })}
+                      disabled={disabled}
+                    />
+                    <Input
+                      label={t('config_management.visual.sections.network.request_retry')}
+                      type="number"
+                      placeholder="3"
+                      value={values.requestRetry}
+                      onChange={(e) => onChange({ requestRetry: e.target.value })}
+                      disabled={disabled}
+                      error={requestRetryError}
+                    />
+                    <Input
+                      label={t('config_management.visual.sections.network.max_retry_credentials')}
+                      type="number"
+                      placeholder="0"
+                      value={values.maxRetryCredentials}
+                      onChange={(e) => onChange({ maxRetryCredentials: e.target.value })}
+                      disabled={disabled}
+                      hint={t(
+                        'config_management.visual.sections.network.max_retry_credentials_hint'
+                      )}
+                      error={maxRetryCredentialsError}
+                    />
+                    <Input
+                      label={t('config_management.visual.sections.network.max_retry_interval')}
+                      type="number"
+                      placeholder="30"
+                      value={values.maxRetryInterval}
+                      onChange={(e) => onChange({ maxRetryInterval: e.target.value })}
+                      disabled={disabled}
+                      error={maxRetryIntervalError}
+                    />
+                    <Input
+                      label={t(
+                        'config_management.visual.sections.network.auth_auto_refresh_workers'
+                      )}
+                      type="number"
+                      placeholder="16"
+                      value={values.authAutoRefreshWorkers}
+                      onChange={(e) => onChange({ authAutoRefreshWorkers: e.target.value })}
+                      disabled={disabled}
+                      hint={t(
+                        'config_management.visual.sections.network.auth_auto_refresh_workers_hint'
+                      )}
+                      error={authAutoRefreshWorkersError}
+                    />
+                    <FieldShell
+                      label={t('config_management.visual.sections.network.routing_strategy')}
+                      labelId={routingStrategyLabelId}
+                      hint={t('config_management.visual.sections.network.routing_strategy_hint')}
+                      hintId={routingStrategyHintId}
+                    >
+                      <Select
+                        value={values.routingStrategy}
+                        options={[
+                          {
+                            value: 'round-robin',
+                            label: t(
+                              'config_management.visual.sections.network.strategy_round_robin'
+                            ),
+                          },
+                          {
+                            value: 'fill-first',
+                            label: t(
+                              'config_management.visual.sections.network.strategy_fill_first'
+                            ),
+                          },
+                        ]}
+                        id={`${routingStrategyLabelId}-select`}
+                        disabled={disabled}
+                        ariaLabelledBy={routingStrategyLabelId}
+                        ariaDescribedBy={routingStrategyHintId}
+                        onChange={(nextValue) =>
+                          onChange({
+                            routingStrategy: nextValue as VisualConfigValues['routingStrategy'],
+                          })
+                        }
+                      />
+                    </FieldShell>
+                    <FieldShell
+                      label={t(
+                        'config_management.visual.sections.network.disable_image_generation'
+                      )}
+                      labelId={disableImageGenerationLabelId}
+                      hint={t(
+                        'config_management.visual.sections.network.disable_image_generation_hint'
+                      )}
+                      hintId={disableImageGenerationHintId}
+                    >
+                      <Select
+                        value={values.disableImageGeneration}
+                        options={disableImageGenerationOptions}
+                        id={`${disableImageGenerationLabelId}-select`}
+                        disabled={disabled}
+                        ariaLabelledBy={disableImageGenerationLabelId}
+                        ariaDescribedBy={disableImageGenerationHintId}
+                        onChange={(nextValue) =>
+                          onChange({
+                            disableImageGeneration:
+                              nextValue as VisualConfigValues['disableImageGeneration'],
+                          })
+                        }
+                      />
+                    </FieldShell>
+                    <Input
+                      label={t('config_management.visual.sections.network.session_affinity_ttl')}
+                      placeholder="1h"
+                      value={values.routingSessionAffinityTTL}
+                      onChange={(e) => onChange({ routingSessionAffinityTTL: e.target.value })}
+                      disabled={disabled}
+                    />
+                  </SectionGrid>
 
-              <SectionGrid>
-                <ToggleRow
-                  title={t('config_management.visual.sections.network.force_model_prefix')}
-                  description={t(
-                    'config_management.visual.sections.network.force_model_prefix_desc'
-                  )}
-                  checked={values.forceModelPrefix}
-                  disabled={disabled}
-                  onChange={(forceModelPrefix) => onChange({ forceModelPrefix })}
-                />
-                <ToggleRow
-                  title={t('config_management.visual.sections.network.passthrough_headers')}
-                  description={t(
-                    'config_management.visual.sections.network.passthrough_headers_desc'
-                  )}
-                  checked={values.passthroughHeaders}
-                  disabled={disabled}
-                  onChange={(passthroughHeaders) => onChange({ passthroughHeaders })}
-                />
-                <ToggleRow
-                  title={t('config_management.visual.sections.network.disable_cooling')}
-                  description={t('config_management.visual.sections.network.disable_cooling_desc')}
-                  checked={values.disableCooling}
-                  disabled={disabled}
-                  onChange={(disableCooling) => onChange({ disableCooling })}
-                />
-                <ToggleRow
-                  title={t('config_management.visual.sections.network.session_affinity')}
-                  checked={values.routingSessionAffinity}
-                  disabled={disabled}
-                  onChange={(routingSessionAffinity) => onChange({ routingSessionAffinity })}
-                />
-                <ToggleRow
-                  title={t('config_management.visual.sections.network.ws_auth')}
-                  description={t('config_management.visual.sections.network.ws_auth_desc')}
-                  checked={values.wsAuth}
-                  disabled={disabled}
-                  onChange={(wsAuth) => onChange({ wsAuth })}
-                />
-                <ToggleRow
-                  title={t('config_management.visual.sections.network.enable_gemini_cli_endpoint')}
-                  description={t(
-                    'config_management.visual.sections.network.enable_gemini_cli_endpoint_desc'
-                  )}
-                  checked={values.enableGeminiCliEndpoint}
-                  disabled={disabled}
-                  onChange={(enableGeminiCliEndpoint) => onChange({ enableGeminiCliEndpoint })}
-                />
-              </SectionGrid>
+                  <SectionGrid>
+                    <ToggleRow
+                      title={t('config_management.visual.sections.network.force_model_prefix')}
+                      description={t(
+                        'config_management.visual.sections.network.force_model_prefix_desc'
+                      )}
+                      checked={values.forceModelPrefix}
+                      disabled={disabled}
+                      onChange={(forceModelPrefix) => onChange({ forceModelPrefix })}
+                    />
+                    <ToggleRow
+                      title={t('config_management.visual.sections.network.passthrough_headers')}
+                      description={t(
+                        'config_management.visual.sections.network.passthrough_headers_desc'
+                      )}
+                      checked={values.passthroughHeaders}
+                      disabled={disabled}
+                      onChange={(passthroughHeaders) => onChange({ passthroughHeaders })}
+                    />
+                    <ToggleRow
+                      title={t('config_management.visual.sections.network.disable_cooling')}
+                      description={t(
+                        'config_management.visual.sections.network.disable_cooling_desc'
+                      )}
+                      checked={values.disableCooling}
+                      disabled={disabled}
+                      onChange={(disableCooling) => onChange({ disableCooling })}
+                    />
+                    <ToggleRow
+                      title={t('config_management.visual.sections.network.session_affinity')}
+                      checked={values.routingSessionAffinity}
+                      disabled={disabled}
+                      onChange={(routingSessionAffinity) => onChange({ routingSessionAffinity })}
+                    />
+                    <ToggleRow
+                      title={t('config_management.visual.sections.network.ws_auth')}
+                      description={t('config_management.visual.sections.network.ws_auth_desc')}
+                      checked={values.wsAuth}
+                      disabled={disabled}
+                      onChange={(wsAuth) => onChange({ wsAuth })}
+                    />
+                    <ToggleRow
+                      title={t(
+                        'config_management.visual.sections.network.enable_gemini_cli_endpoint'
+                      )}
+                      description={t(
+                        'config_management.visual.sections.network.enable_gemini_cli_endpoint_desc'
+                      )}
+                      checked={values.enableGeminiCliEndpoint}
+                      disabled={disabled}
+                      onChange={(enableGeminiCliEndpoint) => onChange({ enableGeminiCliEndpoint })}
+                    />
+                  </SectionGrid>
+                </SectionStack>
+              </SectionSubsection>
             </SectionStack>
           </ConfigSection>
 
@@ -1092,7 +1078,7 @@ export function VisualConfigEditor({
             ref={(node) => {
               sectionRefs.current.quota = node;
             }}
-            indexLabel="07"
+            indexLabel="04"
             icon={<IconTimer size={16} />}
             title={t('config_management.visual.sections.quota.title')}
             description={t('config_management.visual.sections.quota.description')}
@@ -1202,7 +1188,7 @@ export function VisualConfigEditor({
             ref={(node) => {
               sectionRefs.current.streaming = node;
             }}
-            indexLabel="08"
+            indexLabel="05"
             icon={<IconSatellite size={16} />}
             title={t('config_management.visual.sections.streaming.title')}
             description={t('config_management.visual.sections.streaming.description')}
@@ -1303,7 +1289,7 @@ export function VisualConfigEditor({
             ref={(node) => {
               sectionRefs.current.payload = node;
             }}
-            indexLabel="09"
+            indexLabel="06"
             icon={<IconCode size={16} />}
             title={t('config_management.visual.sections.payload.title')}
             description={t('config_management.visual.sections.payload.description')}
