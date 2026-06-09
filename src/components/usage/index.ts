@@ -1,6 +1,6 @@
 // Hooks
 export { useUsageData } from './hooks/useUsageData';
-export type { UsagePayload, UseUsageDataReturn } from './hooks/useUsageData';
+export type { UsageLoadRequestOptions, UsagePayload, UseUsageDataReturn } from './hooks/useUsageData';
 
 export { useSparklines } from './hooks/useSparklines';
 export type { SparklineData, SparklineBundle, UseSparklinesOptions, UseSparklinesReturn } from './hooks/useSparklines';
