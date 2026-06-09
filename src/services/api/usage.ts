@@ -22,6 +22,12 @@ export interface UsageImportResponse {
   [key: string]: unknown;
 }
 
+export interface UsageQueryOptions {
+  includeDetails?: boolean;
+  since?: string | Date;
+  detailLimit?: number;
+}
+
 export interface PricingSourceSnapshot {
   id?: string;
   label?: string;
@@ -75,11 +81,33 @@ export interface PricingOverridePayload {
   cache_write_usd_per_mtok: number;
 }
 
+const buildUsageQueryParams = (options: UsageQueryOptions = {}) => {
+  const params: Record<string, string | number | boolean> = {};
+  if (typeof options.includeDetails === 'boolean') {
+    params.include_details = options.includeDetails;
+  }
+  if (options.since instanceof Date) {
+    if (!Number.isNaN(options.since.getTime())) {
+      params.since = options.since.toISOString();
+    }
+  } else if (typeof options.since === 'string' && options.since.trim()) {
+    params.since = options.since.trim();
+  }
+  if (typeof options.detailLimit === 'number' && Number.isFinite(options.detailLimit)) {
+    params.detail_limit = Math.max(1, Math.floor(options.detailLimit));
+  }
+  return Object.keys(params).length ? params : undefined;
+};
+
 export const usageApi = {
   /**
    * 获取使用统计原始数据
    */
-  getUsage: () => apiClient.get<Record<string, unknown>>('/usage', { timeout: USAGE_TIMEOUT_MS }),
+  getUsage: (options: UsageQueryOptions = {}) =>
+    apiClient.get<Record<string, unknown>>('/usage', {
+      timeout: USAGE_TIMEOUT_MS,
+      params: buildUsageQueryParams(options)
+    }),
 
   /**
    * 导出使用统计快照

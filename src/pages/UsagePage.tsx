@@ -31,7 +31,8 @@ import {
   ServiceHealthCard,
   useUsageData,
   useSparklines,
-  useChartData
+  useChartData,
+  type UsageLoadRequestOptions
 } from '@/components/usage';
 import {
   getModelNamesFromUsage,
@@ -61,6 +62,7 @@ const TIME_RANGE_STORAGE_KEY = 'cli-proxy-usage-time-range-v1';
 const DEFAULT_CHART_LINES = ['all'];
 const DEFAULT_TIME_RANGE: UsageTimeRange = '24h';
 const MAX_CHART_LINES = 9;
+const USAGE_DETAILS_WINDOW_LIMIT = 10_000;
 const TIME_RANGE_OPTIONS: ReadonlyArray<{ value: UsageTimeRange; labelKey: string }> = [
   { value: 'all', labelKey: 'usage_stats.range_all' },
   { value: '1h', labelKey: 'usage_stats.range_1h' },
@@ -75,6 +77,18 @@ const HOUR_WINDOW_BY_TIME_RANGE: Record<Exclude<UsageTimeRange, 'all'>, number> 
   '7h': 7,
   '24h': 24,
   '7d': 7 * 24
+};
+
+const buildUsageRequestOptions = (timeRange: UsageTimeRange): UsageLoadRequestOptions => {
+  if (timeRange === 'all') {
+    return { includeDetails: true };
+  }
+  const hours = HOUR_WINDOW_BY_TIME_RANGE[timeRange];
+  return {
+    includeDetails: true,
+    since: new Date(Date.now() - hours * 60 * 60 * 1000).toISOString(),
+    detailLimit: USAGE_DETAILS_WINDOW_LIMIT
+  };
 };
 
 const isUsageTimeRange = (value: unknown): value is UsageTimeRange =>
@@ -133,6 +147,12 @@ export function UsagePage() {
   const isDark = resolvedTheme === 'dark';
   const config = useConfigStore((state) => state.config);
 
+  const [timeRange, setTimeRange] = useState<UsageTimeRange>(loadTimeRange);
+  const getUsageRequestOptions = useCallback(
+    () => buildUsageRequestOptions(timeRange),
+    [timeRange]
+  );
+
   // Data hook
   const {
     usage,
@@ -154,13 +174,12 @@ export function UsagePage() {
     importInputRef,
     exporting,
     importing
-  } = useUsageData();
+  } = useUsageData({ getUsageRequestOptions });
 
   useHeaderRefresh(loadUsage);
 
   // Chart lines state
   const [chartLines, setChartLines] = useState<string[]>(loadChartLines);
-  const [timeRange, setTimeRange] = useState<UsageTimeRange>(loadTimeRange);
 
   const timeRangeOptions = useMemo(
     () =>
