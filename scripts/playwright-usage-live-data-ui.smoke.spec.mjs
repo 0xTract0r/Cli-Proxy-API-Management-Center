@@ -17,6 +17,7 @@ const timeRangeStorageKey = 'cli-proxy-usage-time-range-v1';
 const rangeOptionIndex = { all: 0, '24h': 4, '7d': 5 };
 const usageApiPath = '/v0/management/usage';
 const pricingApiPath = '/v0/management/usage/pricing';
+const runtimeDetectionPath = '/v0/management/nodes';
 
 const isRecord = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const toNumber = (value) => {
@@ -97,6 +98,22 @@ const responsePathnameEquals = (response, pathName) => {
     return false;
   }
 };
+const isRuntimeDetectionProbeUrl = (value) => {
+  try {
+    return new URL(value).pathname === runtimeDetectionPath;
+  } catch {
+    return String(value || '').includes(runtimeDetectionPath);
+  }
+};
+const isExpectedRuntimeDetectionConsoleError = (message) => {
+  if (message.type() !== 'error') return false;
+  if (!isRuntimeDetectionProbeUrl(message.location().url || '')) return false;
+  return /Failed to load resource|404|405/i.test(message.text());
+};
+const isExpectedRuntimeDetectionResponse = (response) =>
+  response.request().method() === 'GET' &&
+  responsePathnameEquals(response, runtimeDetectionPath) &&
+  [404, 405].includes(response.status());
 
 const extractCacheReadTokens = (tokens) =>
   Math.max(
@@ -525,7 +542,9 @@ test('production usage page data items match management usage API', async ({ pag
   const observedPricingReads = [];
   let apiContext;
   page.on('console', (message) => {
-    if (message.type() === 'error') consoleErrors.push(message.text());
+    if (message.type() === 'error' && !isExpectedRuntimeDetectionConsoleError(message)) {
+      consoleErrors.push(message.text());
+    }
   });
   page.on('requestfailed', (request) => {
     requestFailures.push(`${request.method()} ${request.url()} ${request.failure()?.errorText || ''}`);
@@ -537,7 +556,9 @@ test('production usage page data items match management usage API', async ({ pag
     if (response.request().method() === 'GET' && responsePathnameEquals(response, pricingApiPath)) {
       observedPricingReads.push({ status: response.status(), url: response.url() });
     }
-    if (response.status() >= 400) httpErrors.push(`${response.status()} ${response.url()}`);
+    if (response.status() >= 400 && !isExpectedRuntimeDetectionResponse(response)) {
+      httpErrors.push(`${response.status()} ${response.url()}`);
+    }
   });
 
   try {
