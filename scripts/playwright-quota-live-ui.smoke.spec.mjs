@@ -29,6 +29,7 @@ const supportedProviders = new Set(
 
 const targetUrl = `${managementUiBase}${managementUiRoute}`;
 const apiBase = process.env.MANAGEMENT_API_BASE || (managementUiBase ? new URL(managementUiBase).origin : '');
+const runtimeDetectionPath = '/v0/management/nodes';
 const productionTargetPattern = /(?::18317\b|cpa\.wisedata\.co)/i;
 const productionLookingTarget =
   productionTargetPattern.test(managementUiBase) || productionTargetPattern.test(apiBase);
@@ -132,6 +133,30 @@ const sanitizeUrl = (value) => {
   } catch {
     return String(value || '');
   }
+};
+
+const responsePathnameEquals = (response, pathName) => {
+  try {
+    return new URL(response.url()).pathname === pathName;
+  } catch {
+    return false;
+  }
+};
+
+const isExpectedRuntimeDetectionResponse = (response) =>
+  response.request().method() === 'GET' &&
+  responsePathnameEquals(response, runtimeDetectionPath) &&
+  [404, 405].includes(response.status());
+
+const isExpectedRuntimeDetectionConsoleError = (message) => {
+  if (message.type !== 'error') return false;
+  const url = message.location?.url || '';
+  try {
+    if (new URL(url).pathname !== runtimeDetectionPath) return false;
+  } catch {
+    if (!String(url).includes(runtimeDetectionPath)) return false;
+  }
+  return /Failed to load resource|404|405/i.test(message.text || '');
 };
 
 const sanitizeMessage = (value) =>
@@ -708,7 +733,7 @@ test('live quota page reads core snapshots and refreshes without visible failure
         status: response.status(),
       });
     }
-    if (response.status() >= 400) {
+    if (response.status() >= 400 && !isExpectedRuntimeDetectionResponse(response)) {
       failedResponses.push({
         method: response.request().method(),
         url: sanitizeUrl(url),
@@ -817,7 +842,9 @@ test('live quota page reads core snapshots and refreshes without visible failure
       fullPage: true,
     });
 
-    const criticalConsole = consoleMessages.filter((message) => message.type === 'error');
+    const criticalConsole = consoleMessages.filter(
+      (message) => message.type === 'error' && !isExpectedRuntimeDetectionConsoleError(message)
+    );
     assertUiLoadedQuotaSnapshots(observedQuotaResponses);
     expect(criticalConsole, 'browser console errors').toEqual([]);
     expect(requestFailures, 'browser request failures').toEqual([]);

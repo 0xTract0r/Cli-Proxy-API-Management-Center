@@ -11,6 +11,7 @@ const smokeOutDir =
 const ignoreHTTPSErrors = /^(1|true|yes|on)$/i.test(
   process.env.PLAYWRIGHT_IGNORE_HTTPS_ERRORS || process.env.MANAGEMENT_UI_IGNORE_HTTPS_ERRORS || ''
 );
+const runtimeDetectionPath = '/v0/management/nodes';
 
 const routes = [
   {
@@ -93,6 +94,25 @@ const sanitizeEvidenceValue = (value) => {
   }
   return value;
 };
+
+const isRuntimeDetectionProbeUrl = (value) => {
+  try {
+    return new URL(value).pathname === runtimeDetectionPath;
+  } catch {
+    return String(value || '').includes(runtimeDetectionPath);
+  }
+};
+
+const isExpectedRuntimeDetectionConsoleError = (message) => {
+  if (message.type() !== 'error') return false;
+  if (!isRuntimeDetectionProbeUrl(message.location().url || '')) return false;
+  return /Failed to load resource|404|405/i.test(message.text());
+};
+
+const isExpectedRuntimeDetectionResponse = (response) =>
+  response.request().method() === 'GET' &&
+  isRuntimeDetectionProbeUrl(response.url()) &&
+  [404, 405].includes(response.status());
 
 async function setupSession(target) {
   await target.addInitScript(
@@ -199,13 +219,19 @@ test('production management pages render real data components without visible fa
   for (const route of routes) {
     const page = await context.newPage();
     page.on('console', (message) => {
-      if (message.type() === 'error') consoleErrors.push(`${route.name}: ${message.text()}`);
+      if (message.type() === 'error' && !isExpectedRuntimeDetectionConsoleError(message)) {
+        consoleErrors.push(`${route.name}: ${message.text()}`);
+      }
     });
     page.on('requestfailed', (request) => {
       requestFailures.push(`${route.name}: ${request.method()} ${request.url()} ${request.failure()?.errorText || ''}`);
     });
     page.on('response', (response) => {
-      if (response.status() >= 400 && !response.url().includes('/favicon')) {
+      if (
+        response.status() >= 400 &&
+        !response.url().includes('/favicon') &&
+        !isExpectedRuntimeDetectionResponse(response)
+      ) {
         httpErrors.push(`${route.name}: ${response.status()} ${response.request().method()} ${response.url()}`);
       }
     });

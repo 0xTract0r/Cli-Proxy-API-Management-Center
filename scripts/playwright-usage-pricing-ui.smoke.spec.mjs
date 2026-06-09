@@ -16,9 +16,24 @@ const runPricingRefresh = /^(1|true|yes|on)$/i.test(process.env.RUN_PRICING_REFR
 const requirePersistedAt = !/^(0|false|no|off)$/i.test(process.env.REQUIRE_PRICING_PERSISTED_AT || '1');
 
 const targetUrl = `${managementUiBase}${managementUiRoute}`;
+const runtimeDetectionPath = '/v0/management/nodes';
 
 const hasZeroTimeText = (text) =>
   /0001-01-01|1\/1\/1|0001\/1\/1|0001年|一月\s*1,\s*1/i.test(text || '');
+
+const isRuntimeDetectionProbeUrl = (value) => {
+  try {
+    return new URL(value).pathname === runtimeDetectionPath;
+  } catch {
+    return String(value || '').includes(runtimeDetectionPath);
+  }
+};
+
+const isExpectedRuntimeDetectionConsoleError = (message) => {
+  if (message.type() !== 'error') return false;
+  if (!isRuntimeDetectionProbeUrl(message.location().url || '')) return false;
+  return /Failed to load resource|404|405/i.test(message.text());
+};
 
 async function setupManagementSession(page) {
   await page.addInitScript(
@@ -51,7 +66,7 @@ test('usage pricing page shows persisted catalog state without zero-time regress
   const consoleErrors = [];
   const failedRequests = [];
   page.on('console', (message) => {
-    if (message.type() === 'error') {
+    if (message.type() === 'error' && !isExpectedRuntimeDetectionConsoleError(message)) {
       consoleErrors.push(message.text());
     }
   });
