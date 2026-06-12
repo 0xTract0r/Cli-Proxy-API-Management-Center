@@ -60,6 +60,16 @@ export interface AuthFileStatusHistoryEntry {
 
 export type AuthFileHeaderMap = Record<string, string>;
 
+/**
+ * Snapshot of the core-managed identity projection for one account.
+ *
+ * 反关联模型（A/B + high-water）：
+ *  - A 类「固定平台身份」：`stable_identity`（OS/Arch/X-App 等跨版本钉死的字段）。
+ *  - B 类「高水位软件指纹」：`versioned_capabilities`（UA / package / runtime 版本，
+ *    只升不降的 high-water）。
+ *  - `runtime_fingerprint`：运行时环境信号（非身份钉死项）。
+ * 字段名沿用 core projection，语义重定义为「身份投影」而非旧的「自动升级策略」。
+ */
 export interface AuthFileManagedHeaderProjection {
   generated_at?: string;
   source?: string;
@@ -72,8 +82,14 @@ export interface AuthFileManagedHeaderProjection {
   runtime_fingerprint?: AuthFileHeaderMap;
 }
 
+/**
+ * 单条「身份变更审计」记录（重定义复用，非删除）。
+ * 旧字段 `policy_version` 仍保留以兼容历史数据，但在 UI 上呈现为 high-water
+ * 版本快照标识，不再使用「自动升级策略版本」措辞。
+ */
 export interface AuthFileManagedHeaderHistoryEntry {
   recorded_at?: string;
+  /** Compat field from older core payloads; surfaced as a high-water snapshot marker. */
   policy_version?: string;
   reason?: string;
   source?: string;
@@ -85,7 +101,11 @@ export interface AuthFileManagedHeaderHistoryEntry {
   next?: Record<string, unknown>;
 }
 
+/**
+ * 身份投影 + 身份变更审计历史。`history` 重定义复用为「身份变更审计」视图数据源。
+ */
 export interface AuthFileManagedHeaderState {
+  /** Compat field from older core payloads; not shown as an upgrade-policy version. */
   policy_version?: string;
   current?: AuthFileManagedHeaderProjection | null;
   history?: AuthFileManagedHeaderHistoryEntry[];
@@ -122,6 +142,12 @@ export interface AuthFileAccountSettings {
   tls_profile: string | Record<string, unknown> | null;
   runtime_profile?: Record<string, unknown> | null;
   runtime_identity?: Record<string, unknown> | null;
+  /**
+   * 只读、脱敏的每账号合成 device_id（来自 ①）。
+   * 格式为「前 16 位小写 hex + …(U+2026)」；后端 `omitempty`，auth 缺失或派生空时缺省。
+   * 仅用于展示，不可写、不进 PATCH。
+   */
+  synthetic_device_id?: string;
   managed_header_state?: AuthFileManagedHeaderState | null;
   client_version_observations?: AuthFileClientVersionObservation[];
   activation: AuthFileAccountSettingsActivation;

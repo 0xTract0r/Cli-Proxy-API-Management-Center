@@ -890,6 +890,8 @@ function getNextDirtyFields(
       'claudeHeaderArch',
       'claudeHeaderTimeout',
       'claudeHeaderStabilizeDeviceProfile',
+      'managedHeaderOnlineUpdate',
+      'normalizeAccountEnv',
       'codexHeaderUserAgent',
       'codexHeaderBetaFeatures',
     ] as Array<keyof VisualConfigValues>
@@ -1190,6 +1192,7 @@ export function useVisualConfig() {
       const streaming = asRecord(parsed.streaming);
       const claudeHeaderDefaults = asRecord(parsed['claude-header-defaults']);
       const codexHeaderDefaults = asRecord(parsed['codex-header-defaults']);
+      const managedHeaderProfile = asRecord(parsed['managed-header-profile']);
 
       const newValues: VisualConfigValues = {
         host: typeof parsed.host === 'string' ? parsed.host : '',
@@ -1261,6 +1264,16 @@ export function useVisualConfig() {
           typeof claudeHeaderDefaults?.timeout === 'string' ? claudeHeaderDefaults.timeout : '',
         claudeHeaderStabilizeDeviceProfile: Boolean(
           claudeHeaderDefaults?.['stabilize-device-profile']
+        ),
+        managedHeaderOnlineUpdate: readBooleanConfigValue(
+          managedHeaderProfile,
+          ['online-update', 'online_update'],
+          DEFAULT_VISUAL_VALUES.managedHeaderOnlineUpdate
+        ),
+        normalizeAccountEnv: readBooleanConfigValue(
+          parsed,
+          ['normalize-account-env', 'normalize_account_env'],
+          DEFAULT_VISUAL_VALUES.normalizeAccountEnv
         ),
         codexHeaderUserAgent:
           typeof codexHeaderDefaults?.['user-agent'] === 'string'
@@ -1500,6 +1513,24 @@ export function useVisualConfig() {
           );
           deleteIfMapEmpty(doc, ['codex-header-defaults']);
         }
+
+        // managed-header-profile.online-update（全局；core 默认 true）。
+        // 默认为 true 时无需落盘；仅当配置里已有该块、或用户显式关掉（false，非默认）时才物化，
+        // 避免无关保存把整块默认配置写进 YAML。
+        if (
+          docHas(doc, ['managed-header-profile']) ||
+          docHas(doc, ['managed-header-profile', 'online-update']) ||
+          dirtyFields.has('managedHeaderOnlineUpdate') ||
+          !values.managedHeaderOnlineUpdate
+        ) {
+          ensureMapInDoc(doc, ['managed-header-profile']);
+          doc.setIn(['managed-header-profile', 'online-update'], values.managedHeaderOnlineUpdate);
+          deleteIfMapEmpty(doc, ['managed-header-profile']);
+        }
+
+        // normalize-account-env（全局，⑦；core 默认 false）。
+        // 默认 false，setBooleanInDoc 仅在已有 key 或值为 true 时写入，回滚=关开关零迁移。
+        setBooleanInDoc(doc, ['normalize-account-env'], values.normalizeAccountEnv);
 
         if (
           docHas(doc, ['quota-exceeded']) ||

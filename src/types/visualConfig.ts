@@ -121,6 +121,10 @@ export type VisualConfigValues = {
   claudeHeaderArch: string;
   claudeHeaderTimeout: string;
   claudeHeaderStabilizeDeviceProfile: boolean;
+  /** managed-header-profile.online-update（全局；core 默认 true，反关联高水位在线刷新）。 */
+  managedHeaderOnlineUpdate: boolean;
+  /** normalize-account-env（全局，⑦；core 默认 false，按账号归一化 cwd/env 正文）。 */
+  normalizeAccountEnv: boolean;
   codexHeaderUserAgent: string;
   codexHeaderBetaFeatures: string;
   payloadDefaultRules: PayloadRule[];
@@ -187,6 +191,8 @@ export const DEFAULT_VISUAL_VALUES: VisualConfigValues = {
   claudeHeaderArch: '',
   claudeHeaderTimeout: '',
   claudeHeaderStabilizeDeviceProfile: false,
+  managedHeaderOnlineUpdate: true,
+  normalizeAccountEnv: false,
   codexHeaderUserAgent: '',
   codexHeaderBetaFeatures: '',
   payloadDefaultRules: [],
