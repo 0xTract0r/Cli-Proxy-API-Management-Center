@@ -54,7 +54,8 @@
     "model_alias_placeholder": "模型別名（選填）",
     "invalid_provider_index": "無效的供應商索引。",
     "unsaved_changes_title": "未儲存的變更",
-    "unsaved_changes_message": "你有未儲存的變更，離開後將遺失這些變更。確定要離開嗎？"
+    "unsaved_changes_message": "你有未儲存的變更，離開後將遺失這些變更。確定要離開嗎？",
+    "readonly": "唯讀"
   },
   "title": {
     "main": "CLI Proxy API Management Center",
@@ -453,7 +454,26 @@
     "account_settings_transport_profile_hint": "留空表示使用 core 預設 transport。Claude 預設使用參考社群實作的 reqwest/rustls-compatible CLI profile；Chrome-like uTLS preset（例如 claude_utls_chrome_133）只是進階明確 opt-in。Codex 走 codex-proxy-compatible Go approximation，Rust sidecar 還沒接入。",
     "account_settings_tls_profile": "TLS 設定",
     "account_settings_tls_profile_hint": "留空表示使用 core 預設 TLS 行為。Claude 預設是 reqwest/rustls-compatible CLI 語意的 Go approximation；舊 Chrome-like alias 仍然只作為明確進階 opt-in。Codex 可強制 Go transport 可控項，但 Rust wire parity 還沒交付。",
-    "account_settings_warnings": "警告"
+    "account_settings_warnings": "警告",
+    "account_settings_section_editable": "可編輯帳號設定",
+    "account_settings_section_editable_desc": "只有本區欄位會隨儲存寫入（每帳號 PATCH）。",
+    "account_settings_section_editable_badge": "可編輯",
+    "account_settings_section_identity": "身分模型",
+    "account_settings_section_identity_desc": "core 派生的每帳號身分：A 類釘死平台身分、B 類高水位軟體指紋和執行時 TLS 身分。唯讀不可編輯。",
+    "account_settings_editable_advanced": "進階覆寫（JSON）",
+    "proxy_url_hint": "選填的每帳號出站代理；留空則沿用全域代理設定。",
+    "account_settings_identity_audit_reason_managed_refresh": "託管 header 重新整理",
+    "account_settings_identity_audit_reason_observed": "觀測到用戶端輪廓",
+    "account_settings_identity_audit_reason_runtime_identity": "執行時身分重新整理",
+    "account_settings_identity_audit_significant": "身分模型變更",
+    "account_settings_identity_audit_significant_chip": "身分模型變更",
+    "account_settings_identity_audit_significant_empty": "尚無身分模型層級變更紀錄。釘死的平台身分、裝置假名和 TLS profile 保持穩定。",
+    "account_settings_identity_audit_routine": "例行版本重新整理",
+    "account_settings_identity_audit_routine_chip": "UA/版本重新整理",
+    "account_settings_identity_audit_routine_hint": "純 User-Agent / 版本高水位重新整理。不改變釘死的平台身分，因此預設折疊。",
+    "account_settings_identity_audit_empty": "該帳號暫無身分變更紀錄。core 重新整理高水位指紋或身分模型發生變化後會出現條目。",
+    "prefix_proxy_info_hint": "這裡是驗證檔案中繼資料快照，不能直接編輯。需要修改帳號設定請使用上方表單。",
+    "prefix_proxy_source_hint": "這裡只是點擊儲存時將傳送給 core 的 payload 預覽。只有上方標為可編輯的欄位會被儲存。"
   },
   "antigravity_quota": {
     "title": "Antigravity 配額",

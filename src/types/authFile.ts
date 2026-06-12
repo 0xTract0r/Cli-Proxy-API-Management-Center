@@ -95,8 +95,20 @@ export interface AuthFileManagedHeaderHistoryEntry {
   source?: string;
   source_url?: string;
   changed_fields?: string[];
+  /** core 实际下发的来源字段（managed_header_state.history）。 */
+  previous_source?: string;
+  previous_source_url?: string;
+  next_source?: string;
+  next_source_url?: string;
+  previous_summary_headers?: AuthFileHeaderMap;
+  next_summary_headers?: AuthFileHeaderMap;
   previous_versioned_capabilities?: AuthFileHeaderMap;
   next_versioned_capabilities?: AuthFileHeaderMap;
+  /** A 类钉死平台身份快照；diff 非空时该条目属于身份模型变更而非例行版本刷新。 */
+  previous_stable_identity?: AuthFileHeaderMap;
+  next_stable_identity?: AuthFileHeaderMap;
+  previous_runtime_fingerprint?: AuthFileHeaderMap;
+  next_runtime_fingerprint?: AuthFileHeaderMap;
   previous?: Record<string, unknown>;
   next?: Record<string, unknown>;
 }

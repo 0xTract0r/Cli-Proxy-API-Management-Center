@@ -2357,6 +2357,229 @@
   font-weight: 700;
 }
 
+// ====== 账号设置弹窗：编辑 / 身份 / 审计 三大分区 ======
+
+.accountSettingsSection {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-sm;
+  padding: $spacing-md;
+  border: 1px solid color-mix(in srgb, var(--border-color) 72%, transparent);
+  border-radius: $radius-md;
+  background-color: color-mix(in srgb, var(--bg-secondary) 55%, transparent);
+
+  :global(.form-group) {
+    margin: 0;
+  }
+}
+
+.accountSettingsSectionEditable {
+  border-color: color-mix(in srgb, var(--primary-color) 32%, var(--border-color));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--primary-color) 6%, transparent), transparent 64px),
+    color-mix(in srgb, var(--bg-secondary) 55%, transparent);
+}
+
+.accountSettingsSectionHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: $spacing-sm;
+  padding-bottom: 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 55%, transparent);
+
+  strong {
+    display: block;
+    color: var(--text-primary);
+    font-size: 13px;
+  }
+
+  p {
+    margin: 3px 0 0;
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.45;
+  }
+}
+
+.accountSettingsSectionBadge {
+  flex-shrink: 0;
+  padding: 3px 9px;
+  border: 1px solid color-mix(in srgb, var(--primary-color) 35%, var(--border-color));
+  border-radius: 999px;
+  background-color: color-mix(in srgb, var(--primary-color) 10%, transparent);
+  color: var(--primary-color);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.accountSettingsSectionBadgeReadonly {
+  border-color: color-mix(in srgb, var(--border-color) 80%, transparent);
+  background-color: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.accountSettingsToggleGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.accountSettingsToggleCard {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 65%, transparent);
+  border-radius: $radius-sm;
+  background-color: color-mix(in srgb, var(--bg-primary) 75%, transparent);
+}
+
+.accountSettingsToggleCardTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-sm;
+
+  label {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 600;
+  }
+}
+
+.accountSettingsSubheading {
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px dashed color-mix(in srgb, var(--border-color) 65%, transparent);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+// ====== 身份模型：A/B 类字段成对展示 ======
+
+.identityClassCard {
+  gap: 6px;
+}
+
+.identityClassEntries {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.identityClassEntry {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+
+  > span {
+    flex-shrink: 0;
+    min-width: 130px;
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+  }
+
+  > code {
+    min-width: 0;
+    color: var(--text-primary);
+    font-family: monospace;
+    font-size: 12px;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+}
+
+// ====== 身份变更审计：身份模型变更 vs 例行版本刷新 ======
+
+.identityAuditGroupHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-sm;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.identityAuditEntrySignificant {
+  border-color: color-mix(in srgb, var(--primary-color) 42%, var(--border-color));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--primary-color) 7%, transparent), transparent 56px),
+    color-mix(in srgb, var(--bg-primary) 75%, transparent);
+}
+
+.identityAuditChipSignificant {
+  background-color: color-mix(in srgb, var(--primary-color) 24%, var(--bg-tertiary));
+  color: var(--text-primary);
+}
+
+.identityAuditChipRoutine {
+  background-color: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.identityAuditEmpty {
+  padding: 12px;
+  border: 1px dashed color-mix(in srgb, var(--border-color) 80%, transparent);
+  border-radius: $radius-sm;
+  background-color: color-mix(in srgb, var(--bg-tertiary) 60%, transparent);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.identityAuditRoutineGroup {
+  border: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
+  border-radius: $radius-sm;
+  background-color: color-mix(in srgb, var(--bg-tertiary) 40%, transparent);
+}
+
+.identityAuditRoutineSummary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-sm;
+  padding: 9px 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+
+  &::-webkit-details-marker {
+    display: none;
+  }
+
+  > span:first-child::before {
+    content: '▸ ';
+    color: var(--text-tertiary);
+    font-size: 10px;
+  }
+
+  .identityAuditRoutineGroup[open] & > span:first-child::before {
+    content: '▾ ';
+  }
+}
+
+.identityAuditRoutineBody {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 12px 12px;
+}
+
 @include mobile {
   .managedHeaderTable {
     thead {
@@ -2394,6 +2617,24 @@
   .managedHeaderHistoryDetailGrid,
   .managedHeaderHistoryDiffTable {
     grid-template-columns: 1fr;
+  }
+
+  .accountSettingsToggleGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .accountSettingsSectionHeader {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .identityClassEntry {
+    flex-direction: column;
+    gap: 2px;
+
+    > span {
+      min-width: 0;
+    }
   }
 }
 

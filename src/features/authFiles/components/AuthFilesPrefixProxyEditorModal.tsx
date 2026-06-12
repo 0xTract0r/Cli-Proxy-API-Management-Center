@@ -18,6 +18,7 @@ import type {
 } from '@/features/authFiles/hooks/useAuthFilesPrefixProxyEditor';
 import type {
   AuthFileClientVersionObservation,
+  AuthFileHeaderMap,
   AuthFileManagedHeaderHistoryEntry,
 } from '@/types/authFile';
 import { useThemeStore } from '@/stores';
@@ -40,8 +41,70 @@ type ManagedHeaderHistoryDiffRow = {
   next?: unknown;
 };
 
+type TranslateFn = (key: string, options?: Record<string, unknown>) => string;
+
 const VERSIONED_CAPABILITIES_FIELD = 'versioned_capabilities';
 const expandReadablePreview = (level: number) => level < 2;
+
+/**
+ * 纯「版本高水位」字段：这些字段单独变化属于例行 UA/版本刷新，
+ * 不属于身份模型级变更。匹配时大小写不敏感并去掉 map 前缀。
+ */
+const ROUTINE_VERSION_FIELDS = new Set([
+  'user-agent',
+  'version',
+  'x-stainless-package-version',
+  'x-stainless-runtime-version',
+  VERSIONED_CAPABILITIES_FIELD,
+]);
+
+const ROUTINE_REASONS = new Set(['managed-header-refresh', 'observed-client-profile']);
+
+function stripHistoryFieldPrefix(field: string): string {
+  return field.replace(/^(versioned_capabilities|summary_headers|managed_headers|headers)\./, '');
+}
+
+function headerMapsDiffer(
+  previous: AuthFileHeaderMap | undefined,
+  next: AuthFileHeaderMap | undefined
+): boolean {
+  const keys = new Set([...Object.keys(previous || {}), ...Object.keys(next || {})]);
+  for (const key of keys) {
+    if ((previous?.[key] || '').trim() !== (next?.[key] || '').trim()) {
+      return true;
+    }
+  }
+  return false;
+}
+
+type IdentityAuditClass = 'significant' | 'routine';
+
+/**
+ * 审计分类：A 类/运行时指纹快照有 diff、或 changed_fields 含非版本字段的，
+ * 视为「身份模型变更」突出展示；纯 UA/版本高水位刷新归为例行流水折叠。
+ */
+function classifyIdentityAuditEntry(
+  entry: AuthFileManagedHeaderHistoryEntry
+): IdentityAuditClass {
+  if (headerMapsDiffer(entry.previous_stable_identity, entry.next_stable_identity)) {
+    return 'significant';
+  }
+  if (headerMapsDiffer(entry.previous_runtime_fingerprint, entry.next_runtime_fingerprint)) {
+    return 'significant';
+  }
+  const changedFields = (entry.changed_fields || []).filter(Boolean);
+  if (changedFields.length > 0) {
+    return changedFields.every((field) =>
+      ROUTINE_VERSION_FIELDS.has(stripHistoryFieldPrefix(field).toLowerCase())
+    )
+      ? 'routine'
+      : 'significant';
+  }
+  // 没有字段级 diff 时按 reason 兜底：已知例行刷新归例行，未知原因突出展示。
+  return ROUTINE_REASONS.has((entry.reason || '').trim().toLowerCase())
+    ? 'routine'
+    : 'significant';
+}
 
 function ReadOnlyCodeViewer({
   value,
@@ -131,13 +194,7 @@ function ReadOnlyCodeViewer({
   );
 }
 
-function ManagedHeadersPanel({
-  entries,
-  t,
-}: {
-  entries: [string, string][];
-  t: (key: string, options?: Record<string, unknown>) => string;
-}) {
+function ManagedHeadersPanel({ entries, t }: { entries: [string, string][]; t: TranslateFn }) {
   return (
     <div className="form-group">
       <label>
@@ -208,11 +265,7 @@ function ManagedHeadersPanel({
   );
 }
 
-function ClaudeHeaderStrategyPanel({
-  t,
-}: {
-  t: (key: string, options?: Record<string, unknown>) => string;
-}) {
+function ClaudeHeaderStrategyPanel({ t }: { t: TranslateFn }) {
   const rows = [
     ['User-Agent', 'auth_files.account_settings_claude_header_strategy_client_version'],
     [
@@ -292,7 +345,7 @@ function ClaudeClientVersionObservationsPanel({
   t,
 }: {
   observations: AuthFileClientVersionObservation[];
-  t: (key: string, options?: Record<string, unknown>) => string;
+  t: TranslateFn;
 }) {
   const rows = observations.slice(0, 8);
   const sourceLabel = (source: AuthFileClientVersionObservation['source']) => {
@@ -622,10 +675,9 @@ function getHistoryMapValue(
 
   const fieldVariants = [
     field,
-    field.replace(/^versioned_capabilities\./, ''),
-    field.replace(/^summary_headers\./, ''),
-    field.replace(/^managed_headers\./, ''),
-    field.replace(/^headers\./, ''),
+    stripHistoryFieldPrefix(field),
+    field.replace(/^stable_identity\./, ''),
+    field.replace(/^runtime_fingerprint\./, ''),
   ];
 
   for (const variant of fieldVariants) {
@@ -637,17 +689,34 @@ function getHistoryMapValue(
   return undefined;
 }
 
+function historySideMaps(
+  entry: AuthFileManagedHeaderHistoryEntry,
+  side: 'previous' | 'next'
+): (AuthFileHeaderMap | undefined)[] {
+  return side === 'previous'
+    ? [
+        entry.previous_versioned_capabilities,
+        entry.previous_stable_identity,
+        entry.previous_runtime_fingerprint,
+        entry.previous_summary_headers,
+      ]
+    : [
+        entry.next_versioned_capabilities,
+        entry.next_stable_identity,
+        entry.next_runtime_fingerprint,
+        entry.next_summary_headers,
+      ];
+}
+
 function getHistoryValue(
   entry: AuthFileManagedHeaderHistoryEntry,
   field: string,
   side: 'previous' | 'next'
 ): unknown {
-  const versionedMap =
-    side === 'previous'
-      ? entry.previous_versioned_capabilities
-      : entry.next_versioned_capabilities;
-  const versionedValue = getHistoryMapValue(versionedMap, field);
-  if (versionedValue !== undefined) return versionedValue;
+  for (const map of historySideMaps(entry, side)) {
+    const value = getHistoryMapValue(map, field);
+    if (value !== undefined) return value;
+  }
 
   const genericMap = entry[side];
   return getHistoryMapValue(isRecord(genericMap) ? genericMap : undefined, field);
@@ -656,9 +725,10 @@ function getHistoryValue(
 function buildHistoryDiffRows(
   entry: AuthFileManagedHeaderHistoryEntry
 ): ManagedHeaderHistoryDiffRow[] {
-  const previousVersionedKeys = Object.keys(entry.previous_versioned_capabilities || {});
-  const nextVersionedKeys = Object.keys(entry.next_versioned_capabilities || {});
-  const mapBackedFields = [...previousVersionedKeys, ...nextVersionedKeys];
+  const mapBackedFields = [
+    ...historySideMaps(entry, 'previous'),
+    ...historySideMaps(entry, 'next'),
+  ].flatMap((map) => Object.keys(map || {}));
   const changedFields = entry.changed_fields || [];
   const shouldPreferMapFields =
     mapBackedFields.length > 0 &&
@@ -680,7 +750,194 @@ function buildHistoryDiffRows(
       previous: getHistoryValue(entry, field, 'previous'),
       next: getHistoryValue(entry, field, 'next'),
     }))
-    .filter((row) => row.previous !== undefined || row.next !== undefined);
+    .filter(
+      (row) =>
+        (row.previous !== undefined || row.next !== undefined) &&
+        formatHistoryValue(row.previous) !== formatHistoryValue(row.next)
+    );
+}
+
+function identityAuditReasonLabel(reason: string | undefined, t: TranslateFn): string {
+  switch ((reason || '').trim().toLowerCase()) {
+    case 'managed-header-refresh':
+      return t('auth_files.account_settings_identity_audit_reason_managed_refresh', {
+        defaultValue: 'Managed header refresh',
+      });
+    case 'observed-client-profile':
+      return t('auth_files.account_settings_identity_audit_reason_observed', {
+        defaultValue: 'Observed client profile',
+      });
+    case 'runtime-identity-refresh':
+      return t('auth_files.account_settings_identity_audit_reason_runtime_identity', {
+        defaultValue: 'Runtime identity refresh',
+      });
+    default:
+      return reason || 'identity-change';
+  }
+}
+
+function IdentityAuditEntry({
+  entry,
+  variant,
+  formatFieldList,
+  t,
+}: {
+  entry: AuthFileManagedHeaderHistoryEntry;
+  variant: IdentityAuditClass;
+  formatFieldList: (fields: string[]) => string;
+  t: TranslateFn;
+}) {
+  const diffRows = buildHistoryDiffRows(entry);
+  const entryClassName =
+    variant === 'significant'
+      ? `${styles.managedHeaderHistoryEntry} ${styles.identityAuditEntrySignificant}`
+      : styles.managedHeaderHistoryEntry;
+
+  return (
+    <div className={entryClassName} data-testid={`account-settings-identity-audit-entry-${variant}`}>
+      <div className={styles.managedHeaderHistorySummary}>
+        <div className={styles.managedHeaderHistoryMeta}>
+          <strong>{entry.recorded_at || '-'}</strong>
+          <span>{identityAuditReasonLabel(entry.reason, t)}</span>
+          {entry.policy_version && <span>{entry.policy_version}</span>}
+          {(entry.source || entry.source_url) && (
+            <span>{[entry.source, entry.source_url].filter(Boolean).join(' · ')}</span>
+          )}
+        </div>
+        <div className={styles.managedHeaderChips}>
+          <span
+            className={
+              variant === 'significant'
+                ? `${styles.managedHeaderChip} ${styles.identityAuditChipSignificant}`
+                : `${styles.managedHeaderChip} ${styles.identityAuditChipRoutine}`
+            }
+          >
+            {variant === 'significant'
+              ? t('auth_files.account_settings_identity_audit_significant_chip', {
+                  defaultValue: 'Identity model change',
+                })
+              : t('auth_files.account_settings_identity_audit_routine_chip', {
+                  defaultValue: 'UA/version refresh',
+                })}
+          </span>
+          {(entry.changed_fields || []).length > 0 ? (
+            (entry.changed_fields || []).map((field) => (
+              <span className={styles.managedHeaderChip} key={field} title={field}>
+                {field}
+              </span>
+            ))
+          ) : (
+            <span className={styles.managedHeaderChip}>
+              {t('auth_files.account_settings_managed_header_history_no_diff', {
+                defaultValue: 'No field-level diff recorded',
+              })}
+            </span>
+          )}
+        </div>
+      </div>
+      <details
+        className={styles.managedHeaderHistoryDetails}
+        data-testid="account-settings-identity-audit-details"
+      >
+        <summary
+          className={styles.managedHeaderHistoryToggle}
+          data-testid="account-settings-identity-audit-details-toggle"
+        >
+          {t('auth_files.account_settings_managed_header_history_view_changes', {
+            defaultValue: 'View changes',
+          })}
+        </summary>
+        <div className={styles.managedHeaderHistoryDetailGrid}>
+          <div className={styles.managedHeaderHistoryDetailItem}>
+            <span>
+              {t('auth_files.account_settings_managed_header_history_recorded_at', {
+                defaultValue: 'Recorded at',
+              })}
+            </span>
+            <strong>{entry.recorded_at || '-'}</strong>
+          </div>
+          <div className={styles.managedHeaderHistoryDetailItem}>
+            <span>
+              {t('auth_files.account_settings_managed_header_history_reason', {
+                defaultValue: 'Reason',
+              })}
+            </span>
+            <strong>{entry.reason || 'identity-change'}</strong>
+          </div>
+          <div className={styles.managedHeaderHistoryDetailItem}>
+            <span>
+              {t('auth_files.account_settings_identity_audit_snapshot', {
+                defaultValue: 'Snapshot marker',
+              })}
+            </span>
+            <strong>{entry.policy_version || '-'}</strong>
+          </div>
+          <div className={styles.managedHeaderHistoryDetailItem}>
+            <span>
+              {t('auth_files.account_settings_managed_header_history_source', {
+                defaultValue: 'Source',
+              })}
+            </span>
+            <strong>
+              {[entry.source || entry.next_source, entry.source_url || entry.next_source_url]
+                .filter(Boolean)
+                .join(' · ') || '-'}
+            </strong>
+          </div>
+          <div
+            className={`${styles.managedHeaderHistoryDetailItem} ${styles.managedHeaderHistoryDetailItemWide}`}
+          >
+            <span>
+              {t('auth_files.account_settings_managed_header_history_changed_fields', {
+                defaultValue: 'Changed fields',
+              })}
+            </span>
+            <strong>{formatFieldList(entry.changed_fields || [])}</strong>
+          </div>
+        </div>
+        {diffRows.length > 0 ? (
+          <div
+            className={styles.managedHeaderHistoryDiffTable}
+            data-testid="account-settings-identity-audit-diff-table"
+          >
+            <div className={styles.managedHeaderHistoryDiffHead}>
+              {t('auth_files.account_settings_managed_header_history_field', {
+                defaultValue: 'Field',
+              })}
+            </div>
+            <div className={styles.managedHeaderHistoryDiffHead}>
+              {t('auth_files.account_settings_managed_header_history_previous', {
+                defaultValue: 'Previous',
+              })}
+            </div>
+            <div className={styles.managedHeaderHistoryDiffHead}>
+              {t('auth_files.account_settings_managed_header_history_next', {
+                defaultValue: 'Next',
+              })}
+            </div>
+            {diffRows.map((row) => (
+              <div className={styles.managedHeaderHistoryDiffRow} key={row.field}>
+                <span>{row.field}</span>
+                <code title={formatHistoryValue(row.previous)}>
+                  {formatHistoryValue(row.previous)}
+                </code>
+                <code title={formatHistoryValue(row.next)}>{formatHistoryValue(row.next)}</code>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div
+            className={styles.managedHeaderHistoryNoDiff}
+            data-testid="account-settings-identity-audit-no-diff"
+          >
+            {t('auth_files.account_settings_managed_header_history_no_diff', {
+              defaultValue: 'No field-level diff recorded',
+            })}
+          </div>
+        )}
+      </details>
+    </div>
+  );
 }
 
 export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEditorModalProps) {
@@ -792,21 +1049,34 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
     managedStableEntries.length > 0 ||
     managedVersionedEntries.length > 0 ||
     managedRuntimeFields.length > 0;
+  // 审计数据源：managed_header_state.history。按 reason/changed_fields 分类，
+  // 例行 UA/版本刷新折叠为次要流水，身份模型级变更突出展示；最新在前。
   const managedHistory = managedHeaderState?.history || [];
-  const managedLatestHistory = managedHistory[managedHistory.length - 1] || null;
+  const classifiedHistory = managedHistory
+    .map((entry, index) => ({
+      entry,
+      index,
+      auditClass: classifyIdentityAuditEntry(entry),
+    }))
+    .reverse();
+  const significantHistory = classifiedHistory.filter(
+    (item) => item.auditClass === 'significant'
+  );
+  const routineHistory = classifiedHistory.filter((item) => item.auditClass === 'routine');
   const formatFieldList = (fields: string[]) =>
     fields.length > 0
       ? fields.join(', ')
       : t('auth_files.account_settings_managed_header_none', {
           defaultValue: 'None',
         });
+  const readonlyBadge = t('common.readonly', { defaultValue: 'Read only' });
 
   return (
     <Modal
       open={Boolean(editor)}
       onClose={onClose}
       closeDisabled={editor?.saving === true}
-      width={760}
+      width={840}
       title={
         editor?.fileName
           ? t('auth_files.auth_field_editor_title', {
@@ -862,115 +1132,79 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
             <>
               {editor.error && <div className={styles.prefixProxyError}>{editor.error}</div>}
 
-              {isClaudeManagedPolicy ? (
-                <ClaudeHeaderStrategyPanel t={t} />
-              ) : (
-                <ManagedHeadersPanel entries={managedHeaderEntries} t={t} />
-              )}
-
-              {isClaudeManagedPolicy && (
-                <ClaudeClientVersionObservationsPanel
-                  observations={editor.clientVersionObservations}
-                  t={t}
-                />
-              )}
-
-              <details
-                className={styles.prefixProxyAdvancedDetails}
-                data-testid="account-settings-raw-json-details"
+              {/* 第 1 区：可编辑账号设置（proxy_url / note / disabled / refresh / 3 个 JSON 覆盖） */}
+              <section
+                className={`${styles.accountSettingsSection} ${styles.accountSettingsSectionEditable}`}
+                data-testid="account-settings-section-editable"
               >
-                <summary>
-                  {t('auth_files.account_settings_raw_json_details', {
-                    defaultValue: 'Advanced raw JSON preview',
-                  })}
-                </summary>
-                <div className={styles.prefixProxyAdvancedBody}>
-                  <div className={styles.prefixProxyJsonWrapper}>
-                    <label className={styles.prefixProxyLabel}>
-                      {t('auth_files.prefix_proxy_info_label', {
-                        defaultValue: 'Auth file summary',
+                <header className={styles.accountSettingsSectionHeader}>
+                  <div>
+                    <strong>
+                      {t('auth_files.account_settings_section_editable', {
+                        defaultValue: 'Editable account settings',
                       })}
-                    </label>
-                    <ReadOnlyCodeViewer
-                      value={editor.fileInfoText}
-                      minRows={6}
-                      testId="account-settings-auth-file-info-viewer"
-                      label={t('common.readonly', { defaultValue: 'Read only' })}
-                      onCopyText={onCopyText}
-                    />
-                    <div className="hint">
-                      {t('auth_files.prefix_proxy_info_hint', {
+                    </strong>
+                    <p>
+                      {t('auth_files.account_settings_section_editable_desc', {
                         defaultValue:
-                          'Read-only snapshot of the auth file metadata. Edit account settings below.',
+                          'Only the fields in this section are written by Save (per-account PATCH).',
+                      })}
+                    </p>
+                  </div>
+                  <span className={styles.accountSettingsSectionBadge}>
+                    {t('auth_files.account_settings_section_editable_badge', {
+                      defaultValue: 'Editable',
+                    })}
+                  </span>
+                </header>
+
+                <div className={styles.accountSettingsToggleGrid}>
+                  <div className={styles.accountSettingsToggleCard}>
+                    <div className={styles.accountSettingsToggleCardTop}>
+                      <label>
+                        {t('auth_files.status_toggle_label', { defaultValue: 'Enabled' })}
+                      </label>
+                      <ToggleSwitch
+                        checked={!editor.disabled}
+                        disabled={disableControls || editor.saving}
+                        testId="account-settings-enabled-toggle"
+                        ariaLabel={t('auth_files.status_toggle_label', {
+                          defaultValue: 'Enabled',
+                        })}
+                        onChange={(enabled) => onChange('disabled', !enabled)}
+                      />
+                    </div>
+                    <div className="hint">
+                      {t('auth_files.account_settings_enabled_hint', {
+                        defaultValue:
+                          'On means this account can be selected by runtime. Turning it off writes disabled=true without deleting data.',
                       })}
                     </div>
                   </div>
 
-                  <div className={styles.prefixProxyJsonWrapper}>
-                    <label className={styles.prefixProxyLabel}>
-                      {t('auth_files.prefix_proxy_source_label', {
-                        defaultValue: 'Save payload preview',
-                      })}
-                    </label>
-                    <ReadOnlyCodeViewer
-                      value={updatedText}
-                      minRows={8}
-                      testId="account-settings-save-payload-preview"
-                      label={t('common.readonly', { defaultValue: 'Read only' })}
-                      onCopyText={onCopyText}
-                    />
+                  <div className={styles.accountSettingsToggleCard}>
+                    <div className={styles.accountSettingsToggleCardTop}>
+                      <label>
+                        {t('auth_files.account_settings_refresh_enabled', {
+                          defaultValue: 'Automatic token refresh',
+                        })}
+                      </label>
+                      <ToggleSwitch
+                        checked={editor.refreshEnabled}
+                        disabled={disableControls || editor.saving}
+                        testId="account-settings-refresh-enabled-toggle"
+                        ariaLabel={t('auth_files.account_settings_refresh_enabled', {
+                          defaultValue: 'Automatic token refresh',
+                        })}
+                        onChange={(value) => onChange('refreshEnabled', value)}
+                      />
+                    </div>
                     <div className="hint">
-                      {t('auth_files.prefix_proxy_source_hint', {
+                      {t('auth_files.account_settings_refresh_enabled_hint', {
                         defaultValue:
-                          'Read-only preview of the payload that Save will send. Editable fields are labeled below.',
+                          'Keep enabled for normal accounts. Turn it off only for access-token-only testing or controlled migration so this core will not use a refresh token held by another runtime.',
                       })}
                     </div>
-                  </div>
-                </div>
-              </details>
-
-              <div className={styles.prefixProxyFields}>
-                <div className="form-group">
-                  <label>
-                    {t('auth_files.status_toggle_label', { defaultValue: 'Enabled' })}
-                  </label>
-                  <ToggleSwitch
-                    checked={!editor.disabled}
-                    disabled={disableControls || editor.saving}
-                    testId="account-settings-enabled-toggle"
-                    ariaLabel={t('auth_files.status_toggle_label', {
-                      defaultValue: 'Enabled',
-                    })}
-                    onChange={(enabled) => onChange('disabled', !enabled)}
-                  />
-                  <div className="hint">
-                    {t('auth_files.account_settings_enabled_hint', {
-                      defaultValue:
-                        'On means this account can be selected by runtime. Turning it off writes disabled=true without deleting data.',
-                    })}
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label>
-                    {t('auth_files.account_settings_refresh_enabled', {
-                      defaultValue: 'Automatic token refresh',
-                    })}
-                  </label>
-                  <ToggleSwitch
-                    checked={editor.refreshEnabled}
-                    disabled={disableControls || editor.saving}
-                    testId="account-settings-refresh-enabled-toggle"
-                    ariaLabel={t('auth_files.account_settings_refresh_enabled', {
-                      defaultValue: 'Automatic token refresh',
-                    })}
-                    onChange={(value) => onChange('refreshEnabled', value)}
-                  />
-                  <div className="hint">
-                    {t('auth_files.account_settings_refresh_enabled_hint', {
-                      defaultValue:
-                        'Keep enabled for normal accounts. Turn it off only for access-token-only testing or controlled migration so this core will not use a refresh token held by another runtime.',
-                    })}
                   </div>
                 </div>
 
@@ -978,7 +1212,12 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                   label={t('auth_files.proxy_url_label')}
                   value={editor.proxyUrl}
                   placeholder={t('auth_files.proxy_url_placeholder')}
+                  hint={t('auth_files.proxy_url_hint', {
+                    defaultValue:
+                      'Optional per-account outbound proxy. Leave empty to use the global proxy settings.',
+                  })}
                   disabled={disableControls || editor.saving}
+                  data-testid="account-settings-proxy-url-input"
                   onChange={(e) => onChange('proxyUrl', e.target.value)}
                 />
 
@@ -988,8 +1227,131 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                   placeholder={t('auth_files.note_placeholder')}
                   hint={t('auth_files.note_hint')}
                   disabled={disableControls || editor.saving}
+                  data-testid="account-settings-note-input"
                   onChange={(e) => onChange('note', e.target.value)}
                 />
+
+                <div className={styles.accountSettingsSubheading}>
+                  {t('auth_files.account_settings_editable_advanced', {
+                    defaultValue: 'Advanced overrides (JSON)',
+                  })}
+                </div>
+
+                <div className="form-group">
+                  <label>
+                    {t('auth_files.account_settings_extra_headers', {
+                      defaultValue: 'Extra headers (advanced)',
+                    })}
+                  </label>
+                  <EditableJsonCodeField
+                    value={editor.extraHeadersText}
+                    placeholder={`{\n  "X-Team": "core"\n}`}
+                    invalid={Boolean(editor.extraHeadersError)}
+                    disabled={disableControls || editor.saving}
+                    testId="account-settings-extra-headers-editor"
+                    theme={resolvedTheme}
+                    onChange={(value) => onChange('extraHeadersText', value)}
+                  />
+                  {editor.extraHeadersError && (
+                    <div className="error-box">{editor.extraHeadersError}</div>
+                  )}
+                  <div
+                    className={styles.accountSettingsJsonExample}
+                    data-testid="account-settings-extra-headers-example"
+                  >
+                    <span>
+                      {t('auth_files.account_settings_extra_headers_example_label', {
+                        defaultValue: 'Example',
+                      })}
+                    </span>
+                    <code>{'{ "X-Team": "core" }'}</code>
+                  </div>
+                  <div className="hint">
+                    {t('auth_files.account_settings_extra_headers_hint', {
+                      defaultValue:
+                        'Editable JSON for user-owned additive headers only. Do not copy core-managed provider/version headers here; conflicts with managed or protocol-reserved headers are rejected by the core API.',
+                    })}
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label>
+                    {t('auth_files.account_settings_transport_profile', {
+                      defaultValue: 'Transport profile',
+                    })}
+                  </label>
+                  <EditableJsonCodeField
+                    value={editor.transportProfileText}
+                    placeholder={`Leave empty for core default transport.\nClaude CLI example:\n{\n  "preset": "claude_reqwest_rustls_compatible_v1"\n}`}
+                    invalid={Boolean(editor.transportProfileError)}
+                    disabled={disableControls || editor.saving}
+                    testId="account-settings-transport-profile-editor"
+                    theme={resolvedTheme}
+                    onChange={(value) => onChange('transportProfileText', value)}
+                  />
+                  {editor.transportProfileError && (
+                    <div className="error-box">{editor.transportProfileError}</div>
+                  )}
+                  <div className="hint">
+                    {t('auth_files.account_settings_transport_profile_hint', {
+                      defaultValue:
+                        'Leave empty for the core default transport. Claude defaults to a Claude-specific reqwest/rustls-compatible CLI profile based on community implementations; Chrome-like uTLS presets such as claude_utls_chrome_133 are advanced opt-in only. Codex follows codex-proxy-compatible transport with Go approximation until the Rust sidecar is added.',
+                    })}
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label>
+                    {t('auth_files.account_settings_tls_profile', {
+                      defaultValue: 'TLS profile',
+                    })}
+                  </label>
+                  <EditableJsonCodeField
+                    value={editor.tlsProfileText}
+                    placeholder={`Leave empty for core default TLS.\nClaude CLI example:\n{\n  "preset": "claude_reqwest_rustls_compatible_v1"\n}`}
+                    invalid={Boolean(editor.tlsProfileError)}
+                    disabled={disableControls || editor.saving}
+                    testId="account-settings-tls-profile-editor"
+                    theme={resolvedTheme}
+                    onChange={(value) => onChange('tlsProfileText', value)}
+                  />
+                  {editor.tlsProfileError && (
+                    <div className="error-box">{editor.tlsProfileError}</div>
+                  )}
+                  <div className="hint">
+                    {t('auth_files.account_settings_tls_profile_hint', {
+                      defaultValue:
+                        'Leave empty for the core default TLS behavior. Claude default uses reqwest/rustls-compatible CLI semantics via Go approximation; old Chrome-like aliases remain explicit advanced opt-in only. Codex can enforce Go transport knobs, but exact Rust wire parity is not shipped yet.',
+                    })}
+                  </div>
+                </div>
+              </section>
+
+              {/* 第 2 区：只读身份模型（device_id、A/B 投影、header 策略、运行时身份） */}
+              <section
+                className={styles.accountSettingsSection}
+                data-testid="account-settings-section-identity"
+              >
+                <header className={styles.accountSettingsSectionHeader}>
+                  <div>
+                    <strong>
+                      {t('auth_files.account_settings_section_identity', {
+                        defaultValue: 'Identity model',
+                      })}
+                    </strong>
+                    <p>
+                      {t('auth_files.account_settings_section_identity_desc', {
+                        defaultValue:
+                          'Core-derived per-account identity: pinned platform identity (Class A), high-water software fingerprint (Class B) and runtime TLS identity. Not editable.',
+                      })}
+                    </p>
+                  </div>
+                  <span
+                    className={`${styles.accountSettingsSectionBadge} ${styles.accountSettingsSectionBadgeReadonly}`}
+                  >
+                    {readonlyBadge}
+                  </span>
+                </header>
 
                 <div className="form-group">
                   <label>
@@ -1060,6 +1422,30 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                           </span>
                           <strong>{identityModelStrategy}</strong>
                         </div>
+                        {managedHeaderGeneratedAt ? (
+                          <div className={styles.managedHeaderPolicyItem}>
+                            <span>
+                              {t('auth_files.account_settings_managed_header_generated_at', {
+                                defaultValue: 'Generated at',
+                              })}
+                            </span>
+                            <strong>{managedHeaderGeneratedAt}</strong>
+                          </div>
+                        ) : (
+                          <div className={styles.managedHeaderPolicyItem}>
+                            <span>
+                              {t('auth_files.account_settings_identity_audit_count', {
+                                defaultValue: 'Recorded identity changes',
+                              })}
+                            </span>
+                            <strong>
+                              {t('auth_files.account_settings_identity_audit_count_value', {
+                                count: managedHistory.length,
+                                defaultValue: '{{count}} entries',
+                              })}
+                            </strong>
+                          </div>
+                        )}
                         <div
                           className={`${styles.managedHeaderPolicyItem} ${styles.managedHeaderPolicyItemWide}`}
                           data-testid="account-settings-identity-rule"
@@ -1071,12 +1457,64 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                           </span>
                           <strong>{identityModelRule}</strong>
                         </div>
+                        <div
+                          className={`${styles.managedHeaderPolicyItem} ${styles.managedHeaderPolicyItemWide} ${styles.identityClassCard}`}
+                          data-testid="account-settings-identity-class-a"
+                        >
+                          <span>
+                            {t('auth_files.account_settings_identity_class_a', {
+                              defaultValue: 'Class A · pinned platform identity',
+                            })}
+                          </span>
+                          {managedStableEntries.length > 0 ? (
+                            <div className={styles.identityClassEntries}>
+                              {managedStableEntries.map(([name, value]) => (
+                                <div className={styles.identityClassEntry} key={name}>
+                                  <span title={name}>{name}</span>
+                                  <code title={value}>{value}</code>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <strong>{formatFieldList(managedStableFields)}</strong>
+                          )}
+                        </div>
+                        <div
+                          className={`${styles.managedHeaderPolicyItem} ${styles.managedHeaderPolicyItemWide} ${styles.identityClassCard}`}
+                          data-testid="account-settings-identity-class-b"
+                        >
+                          <span>
+                            {t('auth_files.account_settings_identity_class_b', {
+                              defaultValue: 'Class B · high-water software fingerprint',
+                            })}
+                          </span>
+                          {managedVersionedEntries.length > 0 ? (
+                            <div className={styles.identityClassEntries}>
+                              {managedVersionedEntries.map(([name, value]) => (
+                                <div className={styles.identityClassEntry} key={name}>
+                                  <span title={name}>{name}</span>
+                                  <code title={value}>{value}</code>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <strong>{formatFieldList(managedVersionedFields)}</strong>
+                          )}
+                        </div>
+                        <div className={styles.managedHeaderPolicyItem}>
+                          <span>
+                            {t('auth_files.account_settings_managed_header_runtime', {
+                              defaultValue: 'Runtime environment signals',
+                            })}
+                          </span>
+                          <strong>{formatFieldList(managedRuntimeFields)}</strong>
+                        </div>
                         {(managedHeaderSource ||
                           managedHeaderCheckedAt ||
                           managedHeaderSourceUrl ||
                           managedHeaderCompleteness) && (
                           <div
-                            className={`${styles.managedHeaderPolicyItem} ${styles.managedHeaderPolicyItemWide}`}
+                            className={styles.managedHeaderPolicyItem}
                             data-testid="account-settings-managed-source"
                           >
                             <span>
@@ -1112,83 +1550,6 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                             </strong>
                           </div>
                         )}
-                        {managedHeaderGeneratedAt && (
-                          <div className={styles.managedHeaderPolicyItem}>
-                            <span>
-                              {t('auth_files.account_settings_managed_header_generated_at', {
-                                defaultValue: 'Generated at',
-                              })}
-                            </span>
-                            <strong>{managedHeaderGeneratedAt}</strong>
-                          </div>
-                        )}
-                        <div
-                          className={`${styles.managedHeaderPolicyItem} ${styles.managedHeaderPolicyItemWide}`}
-                          data-testid="account-settings-identity-class-a"
-                        >
-                          <span>
-                            {t('auth_files.account_settings_identity_class_a', {
-                              defaultValue: 'Class A · pinned platform identity',
-                            })}
-                          </span>
-                          <strong>
-                            {managedStableEntries.length > 0
-                              ? managedStableEntries
-                                  .map(([name, value]) => `${name}=${value}`)
-                                  .join(' · ')
-                              : formatFieldList(managedStableFields)}
-                          </strong>
-                        </div>
-                        <div
-                          className={`${styles.managedHeaderPolicyItem} ${styles.managedHeaderPolicyItemWide}`}
-                          data-testid="account-settings-identity-class-b"
-                        >
-                          <span>
-                            {t('auth_files.account_settings_identity_class_b', {
-                              defaultValue: 'Class B · high-water software fingerprint',
-                            })}
-                          </span>
-                          <strong>
-                            {managedVersionedEntries.length > 0
-                              ? managedVersionedEntries
-                                  .map(([name, value]) => `${name}=${value}`)
-                                  .join(' · ')
-                              : formatFieldList(managedVersionedFields)}
-                          </strong>
-                        </div>
-                        <div className={styles.managedHeaderPolicyItem}>
-                          <span>
-                            {t('auth_files.account_settings_managed_header_runtime', {
-                              defaultValue: 'Runtime environment signals',
-                            })}
-                          </span>
-                          <strong>{formatFieldList(managedRuntimeFields)}</strong>
-                        </div>
-                        <div className={styles.managedHeaderPolicyItem}>
-                          <span>
-                            {t('auth_files.account_settings_identity_audit_count', {
-                              defaultValue: 'Recorded identity changes',
-                            })}
-                          </span>
-                          <strong>
-                            {t('auth_files.account_settings_identity_audit_count_value', {
-                              count: managedHistory.length,
-                              defaultValue: '{{count}} entries',
-                            })}
-                          </strong>
-                        </div>
-                        {managedLatestHistory && (
-                          <div className={styles.managedHeaderPolicyItem}>
-                            <span>
-                              {t('auth_files.account_settings_identity_audit_latest', {
-                                defaultValue: 'Latest changed fields',
-                              })}
-                            </span>
-                            <strong>
-                              {formatFieldList(managedLatestHistory.changed_fields || [])}
-                            </strong>
-                          </div>
-                        )}
                       </div>
                     </div>
                     <div className="hint">
@@ -1200,241 +1561,18 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                   </div>
                 )}
 
-                {managedHistory.length > 0 && (
-                  <div className="form-group">
-                    <label>
-                      {t('auth_files.account_settings_identity_audit', {
-                        defaultValue: 'Identity change audit',
-                      })}
-                    </label>
-                    <div
-                      className={styles.managedHeaderPanel}
-                      data-testid="account-settings-identity-audit-panel"
-                    >
-                      <div className={styles.managedHeaderHistoryList}>
-                        {managedHistory.map((entry, index) => (
-                          <div
-                            className={styles.managedHeaderHistoryEntry}
-                            key={`${entry.recorded_at || index}-${index}`}
-                          >
-                            <div className={styles.managedHeaderHistorySummary}>
-                              <div className={styles.managedHeaderHistoryMeta}>
-                                <strong>{entry.recorded_at || '-'}</strong>
-                                <span>{entry.reason || 'identity-change'}</span>
-                                {entry.policy_version && <span>{entry.policy_version}</span>}
-                                {(entry.source || entry.source_url) && (
-                                  <span>
-                                    {[entry.source, entry.source_url].filter(Boolean).join(' · ')}
-                                  </span>
-                                )}
-                              </div>
-                              <div className={styles.managedHeaderChips}>
-                                {(entry.changed_fields || []).length > 0 ? (
-                                  (entry.changed_fields || []).map((field) => (
-                                    <span
-                                      className={styles.managedHeaderChip}
-                                      key={field}
-                                      title={field}
-                                    >
-                                      {field}
-                                    </span>
-                                  ))
-                                ) : (
-                                  <span className={styles.managedHeaderChip}>
-                                    {t(
-                                      'auth_files.account_settings_managed_header_history_no_diff',
-                                      {
-                                        defaultValue: 'No field-level diff recorded',
-                                      }
-                                    )}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                            <details
-                              className={styles.managedHeaderHistoryDetails}
-                              data-testid="account-settings-identity-audit-details"
-                            >
-                              <summary
-                                className={styles.managedHeaderHistoryToggle}
-                                data-testid="account-settings-identity-audit-details-toggle"
-                              >
-                                {t(
-                                  'auth_files.account_settings_managed_header_history_view_changes',
-                                  {
-                                    defaultValue: 'View changes',
-                                  }
-                                )}
-                              </summary>
-                              <div className={styles.managedHeaderHistoryDetailGrid}>
-                                <div className={styles.managedHeaderHistoryDetailItem}>
-                                  <span>
-                                    {t(
-                                      'auth_files.account_settings_managed_header_history_recorded_at',
-                                      {
-                                        defaultValue: 'Recorded at',
-                                      }
-                                    )}
-                                  </span>
-                                  <strong>{entry.recorded_at || '-'}</strong>
-                                </div>
-                                <div className={styles.managedHeaderHistoryDetailItem}>
-                                  <span>
-                                    {t(
-                                      'auth_files.account_settings_managed_header_history_reason',
-                                      {
-                                        defaultValue: 'Reason',
-                                      }
-                                    )}
-                                  </span>
-                                  <strong>{entry.reason || 'identity-change'}</strong>
-                                </div>
-                                <div className={styles.managedHeaderHistoryDetailItem}>
-                                  <span>
-                                    {t(
-                                      'auth_files.account_settings_identity_audit_snapshot',
-                                      {
-                                        defaultValue: 'Snapshot marker',
-                                      }
-                                    )}
-                                  </span>
-                                  <strong>{entry.policy_version || '-'}</strong>
-                                </div>
-                                <div className={styles.managedHeaderHistoryDetailItem}>
-                                  <span>
-                                    {t(
-                                      'auth_files.account_settings_managed_header_history_source',
-                                      {
-                                        defaultValue: 'Source',
-                                      }
-                                    )}
-                                  </span>
-                                  <strong>
-                                    {[entry.source, entry.source_url].filter(Boolean).join(' · ') ||
-                                      '-'}
-                                  </strong>
-                                </div>
-                                <div
-                                  className={`${styles.managedHeaderHistoryDetailItem} ${styles.managedHeaderHistoryDetailItemWide}`}
-                                >
-                                  <span>
-                                    {t(
-                                      'auth_files.account_settings_managed_header_history_changed_fields',
-                                      {
-                                        defaultValue: 'Changed fields',
-                                      }
-                                    )}
-                                  </span>
-                                  <strong>{formatFieldList(entry.changed_fields || [])}</strong>
-                                </div>
-                              </div>
-                              {buildHistoryDiffRows(entry).length > 0 ? (
-                                <div
-                                  className={styles.managedHeaderHistoryDiffTable}
-                                  data-testid="account-settings-identity-audit-diff-table"
-                                >
-                                  <div className={styles.managedHeaderHistoryDiffHead}>
-                                    {t(
-                                      'auth_files.account_settings_managed_header_history_field',
-                                      {
-                                        defaultValue: 'Field',
-                                      }
-                                    )}
-                                  </div>
-                                  <div className={styles.managedHeaderHistoryDiffHead}>
-                                    {t(
-                                      'auth_files.account_settings_managed_header_history_previous',
-                                      {
-                                        defaultValue: 'Previous',
-                                      }
-                                    )}
-                                  </div>
-                                  <div className={styles.managedHeaderHistoryDiffHead}>
-                                    {t(
-                                      'auth_files.account_settings_managed_header_history_next',
-                                      {
-                                        defaultValue: 'Next',
-                                      }
-                                    )}
-                                  </div>
-                                  {buildHistoryDiffRows(entry).map((row) => (
-                                    <div
-                                      className={styles.managedHeaderHistoryDiffRow}
-                                      key={row.field}
-                                    >
-                                      <span>{row.field}</span>
-                                      <code title={formatHistoryValue(row.previous)}>
-                                        {formatHistoryValue(row.previous)}
-                                      </code>
-                                      <code title={formatHistoryValue(row.next)}>
-                                        {formatHistoryValue(row.next)}
-                                      </code>
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : (
-                                <div
-                                  className={styles.managedHeaderHistoryNoDiff}
-                                  data-testid="account-settings-identity-audit-no-diff"
-                                >
-                                  {t(
-                                    'auth_files.account_settings_managed_header_history_no_diff',
-                                    {
-                                      defaultValue: 'No field-level diff recorded',
-                                    }
-                                  )}
-                                </div>
-                              )}
-                            </details>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="hint">
-                      {t('auth_files.account_settings_identity_audit_hint', {
-                        defaultValue:
-                          'Append-only, read-only audit of per-account identity changes. It records when Class B high-water version markers moved forward and which fields changed; it is not user editable.',
-                      })}
-                    </div>
-                  </div>
+                {isClaudeManagedPolicy ? (
+                  <ClaudeHeaderStrategyPanel t={t} />
+                ) : (
+                  <ManagedHeadersPanel entries={managedHeaderEntries} t={t} />
                 )}
 
-                <div className="form-group">
-                  <label>
-                    {t('auth_files.account_settings_extra_headers', {
-                      defaultValue: 'Extra headers (advanced)',
-                    })}
-                  </label>
-                  <EditableJsonCodeField
-                    value={editor.extraHeadersText}
-                    placeholder={`{\n  "X-Team": "core"\n}`}
-                    invalid={Boolean(editor.extraHeadersError)}
-                    disabled={disableControls || editor.saving}
-                    testId="account-settings-extra-headers-editor"
-                    theme={resolvedTheme}
-                    onChange={(value) => onChange('extraHeadersText', value)}
+                {isClaudeManagedPolicy && (
+                  <ClaudeClientVersionObservationsPanel
+                    observations={editor.clientVersionObservations}
+                    t={t}
                   />
-                  {editor.extraHeadersError && (
-                    <div className="error-box">{editor.extraHeadersError}</div>
-                  )}
-                  <div
-                    className={styles.accountSettingsJsonExample}
-                    data-testid="account-settings-extra-headers-example"
-                  >
-                    <span>
-                      {t('auth_files.account_settings_extra_headers_example_label', {
-                        defaultValue: 'Example',
-                      })}
-                    </span>
-                    <code>{'{ "X-Team": "core" }'}</code>
-                  </div>
-                  <div className="hint">
-                    {t('auth_files.account_settings_extra_headers_hint', {
-                      defaultValue:
-                        'Editable JSON for user-owned additive headers only. Do not copy core-managed provider/version headers here; conflicts with managed or protocol-reserved headers are rejected by the core API.',
-                    })}
-                  </div>
-                </div>
+                )}
 
                 {(editor.runtimeProfileText || editor.runtimeIdentityText) && (
                   <RuntimeTlsSummary
@@ -1454,7 +1592,7 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                       value={editor.runtimeProfileText}
                       minRows={8}
                       testId="account-settings-runtime-profile-viewer"
-                      label={t('common.readonly', { defaultValue: 'Read only' })}
+                      label={readonlyBadge}
                       onCopyText={onCopyText}
                     />
                     <div className="hint">
@@ -1477,7 +1615,7 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                       value={editor.runtimeIdentityText}
                       minRows={10}
                       testId="account-settings-runtime-identity-viewer"
-                      label={t('common.readonly', { defaultValue: 'Read only' })}
+                      label={readonlyBadge}
                       onCopyText={onCopyText}
                     />
                     <div className="hint">
@@ -1488,58 +1626,6 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                     </div>
                   </div>
                 )}
-
-                <div className="form-group">
-                  <label>
-                    {t('auth_files.account_settings_transport_profile', {
-                      defaultValue: 'Transport profile',
-                    })}
-                  </label>
-                  <EditableJsonCodeField
-                    value={editor.transportProfileText}
-                    placeholder={`Leave empty for core default transport.\nClaude CLI example:\n{\n  "preset": "claude_reqwest_rustls_compatible_v1"\n}`}
-                    invalid={Boolean(editor.transportProfileError)}
-                    disabled={disableControls || editor.saving}
-                    testId="account-settings-transport-profile-editor"
-                    theme={resolvedTheme}
-                    onChange={(value) => onChange('transportProfileText', value)}
-                  />
-                  {editor.transportProfileError && (
-                    <div className="error-box">{editor.transportProfileError}</div>
-                  )}
-                  <div className="hint">
-                    {t('auth_files.account_settings_transport_profile_hint', {
-                      defaultValue:
-                        'Leave empty for the core default transport. Claude defaults to a Claude-specific reqwest/rustls-compatible CLI profile based on community implementations; Chrome-like uTLS presets such as claude_utls_chrome_133 are advanced opt-in only. Codex follows codex-proxy-compatible transport with Go approximation until the Rust sidecar is added.',
-                    })}
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label>
-                    {t('auth_files.account_settings_tls_profile', {
-                      defaultValue: 'TLS profile',
-                    })}
-                  </label>
-                  <EditableJsonCodeField
-                    value={editor.tlsProfileText}
-                    placeholder={`Leave empty for core default TLS.\nClaude CLI example:\n{\n  "preset": "claude_reqwest_rustls_compatible_v1"\n}`}
-                    invalid={Boolean(editor.tlsProfileError)}
-                    disabled={disableControls || editor.saving}
-                    testId="account-settings-tls-profile-editor"
-                    theme={resolvedTheme}
-                    onChange={(value) => onChange('tlsProfileText', value)}
-                  />
-                  {editor.tlsProfileError && (
-                    <div className="error-box">{editor.tlsProfileError}</div>
-                  )}
-                  <div className="hint">
-                    {t('auth_files.account_settings_tls_profile_hint', {
-                      defaultValue:
-                        'Leave empty for the core default TLS behavior. Claude default uses reqwest/rustls-compatible CLI semantics via Go approximation; old Chrome-like aliases remain explicit advanced opt-in only. Codex can enforce Go transport knobs, but exact Rust wire parity is not shipped yet.',
-                    })}
-                  </div>
-                </div>
 
                 {editor.warnings.length > 0 && (
                   <div className="form-group">
@@ -1552,12 +1638,190 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                       value={editor.warnings.join('\n')}
                       minRows={Math.max(3, editor.warnings.length + 1)}
                       testId="account-settings-warnings-viewer"
-                      label={t('common.readonly', { defaultValue: 'Read only' })}
+                      label={readonlyBadge}
                       onCopyText={onCopyText}
                     />
                   </div>
                 )}
-              </div>
+              </section>
+
+              {/* 第 3 区：身份变更审计（managed_header_state.history，按变更类型分类） */}
+              <section
+                className={styles.accountSettingsSection}
+                data-testid="account-settings-section-audit"
+              >
+                <header className={styles.accountSettingsSectionHeader}>
+                  <div>
+                    <strong>
+                      {t('auth_files.account_settings_identity_audit', {
+                        defaultValue: 'Identity change audit',
+                      })}
+                    </strong>
+                    <p>
+                      {t('auth_files.account_settings_identity_audit_hint', {
+                        defaultValue:
+                          'Append-only, read-only audit of per-account identity changes. It records when Class B high-water version markers moved forward and which fields changed; it is not user editable.',
+                      })}
+                    </p>
+                  </div>
+                  <span
+                    className={`${styles.accountSettingsSectionBadge} ${styles.accountSettingsSectionBadgeReadonly}`}
+                  >
+                    {readonlyBadge}
+                  </span>
+                </header>
+
+                <div
+                  className={styles.managedHeaderPanel}
+                  data-testid="account-settings-identity-audit-panel"
+                >
+                  {managedHistory.length === 0 ? (
+                    <div
+                      className={styles.identityAuditEmpty}
+                      data-testid="account-settings-identity-audit-empty"
+                    >
+                      {t('auth_files.account_settings_identity_audit_empty', {
+                        defaultValue:
+                          'No identity changes have been recorded for this account yet. Entries appear once core refreshes the high-water fingerprint or the identity model changes.',
+                      })}
+                    </div>
+                  ) : (
+                    <>
+                      <div className={styles.identityAuditGroupHeader}>
+                        <span>
+                          {t('auth_files.account_settings_identity_audit_significant', {
+                            defaultValue: 'Identity model changes',
+                          })}
+                        </span>
+                        <span className={styles.managedHeaderMeta}>
+                          {t('auth_files.account_settings_identity_audit_count_value', {
+                            count: significantHistory.length,
+                            defaultValue: '{{count}} entries',
+                          })}
+                        </span>
+                      </div>
+                      {significantHistory.length > 0 ? (
+                        <div className={styles.managedHeaderHistoryList}>
+                          {significantHistory.map(({ entry, index }) => (
+                            <IdentityAuditEntry
+                              entry={entry}
+                              variant="significant"
+                              formatFieldList={formatFieldList}
+                              t={t}
+                              key={`significant-${entry.recorded_at || index}-${index}`}
+                            />
+                          ))}
+                        </div>
+                      ) : (
+                        <div
+                          className={styles.identityAuditEmpty}
+                          data-testid="account-settings-identity-audit-significant-empty"
+                        >
+                          {t('auth_files.account_settings_identity_audit_significant_empty', {
+                            defaultValue:
+                              'No identity-model-level changes recorded. Pinned platform identity, device pseudonym, and TLS profile have stayed stable.',
+                          })}
+                        </div>
+                      )}
+
+                      {routineHistory.length > 0 && (
+                        <details
+                          className={styles.identityAuditRoutineGroup}
+                          data-testid="account-settings-identity-audit-routine-group"
+                        >
+                          <summary className={styles.identityAuditRoutineSummary}>
+                            <span>
+                              {t('auth_files.account_settings_identity_audit_routine', {
+                                defaultValue: 'Routine version refreshes',
+                              })}
+                            </span>
+                            <span className={styles.managedHeaderMeta}>
+                              {t('auth_files.account_settings_identity_audit_count_value', {
+                                count: routineHistory.length,
+                                defaultValue: '{{count}} entries',
+                              })}
+                            </span>
+                          </summary>
+                          <div className={styles.identityAuditRoutineBody}>
+                            <div className="hint">
+                              {t('auth_files.account_settings_identity_audit_routine_hint', {
+                                defaultValue:
+                                  'Pure User-Agent / version high-water refreshes. They are collapsed here because they do not change the pinned platform identity.',
+                              })}
+                            </div>
+                            <div className={styles.managedHeaderHistoryList}>
+                              {routineHistory.map(({ entry, index }) => (
+                                <IdentityAuditEntry
+                                  entry={entry}
+                                  variant="routine"
+                                  formatFieldList={formatFieldList}
+                                  t={t}
+                                  key={`routine-${entry.recorded_at || index}-${index}`}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        </details>
+                      )}
+                    </>
+                  )}
+                </div>
+              </section>
+
+              {/* 末区：高级原始 JSON 预览（debug 用途，折叠） */}
+              <details
+                className={styles.prefixProxyAdvancedDetails}
+                data-testid="account-settings-raw-json-details"
+              >
+                <summary>
+                  {t('auth_files.account_settings_raw_json_details', {
+                    defaultValue: 'Advanced raw JSON preview',
+                  })}
+                </summary>
+                <div className={styles.prefixProxyAdvancedBody}>
+                  <div className={styles.prefixProxyJsonWrapper}>
+                    <label className={styles.prefixProxyLabel}>
+                      {t('auth_files.prefix_proxy_info_label', {
+                        defaultValue: 'Auth file summary',
+                      })}
+                    </label>
+                    <ReadOnlyCodeViewer
+                      value={editor.fileInfoText}
+                      minRows={6}
+                      testId="account-settings-auth-file-info-viewer"
+                      label={readonlyBadge}
+                      onCopyText={onCopyText}
+                    />
+                    <div className="hint">
+                      {t('auth_files.prefix_proxy_info_hint', {
+                        defaultValue:
+                          'Read-only snapshot of the auth file metadata. Edit account settings above.',
+                      })}
+                    </div>
+                  </div>
+
+                  <div className={styles.prefixProxyJsonWrapper}>
+                    <label className={styles.prefixProxyLabel}>
+                      {t('auth_files.prefix_proxy_source_label', {
+                        defaultValue: 'Save payload preview',
+                      })}
+                    </label>
+                    <ReadOnlyCodeViewer
+                      value={updatedText}
+                      minRows={8}
+                      testId="account-settings-save-payload-preview"
+                      label={readonlyBadge}
+                      onCopyText={onCopyText}
+                    />
+                    <div className="hint">
+                      {t('auth_files.prefix_proxy_source_hint', {
+                        defaultValue:
+                          'Read-only preview of the payload that Save will send. Editable fields are labeled above.',
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </details>
             </>
           )}
         </div>
