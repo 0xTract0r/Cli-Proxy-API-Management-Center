@@ -690,44 +690,41 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
     props;
 
   const managedHeaderState = editor?.managedHeaderState || null;
+  // 旧 payload 仍可能带 policy_version；仅用于推断 provider，不再作为「自动升级策略版本」展示。
   const managedHeaderPolicy = managedHeaderState?.policy_version || '';
   const managedHeaderPolicyMatch = managedHeaderPolicy.match(/^([a-z0-9_-]+)-managed\/v(\d+)$/i);
   const managedHeaderPolicyProvider = (managedHeaderPolicyMatch?.[1] || '').toLowerCase();
   const editorProvider = (editor?.provider || '').toLowerCase();
   const isClaudeProvider = editorProvider === 'claude' || managedHeaderPolicyProvider === 'claude';
+  const isCodexProvider = editorProvider === 'codex' || managedHeaderPolicyProvider === 'codex';
+  // 是否对该账号展示 Claude 身份模型（A/B + high-water + 观测）。
   const isClaudeManagedPolicy =
-    isClaudeProvider ||
-    (editor?.clientVersionObservations || []).length > 0;
-  const managedHeaderPolicyVersion = managedHeaderPolicyMatch?.[2]
-    ? `v${managedHeaderPolicyMatch[2]}`
-    : managedHeaderPolicy || '-';
-  const managedHeaderPolicyStrategy =
-    isClaudeManagedPolicy
-      ? t('auth_files.account_settings_managed_header_policy_strategy_claude', {
-          defaultValue: 'Claude core-managed request headers',
+    isClaudeProvider || (editor?.clientVersionObservations || []).length > 0;
+  const identityModelStrategy = isClaudeManagedPolicy
+    ? t('auth_files.account_settings_identity_strategy_claude', {
+        defaultValue: 'Claude per-account identity binding',
+      })
+    : isCodexProvider
+      ? t('auth_files.account_settings_identity_strategy_codex', {
+          defaultValue: 'Codex per-account identity binding',
         })
-      : managedHeaderPolicyProvider === 'codex'
-        ? t('auth_files.account_settings_managed_header_policy_strategy_codex', {
-            defaultValue: 'Codex core-managed request headers',
-          })
-        : t('auth_files.account_settings_managed_header_policy_strategy_generic', {
-            defaultValue: 'Core-managed request headers',
-          });
-  const managedHeaderPolicyRule =
-    isClaudeManagedPolicy
-      ? t('auth_files.account_settings_managed_header_policy_rule_claude', {
+      : t('auth_files.account_settings_identity_strategy_generic', {
+          defaultValue: 'Per-account identity binding',
+        });
+  const identityModelRule = isClaudeManagedPolicy
+    ? t('auth_files.account_settings_identity_rule_claude', {
+        defaultValue:
+          'Class A (platform OS/Arch/X-App) is pinned per account; Class B (CLI/package/runtime version) tracks a high-water mark resolved from real incoming Claude CLI requests and never downgrades.',
+      })
+    : isCodexProvider
+      ? t('auth_files.account_settings_identity_rule_codex', {
           defaultValue:
-            'Core resolves Claude CLI version markers from real incoming client requests first; fallback defaults are used only when this core has not observed a compatible client.',
+            'Class A platform identity is pinned per account; Class B version markers use a source-backed high-water mark and never downgrade.',
         })
-      : managedHeaderPolicyProvider === 'codex'
-        ? t('auth_files.account_settings_managed_header_policy_rule_codex', {
-            defaultValue:
-              'Core may refresh Codex Desktop-like headers from an allowlisted codex-proxy coherent bundle. It must not mix npm CLI versions into the Desktop UA.',
-          })
-        : t('auth_files.account_settings_managed_header_policy_rule_generic', {
-            defaultValue:
-              'Core may refresh version-sensitive generated fields while keeping stable identity fields unchanged.',
-          });
+      : t('auth_files.account_settings_identity_rule_generic', {
+          defaultValue:
+            'Class A stable identity fields are pinned per account; Class B version-sensitive fields use a high-water mark that only moves forward.',
+        });
   const managedHeaderEntries = Object.entries(editor?.managedHeaders || {}).sort(
     ([left], [right]) => left.localeCompare(right)
   );
@@ -785,6 +782,16 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
   const managedRuntimeFields = Object.keys(
     managedHeaderState?.current?.runtime_fingerprint || {}
   ).sort();
+  const managedStableEntries = Object.entries(
+    managedHeaderState?.current?.stable_identity || {}
+  ).sort(([left], [right]) => left.localeCompare(right));
+  const managedVersionedEntries = Object.entries(
+    managedHeaderState?.current?.versioned_capabilities || {}
+  ).sort(([left], [right]) => left.localeCompare(right));
+  const hasIdentityProjection =
+    managedStableEntries.length > 0 ||
+    managedVersionedEntries.length > 0 ||
+    managedRuntimeFields.length > 0;
   const managedHistory = managedHeaderState?.history || [];
   const managedLatestHistory = managedHistory[managedHistory.length - 1] || null;
   const formatFieldList = (fields: string[]) =>
@@ -984,64 +991,86 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                   onChange={(e) => onChange('note', e.target.value)}
                 />
 
-                {(managedHeaderPolicy ||
-                  managedVersionedFields.length > 0 ||
-                  managedStableFields.length > 0 ||
-                  managedRuntimeFields.length > 0) && (
+                <div className="form-group">
+                  <label>
+                    {t('auth_files.account_settings_synthetic_device_id', {
+                      defaultValue: 'Synthetic device ID',
+                    })}
+                  </label>
+                  <div
+                    className={styles.managedHeaderPanel}
+                    data-testid="account-settings-synthetic-device-id-panel"
+                  >
+                    <div className={styles.managedHeaderPolicyGrid}>
+                      <div
+                        className={`${styles.managedHeaderPolicyItem} ${styles.managedHeaderPolicyItemWide}`}
+                        data-testid="account-settings-synthetic-device-id-value"
+                      >
+                        <span>
+                          {t('auth_files.account_settings_synthetic_device_id_masked', {
+                            defaultValue: 'Masked device ID',
+                          })}
+                        </span>
+                        {editor.syntheticDeviceId ? (
+                          <strong>
+                            <code className={styles.managedHeaderValue} title={editor.syntheticDeviceId}>
+                              {editor.syntheticDeviceId}
+                            </code>{' '}
+                            <span className={styles.managedHeaderChip}>
+                              {t('auth_files.account_settings_synthetic_device_id_synthetic_badge', {
+                                defaultValue: 'Synthetic pseudonym',
+                              })}
+                            </span>
+                          </strong>
+                        ) : (
+                          <strong data-testid="account-settings-synthetic-device-id-placeholder">
+                            {t('auth_files.account_settings_synthetic_device_id_pending', {
+                              defaultValue: 'Not derived yet',
+                            })}
+                          </strong>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="hint">
+                    {t('auth_files.account_settings_synthetic_device_id_hint', {
+                      defaultValue:
+                        'Read-only. A stable per-account synthetic pseudonym derived by core; only the first 16 hex characters are shown and the real value is never exposed. Empty means core has not derived one yet.',
+                    })}
+                  </div>
+                </div>
+
+                {hasIdentityProjection && (
                   <div className="form-group">
                     <label>
-                      {t('auth_files.account_settings_managed_header_policy', {
-                        defaultValue: 'Core auto-upgrade policy state',
+                      {t('auth_files.account_settings_identity_model', {
+                        defaultValue: 'Per-account identity model',
                       })}
                     </label>
                     <div
                       className={styles.managedHeaderPanel}
-                      data-testid="account-settings-managed-policy-panel"
+                      data-testid="account-settings-identity-model-panel"
                     >
                       <div className={styles.managedHeaderPolicyGrid}>
-                        {managedHeaderPolicy && (
-                          <div className={styles.managedHeaderPolicyItem}>
-                            <span>
-                              {t('auth_files.account_settings_managed_header_policy_strategy', {
-                                defaultValue: 'Managed strategy',
-                              })}
-                            </span>
-                            <strong>{managedHeaderPolicyStrategy}</strong>
-                          </div>
-                        )}
-                        {managedHeaderPolicy && (
-                          <div className={styles.managedHeaderPolicyItem}>
-                            <span>
-                              {t('auth_files.account_settings_managed_header_policy_version', {
-                                defaultValue: 'Strategy version',
-                              })}
-                            </span>
-                            <strong>{managedHeaderPolicyVersion}</strong>
-                          </div>
-                        )}
-                        {managedHeaderPolicy && (
-                          <div className={styles.managedHeaderPolicyItem}>
-                            <span>
-                              {t('auth_files.account_settings_managed_header_policy_internal_id', {
-                                defaultValue: 'Internal policy ID',
-                              })}
-                            </span>
-                            <strong>{managedHeaderPolicy}</strong>
-                          </div>
-                        )}
-                        {managedHeaderPolicy && (
-                          <div
-                            className={`${styles.managedHeaderPolicyItem} ${styles.managedHeaderPolicyItemWide}`}
-                            data-testid="account-settings-managed-policy-rule"
-                          >
-                            <span>
-                              {t('auth_files.account_settings_managed_header_policy_rule', {
-                                defaultValue: 'Auto-update rule',
-                              })}
-                            </span>
-                            <strong>{managedHeaderPolicyRule}</strong>
-                          </div>
-                        )}
+                        <div className={styles.managedHeaderPolicyItem}>
+                          <span>
+                            {t('auth_files.account_settings_identity_strategy_label', {
+                              defaultValue: 'Identity binding',
+                            })}
+                          </span>
+                          <strong>{identityModelStrategy}</strong>
+                        </div>
+                        <div
+                          className={`${styles.managedHeaderPolicyItem} ${styles.managedHeaderPolicyItemWide}`}
+                          data-testid="account-settings-identity-rule"
+                        >
+                          <span>
+                            {t('auth_files.account_settings_identity_rule', {
+                              defaultValue: 'How identity is resolved',
+                            })}
+                          </span>
+                          <strong>{identityModelRule}</strong>
+                        </div>
                         {(managedHeaderSource ||
                           managedHeaderCheckedAt ||
                           managedHeaderSourceUrl ||
@@ -1093,21 +1122,39 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                             <strong>{managedHeaderGeneratedAt}</strong>
                           </div>
                         )}
-                        <div className={styles.managedHeaderPolicyItem}>
+                        <div
+                          className={`${styles.managedHeaderPolicyItem} ${styles.managedHeaderPolicyItemWide}`}
+                          data-testid="account-settings-identity-class-a"
+                        >
                           <span>
-                            {t('auth_files.account_settings_managed_header_versions', {
-                              defaultValue: 'Fields core may auto-bump',
+                            {t('auth_files.account_settings_identity_class_a', {
+                              defaultValue: 'Class A · pinned platform identity',
                             })}
                           </span>
-                          <strong>{formatFieldList(managedVersionedFields)}</strong>
+                          <strong>
+                            {managedStableEntries.length > 0
+                              ? managedStableEntries
+                                  .map(([name, value]) => `${name}=${value}`)
+                                  .join(' · ')
+                              : formatFieldList(managedStableFields)}
+                          </strong>
                         </div>
-                        <div className={styles.managedHeaderPolicyItem}>
+                        <div
+                          className={`${styles.managedHeaderPolicyItem} ${styles.managedHeaderPolicyItemWide}`}
+                          data-testid="account-settings-identity-class-b"
+                        >
                           <span>
-                            {t('auth_files.account_settings_managed_header_stable_identity', {
-                              defaultValue: 'Fields pinned across version bumps',
+                            {t('auth_files.account_settings_identity_class_b', {
+                              defaultValue: 'Class B · high-water software fingerprint',
                             })}
                           </span>
-                          <strong>{formatFieldList(managedStableFields)}</strong>
+                          <strong>
+                            {managedVersionedEntries.length > 0
+                              ? managedVersionedEntries
+                                  .map(([name, value]) => `${name}=${value}`)
+                                  .join(' · ')
+                              : formatFieldList(managedVersionedFields)}
+                          </strong>
                         </div>
                         <div className={styles.managedHeaderPolicyItem}>
                           <span>
@@ -1119,12 +1166,12 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                         </div>
                         <div className={styles.managedHeaderPolicyItem}>
                           <span>
-                            {t('auth_files.account_settings_managed_header_history_count', {
-                              defaultValue: 'Recorded upgrades',
+                            {t('auth_files.account_settings_identity_audit_count', {
+                              defaultValue: 'Recorded identity changes',
                             })}
                           </span>
                           <strong>
-                            {t('auth_files.account_settings_managed_header_history_count_value', {
+                            {t('auth_files.account_settings_identity_audit_count_value', {
                               count: managedHistory.length,
                               defaultValue: '{{count}} entries',
                             })}
@@ -1133,7 +1180,7 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                         {managedLatestHistory && (
                           <div className={styles.managedHeaderPolicyItem}>
                             <span>
-                              {t('auth_files.account_settings_managed_header_latest_change', {
+                              {t('auth_files.account_settings_identity_audit_latest', {
                                 defaultValue: 'Latest changed fields',
                               })}
                             </span>
@@ -1145,9 +1192,9 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                       </div>
                     </div>
                     <div className="hint">
-                      {t('auth_files.account_settings_managed_header_policy_hint', {
+                      {t('auth_files.account_settings_identity_model_hint', {
                         defaultValue:
-                          'This is not another header editor. It explains which parts of the generated headers core is allowed to update automatically.',
+                          'Read-only. Class A platform identity is pinned per account; Class B version markers only move forward (high-water). This is the anti-correlation identity binding, not an editable header list.',
                       })}
                     </div>
                   </div>
@@ -1156,13 +1203,13 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                 {managedHistory.length > 0 && (
                   <div className="form-group">
                     <label>
-                      {t('auth_files.account_settings_managed_header_history', {
-                        defaultValue: 'Managed header upgrade history',
+                      {t('auth_files.account_settings_identity_audit', {
+                        defaultValue: 'Identity change audit',
                       })}
                     </label>
                     <div
                       className={styles.managedHeaderPanel}
-                      data-testid="account-settings-managed-history-panel"
+                      data-testid="account-settings-identity-audit-panel"
                     >
                       <div className={styles.managedHeaderHistoryList}>
                         {managedHistory.map((entry, index) => (
@@ -1173,8 +1220,8 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                             <div className={styles.managedHeaderHistorySummary}>
                               <div className={styles.managedHeaderHistoryMeta}>
                                 <strong>{entry.recorded_at || '-'}</strong>
-                                <span>{entry.reason || 'managed-header-refresh'}</span>
-                                <span>{entry.policy_version || '-'}</span>
+                                <span>{entry.reason || 'identity-change'}</span>
+                                {entry.policy_version && <span>{entry.policy_version}</span>}
                                 {(entry.source || entry.source_url) && (
                                   <span>
                                     {[entry.source, entry.source_url].filter(Boolean).join(' · ')}
@@ -1206,11 +1253,11 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                             </div>
                             <details
                               className={styles.managedHeaderHistoryDetails}
-                              data-testid="account-settings-managed-history-details"
+                              data-testid="account-settings-identity-audit-details"
                             >
                               <summary
                                 className={styles.managedHeaderHistoryToggle}
-                                data-testid="account-settings-managed-history-details-toggle"
+                                data-testid="account-settings-identity-audit-details-toggle"
                               >
                                 {t(
                                   'auth_files.account_settings_managed_header_history_view_changes',
@@ -1240,14 +1287,14 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                                       }
                                     )}
                                   </span>
-                                  <strong>{entry.reason || 'managed-header-refresh'}</strong>
+                                  <strong>{entry.reason || 'identity-change'}</strong>
                                 </div>
                                 <div className={styles.managedHeaderHistoryDetailItem}>
                                   <span>
                                     {t(
-                                      'auth_files.account_settings_managed_header_history_policy_version',
+                                      'auth_files.account_settings_identity_audit_snapshot',
                                       {
-                                        defaultValue: 'Policy version',
+                                        defaultValue: 'Snapshot marker',
                                       }
                                     )}
                                   </span>
@@ -1284,7 +1331,7 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                               {buildHistoryDiffRows(entry).length > 0 ? (
                                 <div
                                   className={styles.managedHeaderHistoryDiffTable}
-                                  data-testid="account-settings-managed-history-diff-table"
+                                  data-testid="account-settings-identity-audit-diff-table"
                                 >
                                   <div className={styles.managedHeaderHistoryDiffHead}>
                                     {t(
@@ -1328,7 +1375,7 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                               ) : (
                                 <div
                                   className={styles.managedHeaderHistoryNoDiff}
-                                  data-testid="account-settings-managed-history-no-diff"
+                                  data-testid="account-settings-identity-audit-no-diff"
                                 >
                                   {t(
                                     'auth_files.account_settings_managed_header_history_no_diff',
@@ -1344,9 +1391,9 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                       </div>
                     </div>
                     <div className="hint">
-                      {t('auth_files.account_settings_managed_header_history_hint', {
+                      {t('auth_files.account_settings_identity_audit_hint', {
                         defaultValue:
-                          'Append-only history for core-driven upgrades. It records which generated fields changed; it is not user editable.',
+                          'Append-only, read-only audit of per-account identity changes. It records when Class B high-water version markers moved forward and which fields changed; it is not user editable.',
                       })}
                     </div>
                   </div>

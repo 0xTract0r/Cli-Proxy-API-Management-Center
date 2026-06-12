@@ -40,6 +40,8 @@ export type PrefixProxyEditorState = {
   refreshEnabled: boolean;
   managedHeaders: AuthFileHeaders;
   managedHeaderState: AuthFileManagedHeaderState | null;
+  /** 只读脱敏合成 device_id（来自 ①）；为空表示后端未派生（omitempty 缺省）。 */
+  syntheticDeviceId: string;
   clientVersionObservations: AuthFileClientVersionObservation[];
   runtimeProfileText: string;
   runtimeIdentityText: string;
@@ -242,6 +244,8 @@ export function useAuthFilesPrefixProxyEditor(
       refreshEnabled: settings?.refresh_enabled !== false,
       managedHeaders: settings?.managed_headers || {},
       managedHeaderState: settings?.managed_header_state || null,
+      syntheticDeviceId:
+        typeof settings?.synthetic_device_id === 'string' ? settings.synthetic_device_id : '',
       clientVersionObservations: Array.isArray(settings?.client_version_observations)
         ? settings.client_version_observations
         : [],
@@ -284,6 +288,10 @@ export function useAuthFilesPrefixProxyEditor(
       refreshEnabled: inlineSettings?.refresh_enabled !== false,
       managedHeaders: inlineSettings?.managed_headers || {},
       managedHeaderState: inlineSettings?.managed_header_state || null,
+      syntheticDeviceId:
+        typeof inlineSettings?.synthetic_device_id === 'string'
+          ? inlineSettings.synthetic_device_id
+          : '',
       clientVersionObservations: Array.isArray(inlineSettings?.client_version_observations)
         ? inlineSettings.client_version_observations
         : [],
