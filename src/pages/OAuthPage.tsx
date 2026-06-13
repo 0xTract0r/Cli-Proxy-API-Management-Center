@@ -160,8 +160,8 @@ const FINGERPRINT_PRESETS: Record<
     headers: 'Codex Desktop managed headers',
   },
   anthropic: {
-    profile: 'claude_reqwest_rustls_compatible_v1',
-    tls: 'claude_reqwest_rustls_compatible_v1',
+    profile: 'claude_cli_clienthello_v1',
+    tls: 'claude_cli_clienthello_v1',
     headers: 'Claude Code managed headers',
   },
   'gemini-cli': {

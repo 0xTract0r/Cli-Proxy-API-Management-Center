@@ -597,9 +597,9 @@ function RuntimeTlsSummary({
       <div className={styles.runtimeTlsSummaryHeader}>
         <strong>Current runtime identity</strong>
         <div className={styles.runtimeTlsSummaryBadges}>
+          {runtimeProfile?.core_managed === true && <span>Core managed</span>}
           <span>{readString(runtimeProfile, 'profile_id')}</span>
           <span>{readString(runtimeProfile, 'tls_profile_id')}</span>
-          {runtimeProfile?.core_managed === true && <span>Core managed</span>}
           <span>Go approximation</span>
         </div>
       </div>
@@ -609,6 +609,18 @@ function RuntimeTlsSummary({
           <strong>{provider}</strong>
         </div>
         <div>
+          <span>Identity revision</span>
+          <strong>{String(identityCurrent?.revision ?? '-')}</strong>
+        </div>
+        <div>
+          <span>Host</span>
+          <strong>{readString(identityCurrent, 'base_url_host')}</strong>
+        </div>
+        <div>
+          <span>Source</span>
+          <strong>{readString(runtimeProfile, 'source')}</strong>
+        </div>
+        <div>
           <span>TLS family</span>
           <strong>{readString(runtimeProfile, 'tls_family')}</strong>
         </div>
@@ -616,25 +628,14 @@ function RuntimeTlsSummary({
           <span>Runtime enforced</span>
           <strong>{readBooleanLabel(runtimeProfile, 'tls_configured')}</strong>
         </div>
-        <div>
-          <span>Identity revision</span>
-          <strong>{String(identityCurrent?.revision ?? '-')}</strong>
-        </div>
-        <div>
-          <span>Source</span>
-          <strong>{readString(runtimeProfile, 'source')}</strong>
-        </div>
-        <div>
-          <span>Host</span>
-          <strong>{readString(identityCurrent, 'base_url_host')}</strong>
-        </div>
       </div>
       <div className={styles.runtimeTlsSummaryText}>
         {isClaude && (
           <p>
-            Claude Code default is <strong>claude_reqwest_rustls_compatible_v1</strong>: a
-            Claude-specific CLI profile modeled after reqwest/rustls behavior. Chrome-like uTLS
-            presets are advanced opt-in only.
+            Claude default TLS is <strong>claude_cli_clienthello_v1</strong>: a uTLS HelloCustom
+            replicating the real claude-cli Node/OpenSSL ClientHello (target JA3 e97f5146, ALPN
+            http/1.1 only). Legacy reqwest/rustls and Chrome-like uTLS aliases are explicit opt-in
+            only.
           </p>
         )}
         {isCodex && (
@@ -799,7 +800,6 @@ function IdentityAuditEntry({
         <div className={styles.managedHeaderHistoryMeta}>
           <strong>{entry.recorded_at || '-'}</strong>
           <span>{identityAuditReasonLabel(entry.reason, t)}</span>
-          {entry.policy_version && <span>{entry.policy_version}</span>}
           {(entry.source || entry.source_url) && (
             <span>{[entry.source, entry.source_url].filter(Boolean).join(' · ')}</span>
           )}
@@ -1282,7 +1282,7 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                   </label>
                   <EditableJsonCodeField
                     value={editor.transportProfileText}
-                    placeholder={`Leave empty for core default transport.\nClaude CLI example:\n{\n  "preset": "claude_reqwest_rustls_compatible_v1"\n}`}
+                    placeholder={`Leave empty for core default transport.\nClaude CLI example:\n{\n  "preset": "claude_cli_clienthello_v1"\n}`}
                     invalid={Boolean(editor.transportProfileError)}
                     disabled={disableControls || editor.saving}
                     testId="account-settings-transport-profile-editor"
@@ -1295,7 +1295,7 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                   <div className="hint">
                     {t('auth_files.account_settings_transport_profile_hint', {
                       defaultValue:
-                        'Leave empty for the core default transport. Claude defaults to a Claude-specific reqwest/rustls-compatible CLI profile based on community implementations; Chrome-like uTLS presets such as claude_utls_chrome_133 are advanced opt-in only. Codex follows codex-proxy-compatible transport with Go approximation until the Rust sidecar is added.',
+                        'Leave empty for the core default transport. Claude defaults to claude_cli_clienthello_v1, replicating the real claude-cli Node/OpenSSL ClientHello (target JA3 e97f5146, ALPN http/1.1 only); legacy reqwest/rustls and Chrome-like uTLS presets such as claude_utls_chrome_133 are explicit opt-in only. Codex follows codex-proxy-compatible transport with Go approximation until the Rust sidecar is added.',
                     })}
                   </div>
                 </div>
@@ -1308,7 +1308,7 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                   </label>
                   <EditableJsonCodeField
                     value={editor.tlsProfileText}
-                    placeholder={`Leave empty for core default TLS.\nClaude CLI example:\n{\n  "preset": "claude_reqwest_rustls_compatible_v1"\n}`}
+                    placeholder={`Leave empty for core default TLS.\nClaude CLI example:\n{\n  "preset": "claude_cli_clienthello_v1"\n}`}
                     invalid={Boolean(editor.tlsProfileError)}
                     disabled={disableControls || editor.saving}
                     testId="account-settings-tls-profile-editor"
@@ -1321,7 +1321,7 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                   <div className="hint">
                     {t('auth_files.account_settings_tls_profile_hint', {
                       defaultValue:
-                        'Leave empty for the core default TLS behavior. Claude default uses reqwest/rustls-compatible CLI semantics via Go approximation; old Chrome-like aliases remain explicit advanced opt-in only. Codex can enforce Go transport knobs, but exact Rust wire parity is not shipped yet.',
+                        'Leave empty for the core default TLS behavior. Claude default TLS is claude_cli_clienthello_v1, a uTLS HelloCustom replicating the real claude-cli Node/OpenSSL ClientHello (target JA3 e97f5146, ALPN http/1.1 only); legacy reqwest/rustls and old Chrome-like aliases remain explicit opt-in only. Codex can enforce Go transport knobs, but exact Rust wire parity is not shipped yet.',
                     })}
                   </div>
                 </div>
@@ -1598,7 +1598,7 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                     <div className="hint">
                       {t('auth_files.account_settings_runtime_profile_hint', {
                         defaultValue:
-                          'Resolved by the core for this account. Claude defaults to a reqwest/rustls-compatible CLI profile; Chrome-like uTLS remains advanced explicit opt-in only.',
+                          'Resolved by the core for this account. Claude defaults to claude_cli_clienthello_v1 (real claude-cli Node/OpenSSL ClientHello, ALPN http/1.1 only); legacy reqwest/rustls and Chrome-like uTLS remain explicit opt-in only.',
                       })}
                     </div>
                   </div>
