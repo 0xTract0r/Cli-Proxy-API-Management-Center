@@ -777,6 +777,52 @@ function identityAuditReasonLabel(reason: string | undefined, t: TranslateFn): s
   }
 }
 
+/**
+ * 版本来源（core `managed_header_state` 的 Source）人类可读标签。
+ * core 取值见 internal/runtime/.../managed_header_online_profile.go：
+ *  - `observed:first_party` 真实客户端请求观测
+ *  - `online:npm`           在线 npm 最新版本
+ *  - `community:codex-proxy` 社区 codex-proxy 策略
+ *  - `default`              内置默认基线
+ * 让用户一眼看出「这个版本号从哪来」：是真实客户端观测到的，还是 npm 拉来的，还是默认。
+ */
+function identityAuditSourceLabel(source: string | undefined, t: TranslateFn): string {
+  const normalized = (source || '').trim().toLowerCase();
+  switch (normalized) {
+    case 'observed:first_party':
+      return t('auth_files.account_settings_identity_audit_source_observed', {
+        defaultValue: 'Real client observed',
+      });
+    case 'online:npm':
+      return t('auth_files.account_settings_identity_audit_source_online_npm', {
+        defaultValue: 'Online npm',
+      });
+    case 'community:codex-proxy':
+      return t('auth_files.account_settings_identity_audit_source_codex_proxy', {
+        defaultValue: 'Community codex-proxy',
+      });
+    case 'default':
+      return t('auth_files.account_settings_identity_audit_source_default', {
+        defaultValue: 'Default baseline',
+      });
+    default:
+      // 未知/历史取值：原样回显，避免误导。
+      return source?.trim() || '';
+  }
+}
+
+/**
+ * 选取该条审计记录「当前版本依据」的 Source 原始值。
+ * 优先 `next_source`（这版变更后的来源），回退 `source`，再回退 `previous_source`。
+ */
+function identityAuditEntrySource(entry: AuthFileManagedHeaderHistoryEntry): string {
+  return (
+    (entry.next_source || '').trim() ||
+    (entry.source || '').trim() ||
+    (entry.previous_source || '').trim()
+  );
+}
+
 function IdentityAuditEntry({
   entry,
   variant,
@@ -794,14 +840,28 @@ function IdentityAuditEntry({
       ? `${styles.managedHeaderHistoryEntry} ${styles.identityAuditEntrySignificant}`
       : styles.managedHeaderHistoryEntry;
 
+  // 版本依据：这条版本号是真实客户端观测、在线 npm 还是默认基线。
+  const rawSource = identityAuditEntrySource(entry);
+  const sourceLabel = identityAuditSourceLabel(rawSource, t);
+  const sourceUrl = (entry.next_source_url || entry.source_url || '').trim();
+
   return (
     <div className={entryClassName} data-testid={`account-settings-identity-audit-entry-${variant}`}>
       <div className={styles.managedHeaderHistorySummary}>
         <div className={styles.managedHeaderHistoryMeta}>
           <strong>{entry.recorded_at || '-'}</strong>
           <span>{identityAuditReasonLabel(entry.reason, t)}</span>
-          {(entry.source || entry.source_url) && (
-            <span>{[entry.source, entry.source_url].filter(Boolean).join(' · ')}</span>
+          {sourceLabel && (
+            <span
+              className={styles.identityAuditSourceTag}
+              data-testid="account-settings-identity-audit-source"
+              title={sourceUrl || rawSource}
+            >
+              {t('auth_files.account_settings_identity_audit_source_inline', {
+                defaultValue: 'Source: {{source}}',
+                source: sourceLabel,
+              })}
+            </span>
           )}
         </div>
         <div className={styles.managedHeaderChips}>
@@ -866,11 +926,11 @@ function IdentityAuditEntry({
           </div>
           <div className={styles.managedHeaderHistoryDetailItem}>
             <span>
-              {t('auth_files.account_settings_identity_audit_snapshot', {
-                defaultValue: 'Snapshot marker',
+              {t('auth_files.account_settings_identity_audit_source_basis', {
+                defaultValue: 'Version source',
               })}
             </span>
-            <strong>{entry.policy_version || '-'}</strong>
+            <strong>{sourceLabel || '-'}</strong>
           </div>
           <div className={styles.managedHeaderHistoryDetailItem}>
             <span>
@@ -878,11 +938,7 @@ function IdentityAuditEntry({
                 defaultValue: 'Source',
               })}
             </span>
-            <strong>
-              {[entry.source || entry.next_source, entry.source_url || entry.next_source_url]
-                .filter(Boolean)
-                .join(' · ') || '-'}
-            </strong>
+            <strong>{[rawSource, sourceUrl].filter(Boolean).join(' · ') || '-'}</strong>
           </div>
           <div
             className={`${styles.managedHeaderHistoryDetailItem} ${styles.managedHeaderHistoryDetailItemWide}`}

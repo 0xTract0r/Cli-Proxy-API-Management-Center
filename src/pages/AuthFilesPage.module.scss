@@ -2529,6 +2529,24 @@
   color: var(--text-secondary);
 }
 
+.identityAuditSourceTag {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  max-width: 100%;
+  margin-top: 2px;
+  padding: 1px 7px;
+  border: 1px solid color-mix(in srgb, var(--primary-color) 32%, var(--border-color));
+  border-radius: $radius-sm;
+  background-color: color-mix(in srgb, var(--primary-color) 12%, var(--bg-tertiary));
+  color: var(--text-primary);
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .identityAuditEmpty {
   padding: 12px;
   border: 1px dashed color-mix(in srgb, var(--border-color) 80%, transparent);
