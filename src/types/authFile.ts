@@ -84,12 +84,12 @@ export interface AuthFileManagedHeaderProjection {
 
 /**
  * 单条「身份变更审计」记录（重定义复用，非删除）。
- * 旧字段 `policy_version` 仍保留以兼容历史数据，但在 UI 上呈现为 high-water
- * 版本快照标识，不再使用「自动升级策略版本」措辞。
+ * 旧字段 `policy_version` 仅保留以兼容历史 payload，UI 不再展示它，也不再使用
+ * 「自动升级策略版本」措辞；每条记录的版本依据改为来自 `next_source` / `source`。
  */
 export interface AuthFileManagedHeaderHistoryEntry {
   recorded_at?: string;
-  /** Compat field from older core payloads; surfaced as a high-water snapshot marker. */
+  /** Compat field from older core payloads; no longer surfaced in the UI. */
   policy_version?: string;
   reason?: string;
   source?: string;
