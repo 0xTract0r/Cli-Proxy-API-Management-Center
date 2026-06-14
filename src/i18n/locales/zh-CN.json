@@ -510,7 +510,6 @@
     "account_settings_identity_class_b": "B 类 · 高水位软件指纹",
     "account_settings_identity_audit_count": "已记录的身份变更",
     "account_settings_identity_audit_count_value": "{{count}} 条",
-    "account_settings_identity_audit_latest": "最近变更字段",
     "account_settings_identity_model_hint": "只读。A 类平台身份按账号钉死；B 类版本标记只前进（高水位）。这是反关联身份绑定，不是可编辑的请求头列表。",
     "account_settings_identity_audit": "身份变更审计",
     "account_settings_identity_audit_snapshot": "快照标识",

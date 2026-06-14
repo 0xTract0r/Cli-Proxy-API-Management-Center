@@ -510,7 +510,6 @@
     "account_settings_identity_class_b": "Class B · high-water software fingerprint",
     "account_settings_identity_audit_count": "Recorded identity changes",
     "account_settings_identity_audit_count_value": "{{count}} entries",
-    "account_settings_identity_audit_latest": "Latest changed fields",
     "account_settings_identity_model_hint": "Read-only. Class A platform identity is pinned per account; Class B version markers only move forward (high-water). This is the anti-correlation identity binding, not an editable header list.",
     "account_settings_identity_audit": "Identity change audit",
     "account_settings_identity_audit_snapshot": "Snapshot marker",

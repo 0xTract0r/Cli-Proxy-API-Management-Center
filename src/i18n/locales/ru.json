@@ -479,7 +479,6 @@
     "account_settings_identity_class_b": "Класс B · high-water отпечаток ПО",
     "account_settings_identity_audit_count": "Записанные изменения идентичности",
     "account_settings_identity_audit_count_value": "{{count}} записей",
-    "account_settings_identity_audit_latest": "Последние изменённые поля",
     "account_settings_identity_model_hint": "Только чтение. Класс A закреплён за аккаунтом; класс B только растёт (high-water). Это привязка идентичности против корреляции, а не редактируемый список заголовков.",
     "account_settings_identity_audit": "Аудит изменений идентичности",
     "account_settings_identity_audit_snapshot": "Маркер снимка",

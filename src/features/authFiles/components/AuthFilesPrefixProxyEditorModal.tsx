@@ -1353,54 +1353,56 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                   </span>
                 </header>
 
-                <div className="form-group">
-                  <label>
-                    {t('auth_files.account_settings_synthetic_device_id', {
-                      defaultValue: 'Synthetic device ID',
-                    })}
-                  </label>
-                  <div
-                    className={styles.managedHeaderPanel}
-                    data-testid="account-settings-synthetic-device-id-panel"
-                  >
-                    <div className={styles.managedHeaderPolicyGrid}>
-                      <div
-                        className={`${styles.managedHeaderPolicyItem} ${styles.managedHeaderPolicyItemWide}`}
-                        data-testid="account-settings-synthetic-device-id-value"
-                      >
-                        <span>
-                          {t('auth_files.account_settings_synthetic_device_id_masked', {
-                            defaultValue: 'Masked device ID',
-                          })}
-                        </span>
-                        {editor.syntheticDeviceId ? (
-                          <strong>
-                            <code className={styles.managedHeaderValue} title={editor.syntheticDeviceId}>
-                              {editor.syntheticDeviceId}
-                            </code>{' '}
-                            <span className={styles.managedHeaderChip}>
-                              {t('auth_files.account_settings_synthetic_device_id_synthetic_badge', {
-                                defaultValue: 'Synthetic pseudonym',
-                              })}
-                            </span>
-                          </strong>
-                        ) : (
-                          <strong data-testid="account-settings-synthetic-device-id-placeholder">
-                            {t('auth_files.account_settings_synthetic_device_id_pending', {
-                              defaultValue: 'Not derived yet',
+                {isClaudeManagedPolicy && (
+                  <div className="form-group">
+                    <label>
+                      {t('auth_files.account_settings_synthetic_device_id', {
+                        defaultValue: 'Synthetic device ID',
+                      })}
+                    </label>
+                    <div
+                      className={styles.managedHeaderPanel}
+                      data-testid="account-settings-synthetic-device-id-panel"
+                    >
+                      <div className={styles.managedHeaderPolicyGrid}>
+                        <div
+                          className={`${styles.managedHeaderPolicyItem} ${styles.managedHeaderPolicyItemWide}`}
+                          data-testid="account-settings-synthetic-device-id-value"
+                        >
+                          <span>
+                            {t('auth_files.account_settings_synthetic_device_id_masked', {
+                              defaultValue: 'Masked device ID',
                             })}
-                          </strong>
-                        )}
+                          </span>
+                          {editor.syntheticDeviceId ? (
+                            <strong>
+                              <code className={styles.managedHeaderValue} title={editor.syntheticDeviceId}>
+                                {editor.syntheticDeviceId}
+                              </code>{' '}
+                              <span className={styles.managedHeaderChip}>
+                                {t('auth_files.account_settings_synthetic_device_id_synthetic_badge', {
+                                  defaultValue: 'Synthetic pseudonym',
+                                })}
+                              </span>
+                            </strong>
+                          ) : (
+                            <strong data-testid="account-settings-synthetic-device-id-placeholder">
+                              {t('auth_files.account_settings_synthetic_device_id_pending', {
+                                defaultValue: 'Not derived yet',
+                              })}
+                            </strong>
+                          )}
+                        </div>
                       </div>
                     </div>
+                    <div className="hint">
+                      {t('auth_files.account_settings_synthetic_device_id_hint', {
+                        defaultValue:
+                          'Read-only. A stable per-account synthetic pseudonym derived by core; only the first 16 hex characters are shown and the real value is never exposed. Empty means core has not derived one yet.',
+                      })}
+                    </div>
                   </div>
-                  <div className="hint">
-                    {t('auth_files.account_settings_synthetic_device_id_hint', {
-                      defaultValue:
-                        'Read-only. A stable per-account synthetic pseudonym derived by core; only the first 16 hex characters are shown and the real value is never exposed. Empty means core has not derived one yet.',
-                    })}
-                  </div>
-                </div>
+                )}
 
                 {hasIdentityProjection && (
                   <div className="form-group">
