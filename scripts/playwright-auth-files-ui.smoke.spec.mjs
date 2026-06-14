@@ -479,8 +479,8 @@ async function verifyAccountSettingsManagedHeaderUi(page) {
         '[data-testid="account-settings-managed-headers-panel"]',
         '[data-testid="account-settings-claude-header-strategy-panel"]',
         '[data-testid="account-settings-claude-client-observations-panel"]',
-        '[data-testid="account-settings-managed-policy-panel"]',
-        '[data-testid="account-settings-managed-history-panel"]',
+        '[data-testid="account-settings-identity-model-panel"]',
+        '[data-testid="account-settings-identity-audit-panel"]',
       ].join(', ')
     );
     const generatedInputCount = await generatedPanels
@@ -555,19 +555,19 @@ async function verifyAccountSettingsManagedHeaderUi(page) {
       .locator('[data-testid="account-settings-claude-header-strategy-row"]')
       .count();
     const policyPanelCount = await page
-      .locator('[data-testid="account-settings-managed-policy-panel"]')
+      .locator('[data-testid="account-settings-identity-model-panel"]')
       .count();
     const policyRuleCount = await page
-      .locator('[data-testid="account-settings-managed-policy-rule"]')
+      .locator('[data-testid="account-settings-identity-rule"]')
       .count();
     const sourceStatusCount = await page
       .locator('[data-testid="account-settings-managed-source"]')
       .count();
     const historyPanelCount = await page
-      .locator('[data-testid="account-settings-managed-history-panel"]')
+      .locator('[data-testid="account-settings-identity-audit-panel"]')
       .count();
     const historyDetailsToggleCount = await page
-      .locator('[data-testid="account-settings-managed-history-details-toggle"]')
+      .locator('[data-testid="account-settings-identity-audit-details-toggle"]')
       .count();
     const claudeObservationPanelCount = await page
       .locator('[data-testid="account-settings-claude-client-observations-panel"]')
@@ -671,27 +671,35 @@ async function verifyAccountSettingsManagedHeaderUi(page) {
         'Claude strategy panel should still name affected headers'
       ).toContainText(/User-Agent|X-Stainless-Package-Version|X-App/i);
     }
-    if (historyPanelCount > 0) {
-      expect(
-        historyDetailsToggleCount,
-        'history panel should expose a details entry point'
-      ).toBeGreaterThan(0);
+    if (historyPanelCount > 0 && historyDetailsToggleCount > 0) {
+      // 例行版本刷新折叠组需要先展开，里面的条目 toggle 才可见。
+      const routineGroup = page.locator(
+        '[data-testid="account-settings-identity-audit-routine-group"]'
+      );
+      if ((await routineGroup.count()) > 0) {
+        const isOpen = await routineGroup
+          .first()
+          .evaluate((node) => node.hasAttribute('open'));
+        if (!isOpen) {
+          await routineGroup.first().locator('> summary').click();
+        }
+      }
 
       await page
-        .locator('[data-testid="account-settings-managed-history-details-toggle"]')
+        .locator('[data-testid="account-settings-identity-audit-details-toggle"]')
         .first()
         .click();
 
       const diffTableCount = await page
-        .locator('[data-testid="account-settings-managed-history-diff-table"]')
+        .locator('[data-testid="account-settings-identity-audit-diff-table"]')
         .count();
       const fallbackCount = await page
-        .locator('[data-testid="account-settings-managed-history-no-diff"]')
+        .locator('[data-testid="account-settings-identity-audit-no-diff"]')
         .count();
 
       if (diffTableCount > 0) {
         const diffTable = page
-          .locator('[data-testid="account-settings-managed-history-diff-table"]')
+          .locator('[data-testid="account-settings-identity-audit-diff-table"]')
           .first();
         await expect(diffTable).toContainText(/Previous|Next|上一个|下一个/i);
         expect(
@@ -750,7 +758,7 @@ async function verifyAccountSettingsManagedHeaderUi(page) {
         policyPanelCount > 0
           ? (
               (await page
-                .locator('[data-testid="account-settings-managed-policy-panel"]')
+                .locator('[data-testid="account-settings-identity-model-panel"]')
                 .innerText()) || ''
             ).slice(0, 500)
           : '',
@@ -758,7 +766,7 @@ async function verifyAccountSettingsManagedHeaderUi(page) {
         historyPanelCount > 0
           ? (
               (await page
-                .locator('[data-testid="account-settings-managed-history-panel"]')
+                .locator('[data-testid="account-settings-identity-audit-panel"]')
                 .innerText()) || ''
             ).slice(0, 500)
           : '',
