@@ -1163,6 +1163,7 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
               disableControls ||
               editor?.saving === true ||
               !dirty ||
+              Boolean(editor?.proxyUrlError) ||
               Boolean(editor?.extraHeadersError) ||
               Boolean(editor?.transportProfileError) ||
               Boolean(editor?.tlsProfileError)
@@ -1265,13 +1266,27 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                 </div>
 
                 <Input
-                  label={t('auth_files.proxy_url_label')}
+                  label={t('auth_files.proxy_url_required_label', {
+                    defaultValue: 'Proxy URL (proxy_url) *',
+                  })}
                   value={editor.proxyUrl}
                   placeholder={t('auth_files.proxy_url_placeholder')}
-                  hint={t('auth_files.proxy_url_hint', {
+                  hint={t('auth_files.proxy_url_required_hint', {
                     defaultValue:
-                      'Optional per-account outbound proxy. Leave empty to use the global proxy settings.',
+                      'Required. Each account must route outbound traffic through its own residential proxy (http/https/socks5). Leaving it empty would expose your real IP, so core rejects empty/invalid proxy_url.',
                   })}
+                  error={
+                    editor.proxyUrlError
+                      ? editor.proxyUrlError === 'empty'
+                        ? t('auth_files.proxy_url_required_error', {
+                            defaultValue: 'Proxy URL is required. Enter a residential proxy URL.',
+                          })
+                        : t('auth_files.proxy_url_invalid_error', {
+                            defaultValue:
+                              'Invalid proxy URL. Use a full URL such as socks5://user:pass@host:port.',
+                          })
+                      : undefined
+                  }
                   disabled={disableControls || editor.saving}
                   data-testid="account-settings-proxy-url-input"
                   onChange={(e) => onChange('proxyUrl', e.target.value)}

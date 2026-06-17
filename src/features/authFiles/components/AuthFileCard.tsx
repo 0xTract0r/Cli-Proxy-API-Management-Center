@@ -24,6 +24,7 @@ import {
   getTypeColor,
   getTypeLabel,
   hasAuthFileStatusWarning,
+  isAuthFileMissingProxyUrl,
   isRuntimeOnlyAuthFile,
   parsePriorityValue,
   QUOTA_PROVIDER_TYPES,
@@ -235,6 +236,16 @@ export function AuthFileCard(props: AuthFileCardProps) {
         : t('auth_files.cyber_policy_marker', { count: cyberPolicyFlagCount })
       : '';
 
+  // 缺失 proxy_url（住宅代理）告警：core#26/#27 把空 proxy_url 账号标为不可用并下发 warnings。
+  // 卡片用醒目橙色标记 + tooltip 提示，让用户一眼看出哪个号缺 proxy 需要补填。
+  const missingProxyUrl = isAuthFileMissingProxyUrl(file);
+  const missingProxyMarkerTitle = missingProxyUrl
+    ? t('auth_files.proxy_url_missing_marker', {
+        defaultValue:
+          'Missing proxy_url: this account is unavailable until a residential proxy is set, otherwise requests would expose your real IP.',
+      })
+    : '';
+
   const priorityValue = parsePriorityValue(file.priority ?? file['priority']);
   const noteValue = typeof file.note === 'string' ? file.note.trim() : '';
   const stateLabel = isRuntimeOnly
@@ -319,11 +330,26 @@ export function AuthFileCard(props: AuthFileCardProps) {
                 >
                   {stateLabel}
                 </span>
+                {missingProxyMarkerTitle && (
+                  <span
+                    className={`${styles.stateBadge} ${styles.stateBadgeMissingProxy}`}
+                    title={missingProxyMarkerTitle}
+                    data-testid="auth-file-missing-proxy-badge"
+                  >
+                    {t('auth_files.proxy_url_missing_badge', {
+                      defaultValue: 'Missing proxy',
+                    })}
+                  </span>
+                )}
                 {(fileStatusMarkerTitle ||
+                  missingProxyMarkerTitle ||
                   cyberPolicyMarkerTitle ||
                   reauthState?.status === 'polling' ||
                   (reauthState?.status === 'error' && reauthErrorTitle)) && (
                   <span className={styles.cardStatusMarkers}>
+                    {missingProxyMarkerTitle && (
+                      <StatusMarker variant="cyber" tooltip={missingProxyMarkerTitle} />
+                    )}
                     {fileStatusMarkerTitle && (
                       <StatusMarker variant="warning" tooltip={fileStatusMarkerTitle} />
                     )}
