@@ -175,6 +175,33 @@ export const hasAuthFileStatusWarning = (file: AuthFileItem): boolean => {
   );
 };
 
+/**
+ * 解析账号视图的 warnings（core#26/#27 在 account 视图 `warnings []string` 下发，
+ * 例如缺失 proxy_url 的不可用账号）。兼容 snake_case / camelCase 两种 account_settings 键。
+ */
+export const getAuthFileWarnings = (file: AuthFileItem): string[] => {
+  const settings = file.account_settings || file.accountSettings || null;
+  const warnings = settings?.warnings;
+  if (!Array.isArray(warnings)) return [];
+  return warnings.filter((item): item is string => typeof item === 'string' && item.trim() !== '');
+};
+
+/**
+ * 是否缺失 proxy_url（住宅代理）。优先用 core 下发的 warnings 命中 "proxy_url" 关键字；
+ * 退化情况下，非虚拟账号且 account_settings.proxy_url 为空也判定为缺失。
+ * 让账号卡片一眼看出哪个号缺 proxy、需要补填，避免请求直连暴露真 IP。
+ */
+export const isAuthFileMissingProxyUrl = (file: AuthFileItem): boolean => {
+  const warnings = getAuthFileWarnings(file);
+  if (warnings.some((warning) => warning.toLowerCase().includes('proxy_url'))) {
+    return true;
+  }
+  if (isRuntimeOnlyAuthFile(file)) return false;
+  const settings = file.account_settings || file.accountSettings || null;
+  if (!settings) return false;
+  return typeof settings.proxy_url === 'string' && settings.proxy_url.trim() === '';
+};
+
 export const getTypeLabel = (t: TFunction, type: string): string => {
   const providerKey = normalizeProviderKey(type);
   const key = `auth_files.filter_${providerKey}`;

@@ -9,6 +9,7 @@ import type {
   AuthFileItem,
 } from '@/types/authFile';
 import { useNotificationStore } from '@/stores';
+import { validateProxyUrl, type ProxyUrlValidationReason } from '@/utils/validation';
 
 type AuthFileHeaders = Record<string, string>;
 type AuthFileHeadersErrorKey =
@@ -35,6 +36,8 @@ export type PrefixProxyEditorState = {
   saving: boolean;
   error: string | null;
   proxyUrl: string;
+  /** proxy_url 必填/格式校验错误（'empty' 未填，'invalid' 非法）；为 null 表示通过。 */
+  proxyUrlError: ProxyUrlValidationReason | null;
   note: string;
   disabled: boolean;
   refreshEnabled: boolean;
@@ -79,6 +82,19 @@ export type UseAuthFilesPrefixProxyEditorResult = {
 
 const isRecordObject = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+
+/**
+ * 计算 proxy_url 校验错误（必填 + 格式）。
+ * 初次打开/水合时即评估，使空 proxy_url 的历史账号一进编辑器就提示需补填。
+ */
+const computeProxyUrlError = (value: string): ProxyUrlValidationReason | null => {
+  const result = validateProxyUrl(value);
+  return result.valid ? null : (result.reason ?? 'invalid');
+};
+
+/** proxy_url 校验错误对应的 i18n key。 */
+const proxyUrlErrorKey = (reason: ProxyUrlValidationReason): string =>
+  reason === 'empty' ? 'auth_files.proxy_url_required_error' : 'auth_files.proxy_url_invalid_error';
 
 const validateHeadersValue = (value: unknown): AuthFileHeadersErrorKey | null => {
   if (!isRecordObject(value)) {
@@ -239,6 +255,7 @@ export function useAuthFilesPrefixProxyEditor(
       saving: false,
       error: null,
       proxyUrl: settings?.proxy_url || '',
+      proxyUrlError: computeProxyUrlError(settings?.proxy_url || ''),
       note: settings?.note || '',
       disabled: settings?.disabled === true,
       refreshEnabled: settings?.refresh_enabled !== false,
@@ -283,6 +300,7 @@ export function useAuthFilesPrefixProxyEditor(
       saving: false,
       error: null,
       proxyUrl: inlineSettings?.proxy_url || '',
+      proxyUrlError: computeProxyUrlError(inlineSettings?.proxy_url || ''),
       note: inlineSettings?.note || '',
       disabled: inlineSettings?.disabled === true,
       refreshEnabled: inlineSettings?.refresh_enabled !== false,
@@ -333,7 +351,10 @@ export function useAuthFilesPrefixProxyEditor(
   ) => {
     setPrefixProxyEditor((prev) => {
       if (!prev) return prev;
-      if (field === 'proxyUrl') return { ...prev, proxyUrl: String(value) };
+      if (field === 'proxyUrl') {
+        const proxyUrl = String(value);
+        return { ...prev, proxyUrl, proxyUrlError: computeProxyUrlError(proxyUrl) };
+      }
       if (field === 'note') return { ...prev, note: String(value) };
       if (field === 'disabled') return { ...prev, disabled: Boolean(value) };
       if (field === 'refreshEnabled') return { ...prev, refreshEnabled: Boolean(value) };
@@ -369,6 +390,16 @@ export function useAuthFilesPrefixProxyEditor(
   const handlePrefixProxySave = async () => {
     if (!prefixProxyEditor || !prefixProxyDirty) return;
 
+    // proxy_url 必填 + 格式校验：为空或非法时前端拦截，不提交（与 core#26/#27 服务端守卫呼应）。
+    const proxyError = computeProxyUrlError(prefixProxyEditor.proxyUrl);
+    if (proxyError) {
+      setPrefixProxyEditor((prev) =>
+        prev ? { ...prev, proxyUrlError: proxyError } : prev
+      );
+      showNotification(t(proxyUrlErrorKey(proxyError)), 'error');
+      return;
+    }
+
     const { request, error } = buildPatchRequest(prefixProxyEditor);
     if (!request) {
       const errorMessage = error?.startsWith('auth_files.') ? t(error) : error || 'Invalid format';
@@ -394,8 +425,30 @@ export function useAuthFilesPrefixProxyEditor(
       await loadKeyStats();
       setPrefixProxyEditor(null);
     } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : '';
-      showNotification(`${t('notification.upload_failed')}: ${errorMessage}`, 'error');
+      const statusCode =
+        err && typeof err === 'object' && 'status' in err
+          ? (err as { status?: number }).status
+          : undefined;
+      const rawMessage = err instanceof Error ? err.message : '';
+      // core#26/#27：proxy_url 为空/非法时服务端返回 400。优雅展示可读错误而非吞掉/崩溃，
+      // 并在编辑器内把 proxy_url 标红，提示用户补填合法住宅代理。
+      if (statusCode === 400) {
+        setPrefixProxyEditor((prev) =>
+          prev ? { ...prev, saving: false, proxyUrlError: prev.proxyUrlError ?? 'invalid' } : prev
+        );
+        const detail = rawMessage
+          ? `${t('auth_files.proxy_url_rejected_error', {
+              defaultValue:
+                'Core rejected this account: proxy_url is required and must be a valid residential proxy.',
+            })} (${rawMessage})`
+          : t('auth_files.proxy_url_rejected_error', {
+              defaultValue:
+                'Core rejected this account: proxy_url is required and must be a valid residential proxy.',
+            });
+        showNotification(detail, 'error');
+        return;
+      }
+      showNotification(`${t('notification.upload_failed')}: ${rawMessage}`, 'error');
       setPrefixProxyEditor((prev) => {
         if (!prev) return prev;
         return { ...prev, saving: false };
