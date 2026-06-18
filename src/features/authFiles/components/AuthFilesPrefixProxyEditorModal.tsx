@@ -1127,6 +1127,32 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
         });
   const readonlyBadge = t('common.readonly', { defaultValue: 'Read only' });
 
+  // 代理状态行（F4）：只消费已有结构化信号，不在前端做 status_message 自由文本匹配。
+  //  - core 账号视图 warnings 里命中 proxy_url 关键字（machine 真源，core#26/#27 下发）→ unavailable
+  //  - 现有 proxy_url 校验：empty → missing，invalid → unavailable
+  //  - 否则视为 healthy
+  const proxyWarningFromCore = (editor?.warnings || []).some((warning) =>
+    typeof warning === 'string' ? warning.toLowerCase().includes('proxy_url') : false
+  );
+  const proxyStatus: 'missing' | 'unavailable' | 'healthy' = (() => {
+    if (editor?.proxyUrlError === 'empty') return 'missing';
+    if (editor?.proxyUrlError === 'invalid') return 'unavailable';
+    if (proxyWarningFromCore) return 'unavailable';
+    return 'healthy';
+  })();
+  const proxyStatusLabel =
+    proxyStatus === 'missing'
+      ? t('auth_files.account_settings_proxy_status_missing', {
+          defaultValue: 'Missing proxy_url',
+        })
+      : proxyStatus === 'unavailable'
+        ? t('auth_files.account_settings_proxy_status_unavailable', {
+            defaultValue: 'Proxy unavailable',
+          })
+        : t('auth_files.account_settings_proxy_status_healthy', {
+            defaultValue: 'Proxy configured',
+          });
+
   return (
     <Modal
       open={Boolean(editor)}
@@ -1302,18 +1328,29 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                   onChange={(e) => onChange('note', e.target.value)}
                 />
 
-                <div className={styles.accountSettingsSubheading}>
-                  {t('auth_files.account_settings_editable_advanced', {
-                    defaultValue: 'Advanced overrides (JSON)',
-                  })}
-                </div>
-
-                <div className="form-group">
-                  <label>
-                    {t('auth_files.account_settings_extra_headers', {
-                      defaultValue: 'Extra headers (advanced)',
+                <details
+                  className={styles.prefixProxyAdvancedDetails}
+                  data-testid="account-settings-editable-advanced-details"
+                >
+                  <summary>
+                    {t('auth_files.account_settings_editable_advanced', {
+                      defaultValue: 'Advanced overrides (JSON)',
                     })}
-                  </label>
+                  </summary>
+                  <div className={styles.prefixProxyAdvancedBody}>
+                    <div className="hint">
+                      {t('auth_files.account_settings_editable_advanced_hint', {
+                        defaultValue:
+                          'Optional power-user overrides. Most accounts only need Enabled, Automatic token refresh, Proxy URL and Note above; leave these collapsed unless you know you need them.',
+                      })}
+                    </div>
+
+                    <div className="form-group">
+                      <label>
+                        {t('auth_files.account_settings_extra_headers', {
+                          defaultValue: 'Extra headers (advanced)',
+                        })}
+                      </label>
                   <EditableJsonCodeField
                     value={editor.extraHeadersText}
                     placeholder={`{\n  "X-Team": "core"\n}`}
@@ -1395,7 +1432,9 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                         'Leave empty for the core default TLS behavior. Claude default TLS is claude_cli_clienthello_v1, a uTLS HelloCustom replicating the real claude-cli Node/OpenSSL ClientHello (target JA3 e97f5146, ALPN http/1.1 only); legacy reqwest/rustls and old Chrome-like aliases remain explicit opt-in only. Codex can enforce Go transport knobs, but exact Rust wire parity is not shipped yet.',
                     })}
                   </div>
-                </div>
+                    </div>
+                  </div>
+                </details>
               </section>
 
               {/* 第 2 区：只读身份模型（device_id、A/B 投影、header 策略、运行时身份） */}
@@ -1423,6 +1462,28 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                     {readonlyBadge}
                   </span>
                 </header>
+
+                <div
+                  className={styles.accountSettingsProxyStatusRow}
+                  data-testid="account-settings-proxy-status-row"
+                >
+                  <span className={styles.accountSettingsProxyStatusLabel}>
+                    {t('auth_files.account_settings_proxy_status_label', {
+                      defaultValue: 'Proxy status',
+                    })}
+                  </span>
+                  <span
+                    className={`${styles.accountSettingsProxyStatusPill} ${
+                      proxyStatus === 'healthy'
+                        ? styles.accountSettingsProxyStatusHealthy
+                        : styles.accountSettingsProxyStatusWarning
+                    }`}
+                    data-testid="account-settings-proxy-status-pill"
+                    data-proxy-status={proxyStatus}
+                  >
+                    {proxyStatusLabel}
+                  </span>
+                </div>
 
                 {isClaudeManagedPolicy && (
                   <div className="form-group">
@@ -1840,6 +1901,35 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                   )}
                 </div>
               </section>
+
+              {/* 保存摘要（F7）：仅在 dirty 时展示「本次将保存」轻量预览，靠近底部 Save 区。 */}
+              {dirty && (
+                <div
+                  className={styles.accountSettingsSavePreview}
+                  data-testid="account-settings-save-summary"
+                >
+                  <div className={styles.accountSettingsSavePreviewHeader}>
+                    <strong>
+                      {t('auth_files.account_settings_save_summary_label', {
+                        defaultValue: 'Will be saved',
+                      })}
+                    </strong>
+                    <span className={styles.managedHeaderMeta}>
+                      {t('auth_files.account_settings_save_summary_hint', {
+                        defaultValue:
+                          'Preview of the per-account PATCH that Save will send right now.',
+                      })}
+                    </span>
+                  </div>
+                  <ReadOnlyCodeViewer
+                    value={updatedText}
+                    minRows={6}
+                    testId="account-settings-save-summary-viewer"
+                    label={readonlyBadge}
+                    onCopyText={onCopyText}
+                  />
+                </div>
+              )}
 
               {/* 末区：高级原始 JSON 预览（debug 用途，折叠） */}
               <details
