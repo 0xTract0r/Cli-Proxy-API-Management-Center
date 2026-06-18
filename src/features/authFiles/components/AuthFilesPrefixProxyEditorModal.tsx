@@ -1127,6 +1127,32 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
         });
   const readonlyBadge = t('common.readonly', { defaultValue: 'Read only' });
 
+  // 代理状态行（F4）：只消费已有结构化信号，不在前端做 status_message 自由文本匹配。
+  //  - core 账号视图 warnings 里命中 proxy_url 关键字（machine 真源，core#26/#27 下发）→ unavailable
+  //  - 现有 proxy_url 校验：empty → missing，invalid → unavailable
+  //  - 否则视为 healthy
+  const proxyWarningFromCore = (editor?.warnings || []).some((warning) =>
+    typeof warning === 'string' ? warning.toLowerCase().includes('proxy_url') : false
+  );
+  const proxyStatus: 'missing' | 'unavailable' | 'healthy' = (() => {
+    if (editor?.proxyUrlError === 'empty') return 'missing';
+    if (editor?.proxyUrlError === 'invalid') return 'unavailable';
+    if (proxyWarningFromCore) return 'unavailable';
+    return 'healthy';
+  })();
+  const proxyStatusLabel =
+    proxyStatus === 'missing'
+      ? t('auth_files.account_settings_proxy_status_missing', {
+          defaultValue: 'Missing proxy_url',
+        })
+      : proxyStatus === 'unavailable'
+        ? t('auth_files.account_settings_proxy_status_unavailable', {
+            defaultValue: 'Proxy unavailable',
+          })
+        : t('auth_files.account_settings_proxy_status_healthy', {
+            defaultValue: 'Proxy configured',
+          });
+
   return (
     <Modal
       open={Boolean(editor)}
@@ -1189,216 +1215,8 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
             <>
               {editor.error && <div className={styles.prefixProxyError}>{editor.error}</div>}
 
-              {/* 第 1 区：可编辑账号设置（proxy_url / note / disabled / refresh / 3 个 JSON 覆盖） */}
-              <section
-                className={`${styles.accountSettingsSection} ${styles.accountSettingsSectionEditable}`}
-                data-testid="account-settings-section-editable"
-              >
-                <header className={styles.accountSettingsSectionHeader}>
-                  <div>
-                    <strong>
-                      {t('auth_files.account_settings_section_editable', {
-                        defaultValue: 'Editable account settings',
-                      })}
-                    </strong>
-                    <p>
-                      {t('auth_files.account_settings_section_editable_desc', {
-                        defaultValue:
-                          'Only the fields in this section are written by Save (per-account PATCH).',
-                      })}
-                    </p>
-                  </div>
-                  <span className={styles.accountSettingsSectionBadge}>
-                    {t('auth_files.account_settings_section_editable_badge', {
-                      defaultValue: 'Editable',
-                    })}
-                  </span>
-                </header>
-
-                <div className={styles.accountSettingsToggleGrid}>
-                  <div className={styles.accountSettingsToggleCard}>
-                    <div className={styles.accountSettingsToggleCardTop}>
-                      <label>
-                        {t('auth_files.status_toggle_label', { defaultValue: 'Enabled' })}
-                      </label>
-                      <ToggleSwitch
-                        checked={!editor.disabled}
-                        disabled={disableControls || editor.saving}
-                        testId="account-settings-enabled-toggle"
-                        ariaLabel={t('auth_files.status_toggle_label', {
-                          defaultValue: 'Enabled',
-                        })}
-                        onChange={(enabled) => onChange('disabled', !enabled)}
-                      />
-                    </div>
-                    <div className="hint">
-                      {t('auth_files.account_settings_enabled_hint', {
-                        defaultValue:
-                          'On means this account can be selected by runtime. Turning it off writes disabled=true without deleting data.',
-                      })}
-                    </div>
-                  </div>
-
-                  <div className={styles.accountSettingsToggleCard}>
-                    <div className={styles.accountSettingsToggleCardTop}>
-                      <label>
-                        {t('auth_files.account_settings_refresh_enabled', {
-                          defaultValue: 'Automatic token refresh',
-                        })}
-                      </label>
-                      <ToggleSwitch
-                        checked={editor.refreshEnabled}
-                        disabled={disableControls || editor.saving}
-                        testId="account-settings-refresh-enabled-toggle"
-                        ariaLabel={t('auth_files.account_settings_refresh_enabled', {
-                          defaultValue: 'Automatic token refresh',
-                        })}
-                        onChange={(value) => onChange('refreshEnabled', value)}
-                      />
-                    </div>
-                    <div className="hint">
-                      {t('auth_files.account_settings_refresh_enabled_hint', {
-                        defaultValue:
-                          'Keep enabled for normal accounts. Turn it off only for access-token-only testing or controlled migration so this core will not use a refresh token held by another runtime.',
-                      })}
-                    </div>
-                  </div>
-                </div>
-
-                <Input
-                  label={t('auth_files.proxy_url_required_label', {
-                    defaultValue: 'Proxy URL (proxy_url) *',
-                  })}
-                  value={editor.proxyUrl}
-                  placeholder={t('auth_files.proxy_url_placeholder')}
-                  hint={t('auth_files.proxy_url_required_hint', {
-                    defaultValue:
-                      'Required. Each account must route outbound traffic through its own residential proxy (http/https/socks5). Leaving it empty would expose your real IP, so core rejects empty/invalid proxy_url.',
-                  })}
-                  error={
-                    editor.proxyUrlError
-                      ? editor.proxyUrlError === 'empty'
-                        ? t('auth_files.proxy_url_required_error', {
-                            defaultValue: 'Proxy URL is required. Enter a residential proxy URL.',
-                          })
-                        : t('auth_files.proxy_url_invalid_error', {
-                            defaultValue:
-                              'Invalid proxy URL. Use a full URL such as socks5://user:pass@host:port.',
-                          })
-                      : undefined
-                  }
-                  disabled={disableControls || editor.saving}
-                  data-testid="account-settings-proxy-url-input"
-                  onChange={(e) => onChange('proxyUrl', e.target.value)}
-                />
-
-                <Input
-                  label={t('auth_files.note_label')}
-                  value={editor.note}
-                  placeholder={t('auth_files.note_placeholder')}
-                  hint={t('auth_files.note_hint')}
-                  disabled={disableControls || editor.saving}
-                  data-testid="account-settings-note-input"
-                  onChange={(e) => onChange('note', e.target.value)}
-                />
-
-                <div className={styles.accountSettingsSubheading}>
-                  {t('auth_files.account_settings_editable_advanced', {
-                    defaultValue: 'Advanced overrides (JSON)',
-                  })}
-                </div>
-
-                <div className="form-group">
-                  <label>
-                    {t('auth_files.account_settings_extra_headers', {
-                      defaultValue: 'Extra headers (advanced)',
-                    })}
-                  </label>
-                  <EditableJsonCodeField
-                    value={editor.extraHeadersText}
-                    placeholder={`{\n  "X-Team": "core"\n}`}
-                    invalid={Boolean(editor.extraHeadersError)}
-                    disabled={disableControls || editor.saving}
-                    testId="account-settings-extra-headers-editor"
-                    theme={resolvedTheme}
-                    onChange={(value) => onChange('extraHeadersText', value)}
-                  />
-                  {editor.extraHeadersError && (
-                    <div className="error-box">{editor.extraHeadersError}</div>
-                  )}
-                  <div
-                    className={styles.accountSettingsJsonExample}
-                    data-testid="account-settings-extra-headers-example"
-                  >
-                    <span>
-                      {t('auth_files.account_settings_extra_headers_example_label', {
-                        defaultValue: 'Example',
-                      })}
-                    </span>
-                    <code>{'{ "X-Team": "core" }'}</code>
-                  </div>
-                  <div className="hint">
-                    {t('auth_files.account_settings_extra_headers_hint', {
-                      defaultValue:
-                        'Editable JSON for user-owned additive headers only. Do not copy core-managed provider/version headers here; conflicts with managed or protocol-reserved headers are rejected by the core API.',
-                    })}
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label>
-                    {t('auth_files.account_settings_transport_profile', {
-                      defaultValue: 'Transport profile',
-                    })}
-                  </label>
-                  <EditableJsonCodeField
-                    value={editor.transportProfileText}
-                    placeholder={`Leave empty for core default transport.\nClaude CLI example:\n{\n  "preset": "claude_cli_clienthello_v1"\n}`}
-                    invalid={Boolean(editor.transportProfileError)}
-                    disabled={disableControls || editor.saving}
-                    testId="account-settings-transport-profile-editor"
-                    theme={resolvedTheme}
-                    onChange={(value) => onChange('transportProfileText', value)}
-                  />
-                  {editor.transportProfileError && (
-                    <div className="error-box">{editor.transportProfileError}</div>
-                  )}
-                  <div className="hint">
-                    {t('auth_files.account_settings_transport_profile_hint', {
-                      defaultValue:
-                        'Leave empty for the core default transport. Claude defaults to claude_cli_clienthello_v1, replicating the real claude-cli Node/OpenSSL ClientHello (target JA3 e97f5146, ALPN http/1.1 only); legacy reqwest/rustls and Chrome-like uTLS presets such as claude_utls_chrome_133 are explicit opt-in only. Codex follows codex-proxy-compatible transport with Go approximation until the Rust sidecar is added.',
-                    })}
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label>
-                    {t('auth_files.account_settings_tls_profile', {
-                      defaultValue: 'TLS profile',
-                    })}
-                  </label>
-                  <EditableJsonCodeField
-                    value={editor.tlsProfileText}
-                    placeholder={`Leave empty for core default TLS.\nClaude CLI example:\n{\n  "preset": "claude_cli_clienthello_v1"\n}`}
-                    invalid={Boolean(editor.tlsProfileError)}
-                    disabled={disableControls || editor.saving}
-                    testId="account-settings-tls-profile-editor"
-                    theme={resolvedTheme}
-                    onChange={(value) => onChange('tlsProfileText', value)}
-                  />
-                  {editor.tlsProfileError && (
-                    <div className="error-box">{editor.tlsProfileError}</div>
-                  )}
-                  <div className="hint">
-                    {t('auth_files.account_settings_tls_profile_hint', {
-                      defaultValue:
-                        'Leave empty for the core default TLS behavior. Claude default TLS is claude_cli_clienthello_v1, a uTLS HelloCustom replicating the real claude-cli Node/OpenSSL ClientHello (target JA3 e97f5146, ALPN http/1.1 only); legacy reqwest/rustls and old Chrome-like aliases remain explicit opt-in only. Codex can enforce Go transport knobs, but exact Rust wire parity is not shipped yet.',
-                    })}
-                  </div>
-                </div>
-              </section>
-
-              {/* 第 2 区：只读身份模型（device_id、A/B 投影、header 策略、运行时身份） */}
+              {/* 第 1 区（只读·信息）：身份模型（device_id、A/B 投影、header 策略、运行时身份）。
+                  IA：先看信息，再填设置，故只读身份信息前置于可编辑账号设置之前。 */}
               <section
                 className={styles.accountSettingsSection}
                 data-testid="account-settings-section-identity"
@@ -1718,7 +1536,7 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                 )}
               </section>
 
-              {/* 第 3 区：身份变更审计（managed_header_state.history，按变更类型分类） */}
+              {/* 第 2 区（只读·信息）：身份变更审计（managed_header_state.history，按变更类型分类） */}
               <section
                 className={styles.accountSettingsSection}
                 data-testid="account-settings-section-audit"
@@ -1840,6 +1658,280 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                   )}
                 </div>
               </section>
+
+              {/* 第 3 区（可编辑·设置）：账号设置（enabled/refresh → proxy_url + 代理状态行 → note → 折叠的高级覆盖 JSON）。
+                  输入/覆盖类操作放在只读信息之后，符合「先看信息、再填设置」的信息架构。 */}
+              <section
+                className={`${styles.accountSettingsSection} ${styles.accountSettingsSectionEditable}`}
+                data-testid="account-settings-section-editable"
+              >
+                <header className={styles.accountSettingsSectionHeader}>
+                  <div>
+                    <strong>
+                      {t('auth_files.account_settings_section_editable', {
+                        defaultValue: 'Editable account settings',
+                      })}
+                    </strong>
+                    <p>
+                      {t('auth_files.account_settings_section_editable_desc', {
+                        defaultValue:
+                          'Only the fields in this section are written by Save (per-account PATCH).',
+                      })}
+                    </p>
+                  </div>
+                  <span className={styles.accountSettingsSectionBadge}>
+                    {t('auth_files.account_settings_section_editable_badge', {
+                      defaultValue: 'Editable',
+                    })}
+                  </span>
+                </header>
+
+                <div className={styles.accountSettingsToggleGrid}>
+                  <div className={styles.accountSettingsToggleCard}>
+                    <div className={styles.accountSettingsToggleCardTop}>
+                      <label>
+                        {t('auth_files.status_toggle_label', { defaultValue: 'Enabled' })}
+                      </label>
+                      <ToggleSwitch
+                        checked={!editor.disabled}
+                        disabled={disableControls || editor.saving}
+                        testId="account-settings-enabled-toggle"
+                        ariaLabel={t('auth_files.status_toggle_label', {
+                          defaultValue: 'Enabled',
+                        })}
+                        onChange={(enabled) => onChange('disabled', !enabled)}
+                      />
+                    </div>
+                    <div className="hint">
+                      {t('auth_files.account_settings_enabled_hint', {
+                        defaultValue:
+                          'On means this account can be selected by runtime. Turning it off writes disabled=true without deleting data.',
+                      })}
+                    </div>
+                  </div>
+
+                  <div className={styles.accountSettingsToggleCard}>
+                    <div className={styles.accountSettingsToggleCardTop}>
+                      <label>
+                        {t('auth_files.account_settings_refresh_enabled', {
+                          defaultValue: 'Automatic token refresh',
+                        })}
+                      </label>
+                      <ToggleSwitch
+                        checked={editor.refreshEnabled}
+                        disabled={disableControls || editor.saving}
+                        testId="account-settings-refresh-enabled-toggle"
+                        ariaLabel={t('auth_files.account_settings_refresh_enabled', {
+                          defaultValue: 'Automatic token refresh',
+                        })}
+                        onChange={(value) => onChange('refreshEnabled', value)}
+                      />
+                    </div>
+                    <div className="hint">
+                      {t('auth_files.account_settings_refresh_enabled_hint', {
+                        defaultValue:
+                          'Keep enabled for normal accounts. Turn it off only for access-token-only testing or controlled migration so this core will not use a refresh token held by another runtime.',
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                <Input
+                  label={t('auth_files.proxy_url_required_label', {
+                    defaultValue: 'Proxy URL (proxy_url) *',
+                  })}
+                  value={editor.proxyUrl}
+                  placeholder={t('auth_files.proxy_url_placeholder')}
+                  hint={t('auth_files.proxy_url_required_hint', {
+                    defaultValue:
+                      'Required. Each account must route outbound traffic through its own residential proxy (http/https/socks5). Leaving it empty would expose your real IP, so core rejects empty/invalid proxy_url.',
+                  })}
+                  error={
+                    editor.proxyUrlError
+                      ? editor.proxyUrlError === 'empty'
+                        ? t('auth_files.proxy_url_required_error', {
+                            defaultValue: 'Proxy URL is required. Enter a residential proxy URL.',
+                          })
+                        : t('auth_files.proxy_url_invalid_error', {
+                            defaultValue:
+                              'Invalid proxy URL. Use a full URL such as socks5://user:pass@host:port.',
+                          })
+                      : undefined
+                  }
+                  disabled={disableControls || editor.saving}
+                  data-testid="account-settings-proxy-url-input"
+                  onChange={(e) => onChange('proxyUrl', e.target.value)}
+                />
+
+                <div
+                  className={styles.accountSettingsProxyStatusRow}
+                  data-testid="account-settings-proxy-status-row"
+                >
+                  <span className={styles.accountSettingsProxyStatusLabel}>
+                    {t('auth_files.account_settings_proxy_status_label', {
+                      defaultValue: 'Proxy status',
+                    })}
+                  </span>
+                  <span
+                    className={`${styles.accountSettingsProxyStatusPill} ${
+                      proxyStatus === 'healthy'
+                        ? styles.accountSettingsProxyStatusHealthy
+                        : styles.accountSettingsProxyStatusWarning
+                    }`}
+                    data-testid="account-settings-proxy-status-pill"
+                    data-proxy-status={proxyStatus}
+                  >
+                    {proxyStatusLabel}
+                  </span>
+                </div>
+
+                <Input
+                  label={t('auth_files.note_label')}
+                  value={editor.note}
+                  placeholder={t('auth_files.note_placeholder')}
+                  hint={t('auth_files.note_hint')}
+                  disabled={disableControls || editor.saving}
+                  data-testid="account-settings-note-input"
+                  onChange={(e) => onChange('note', e.target.value)}
+                />
+
+                <details
+                  className={styles.prefixProxyAdvancedDetails}
+                  data-testid="account-settings-editable-advanced-details"
+                >
+                  <summary>
+                    {t('auth_files.account_settings_editable_advanced', {
+                      defaultValue: 'Advanced overrides (JSON)',
+                    })}
+                  </summary>
+                  <div className={styles.prefixProxyAdvancedBody}>
+                    <div className="hint">
+                      {t('auth_files.account_settings_editable_advanced_hint', {
+                        defaultValue:
+                          'Optional power-user overrides. Most accounts only need Enabled, Automatic token refresh, Proxy URL and Note above; leave these collapsed unless you know you need them.',
+                      })}
+                    </div>
+
+                    <div className="form-group">
+                      <label>
+                        {t('auth_files.account_settings_extra_headers', {
+                          defaultValue: 'Extra headers (advanced)',
+                        })}
+                      </label>
+                  <EditableJsonCodeField
+                    value={editor.extraHeadersText}
+                    placeholder={`{\n  "X-Team": "core"\n}`}
+                    invalid={Boolean(editor.extraHeadersError)}
+                    disabled={disableControls || editor.saving}
+                    testId="account-settings-extra-headers-editor"
+                    theme={resolvedTheme}
+                    onChange={(value) => onChange('extraHeadersText', value)}
+                  />
+                  {editor.extraHeadersError && (
+                    <div className="error-box">{editor.extraHeadersError}</div>
+                  )}
+                  <div
+                    className={styles.accountSettingsJsonExample}
+                    data-testid="account-settings-extra-headers-example"
+                  >
+                    <span>
+                      {t('auth_files.account_settings_extra_headers_example_label', {
+                        defaultValue: 'Example',
+                      })}
+                    </span>
+                    <code>{'{ "X-Team": "core" }'}</code>
+                  </div>
+                  <div className="hint">
+                    {t('auth_files.account_settings_extra_headers_hint', {
+                      defaultValue:
+                        'Editable JSON for user-owned additive headers only. Do not copy core-managed provider/version headers here; conflicts with managed or protocol-reserved headers are rejected by the core API.',
+                    })}
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label>
+                    {t('auth_files.account_settings_transport_profile', {
+                      defaultValue: 'Transport profile',
+                    })}
+                  </label>
+                  <EditableJsonCodeField
+                    value={editor.transportProfileText}
+                    placeholder={`Leave empty for core default transport.\nClaude CLI example:\n{\n  "preset": "claude_cli_clienthello_v1"\n}`}
+                    invalid={Boolean(editor.transportProfileError)}
+                    disabled={disableControls || editor.saving}
+                    testId="account-settings-transport-profile-editor"
+                    theme={resolvedTheme}
+                    onChange={(value) => onChange('transportProfileText', value)}
+                  />
+                  {editor.transportProfileError && (
+                    <div className="error-box">{editor.transportProfileError}</div>
+                  )}
+                  <div className="hint">
+                    {t('auth_files.account_settings_transport_profile_hint', {
+                      defaultValue:
+                        'Leave empty for the core default transport. Claude defaults to claude_cli_clienthello_v1, replicating the real claude-cli Node/OpenSSL ClientHello (target JA3 e97f5146, ALPN http/1.1 only); legacy reqwest/rustls and Chrome-like uTLS presets such as claude_utls_chrome_133 are explicit opt-in only. Codex follows codex-proxy-compatible transport with Go approximation until the Rust sidecar is added.',
+                    })}
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label>
+                    {t('auth_files.account_settings_tls_profile', {
+                      defaultValue: 'TLS profile',
+                    })}
+                  </label>
+                  <EditableJsonCodeField
+                    value={editor.tlsProfileText}
+                    placeholder={`Leave empty for core default TLS.\nClaude CLI example:\n{\n  "preset": "claude_cli_clienthello_v1"\n}`}
+                    invalid={Boolean(editor.tlsProfileError)}
+                    disabled={disableControls || editor.saving}
+                    testId="account-settings-tls-profile-editor"
+                    theme={resolvedTheme}
+                    onChange={(value) => onChange('tlsProfileText', value)}
+                  />
+                  {editor.tlsProfileError && (
+                    <div className="error-box">{editor.tlsProfileError}</div>
+                  )}
+                  <div className="hint">
+                    {t('auth_files.account_settings_tls_profile_hint', {
+                      defaultValue:
+                        'Leave empty for the core default TLS behavior. Claude default TLS is claude_cli_clienthello_v1, a uTLS HelloCustom replicating the real claude-cli Node/OpenSSL ClientHello (target JA3 e97f5146, ALPN http/1.1 only); legacy reqwest/rustls and old Chrome-like aliases remain explicit opt-in only. Codex can enforce Go transport knobs, but exact Rust wire parity is not shipped yet.',
+                    })}
+                  </div>
+                    </div>
+                  </div>
+                </details>
+              </section>
+
+              {/* 保存摘要（F7）：仅在 dirty 时展示「本次将保存」轻量预览，靠近底部 Save 区。 */}
+              {dirty && (
+                <div
+                  className={styles.accountSettingsSavePreview}
+                  data-testid="account-settings-save-summary"
+                >
+                  <div className={styles.accountSettingsSavePreviewHeader}>
+                    <strong>
+                      {t('auth_files.account_settings_save_summary_label', {
+                        defaultValue: 'Will be saved',
+                      })}
+                    </strong>
+                    <span className={styles.managedHeaderMeta}>
+                      {t('auth_files.account_settings_save_summary_hint', {
+                        defaultValue:
+                          'Preview of the per-account PATCH that Save will send right now.',
+                      })}
+                    </span>
+                  </div>
+                  <ReadOnlyCodeViewer
+                    value={updatedText}
+                    minRows={6}
+                    testId="account-settings-save-summary-viewer"
+                    label={readonlyBadge}
+                    onCopyText={onCopyText}
+                  />
+                </div>
+              )}
 
               {/* 末区：高级原始 JSON 预览（debug 用途，折叠） */}
               <details
