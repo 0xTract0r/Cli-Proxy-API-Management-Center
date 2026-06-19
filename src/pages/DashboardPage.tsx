@@ -281,7 +281,8 @@ export function DashboardPage() {
     currentTime,
     {
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
+      withZoneLabel: true
     },
     i18n.language
   );

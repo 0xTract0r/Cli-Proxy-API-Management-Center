@@ -84,7 +84,7 @@ import {
   isXaiFile,
 } from '@/utils/quota';
 import { normalizeAuthIndex } from '@/utils/authIndex';
-import { formatInUtc8 } from '@/utils/datetime';
+import { formatInUtc8, UTC8_PAREN_LABEL } from '@/utils/datetime';
 import type { QuotaRenderHelpers } from './QuotaCard';
 import styles from '@/pages/QuotaPage.module.scss';
 
@@ -240,7 +240,8 @@ const formatCoreQuotaSnapshotLabel = (
   if (next) {
     parts.push(t('quota_management.snapshot_next_refresh', { time: next }));
   }
-  return parts.length > 0 ? parts.join(' / ') : null;
+  // 两个时间合并成一行时，只在末尾追加一个 (UTC+8) 说明，避免每个时间都带标注显得啰嗦。
+  return parts.length > 0 ? `${parts.join(' / ')} ${UTC8_PAREN_LABEL}` : null;
 };
 
 const resolveAntigravityProjectId = async (file: AuthFileItem): Promise<string> => {

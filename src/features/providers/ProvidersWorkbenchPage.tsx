@@ -35,7 +35,12 @@ const formatDateTime = (iso: string, locale?: string) => {
     const date = new Date(iso);
     if (Number.isNaN(date.getTime())) return iso;
     // 展示一律 UTC+8（Asia/Shanghai），不跟随浏览器本地时区。
-    return formatInUtc8(date, { dateStyle: 'medium', timeStyle: 'short' }, locale, iso);
+    return formatInUtc8(
+      date,
+      { dateStyle: 'medium', timeStyle: 'short', withZoneLabel: true },
+      locale,
+      iso
+    );
   } catch {
     return iso;
   }

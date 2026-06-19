@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import type { ChartData } from '@/utils/usage';
 import { getHourChartMinWidth } from '@/utils/usage/chartConfig';
+import { UTC8_PAREN_LABEL } from '@/utils/datetime';
 import styles from '@/pages/UsagePage.module.scss';
 
 export interface UsageChartProps {
@@ -35,6 +36,10 @@ export function UsageChart({
       title={title}
       extra={
         <div className={styles.periodButtons}>
+          {/* 图表横轴时间一律 UTC+8；此处统一标注一次，不在每个刻度上重复 */}
+          <span className={styles.axisZoneNote} aria-label={`Time zone ${UTC8_PAREN_LABEL}`}>
+            {UTC8_PAREN_LABEL}
+          </span>
           <Button
             variant={period === 'hour' ? 'primary' : 'secondary'}
             size="sm"
