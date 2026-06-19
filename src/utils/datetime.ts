@@ -13,6 +13,24 @@
 export const DISPLAY_TIME_ZONE = 'Asia/Shanghai';
 
 /**
+ * 面向用户的时区标注文案。用户环境固定 UTC+8（Asia/Shanghai）。
+ *
+ * Intl 的 `timeZoneName: 'shortOffset'` 会输出 `GMT+8`，与用户期望的 `UTC+8`
+ * 字样不一致，因此这里统一用手工常量在格式化结果后追加，保证用户在界面上看到
+ * 的就是 `UTC+8`。内部状态、查询参数（since）、导出仍是 UTC，不使用本标注。
+ */
+export const UTC8_LABEL = 'UTC+8';
+
+/** 带括号的时区标注，用于图表标题/轴说明这类单点说明位。 */
+export const UTC8_PAREN_LABEL = `(${UTC8_LABEL})`;
+
+/** 在已格式化的展示串后追加 ` UTC+8`；空串/解析失败回退串不追加，避免污染。 */
+function appendUtc8Label(formatted: string): string {
+  if (!formatted) return formatted;
+  return `${formatted} ${UTC8_LABEL}`;
+}
+
+/**
  * 把任意可解析为时间的值转换成 Date；无法解析时返回 null。
  * 支持：Date、毫秒数（number）、ISO/RFC3339 字符串、数字字符串。
  * 注意：此函数不处理秒/微秒/纳秒等多精度 Unix 戳，那由调用方在传入前归一化。
@@ -41,60 +59,79 @@ function withDisplayTimeZone(
 /**
  * 通用：把一个时间值按 UTC+8 格式化为字符串。
  * @param value 时间值（Date/number ms/ISO 字符串）
- * @param options Intl 选项（timeZone 会被强制覆盖为 Asia/Shanghai）
+ * @param options Intl 选项（timeZone 会被强制覆盖为 Asia/Shanghai）；可选 `withZoneLabel`
+ *   为 true 时在结果后追加 ` UTC+8` 标注（绝对时间戳的面向用户展示场景用）
  * @param locale 区域；不传则用运行时默认
  * @param fallback 解析失败时的占位串
  */
 export function formatInUtc8(
   value: unknown,
-  options?: Intl.DateTimeFormatOptions,
+  options?: Intl.DateTimeFormatOptions & { withZoneLabel?: boolean },
   locale?: string,
   fallback = ''
 ): string {
   const date = toDate(value);
   if (!date) return fallback;
-  return new Intl.DateTimeFormat(locale, withDisplayTimeZone(options)).format(date);
+  const { withZoneLabel, ...intlOptions } = options ?? {};
+  const formatted = new Intl.DateTimeFormat(
+    locale,
+    withDisplayTimeZone(intlOptions)
+  ).format(date);
+  return withZoneLabel ? appendUtc8Label(formatted) : formatted;
 }
 
-/** 等价于 `date.toLocaleString()`，但强制 UTC+8。 */
+/**
+ * 等价于 `date.toLocaleString()`，但强制 UTC+8。
+ * 面向用户的绝对时间戳，默认追加 ` UTC+8` 标注；传 `withZoneLabel = false` 可关闭
+ * （例如紧凑/拼接场景）。
+ */
 export function formatDateTimeUtc8(
   value: unknown,
   locale?: string,
-  fallback = ''
+  fallback = '',
+  withZoneLabel = true
 ): string {
   return formatInUtc8(
     value,
-    { dateStyle: 'medium', timeStyle: 'medium' },
+    { dateStyle: 'medium', timeStyle: 'medium', withZoneLabel },
     locale,
     fallback
   );
 }
 
-/** 仅日期，强制 UTC+8。等价于 `toLocaleDateString()`。 */
+/**
+ * 仅日期，强制 UTC+8。等价于 `toLocaleDateString()`。
+ * 纯日期默认不带 ` UTC+8`（无时刻，时区标注意义不大）；需要时传 `withZoneLabel = true`。
+ */
 export function formatDateUtc8(
   value: unknown,
   options?: Intl.DateTimeFormatOptions,
   locale?: string,
-  fallback = ''
+  fallback = '',
+  withZoneLabel = false
 ): string {
   return formatInUtc8(
     value,
-    options ?? { dateStyle: 'medium' },
+    { ...(options ?? { dateStyle: 'medium' }), withZoneLabel },
     locale,
     fallback
   );
 }
 
-/** 仅时间，强制 UTC+8。等价于 `toLocaleTimeString()`。 */
+/**
+ * 仅时间，强制 UTC+8。等价于 `toLocaleTimeString()`。
+ * 面向用户的时刻默认追加 ` UTC+8` 标注；传 `withZoneLabel = false` 可关闭。
+ */
 export function formatTimeUtc8(
   value: unknown,
   options?: Intl.DateTimeFormatOptions,
   locale?: string,
-  fallback = ''
+  fallback = '',
+  withZoneLabel = true
 ): string {
   return formatInUtc8(
     value,
-    options ?? { hour: '2-digit', minute: '2-digit' },
+    { ...(options ?? { hour: '2-digit', minute: '2-digit' }), withZoneLabel },
     locale,
     fallback
   );

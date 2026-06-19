@@ -18,7 +18,12 @@ const formatOccurredAt = (value: string | undefined, locale: string) => {
   const parsed = Date.parse(raw);
   if (Number.isNaN(parsed)) return raw;
   // 展示一律 UTC+8（Asia/Shanghai），不跟随浏览器本地时区。
-  return formatInUtc8(parsed, { dateStyle: 'medium', timeStyle: 'short' }, locale || undefined, raw);
+  return formatInUtc8(
+    parsed,
+    { dateStyle: 'medium', timeStyle: 'short', withZoneLabel: true },
+    locale || undefined,
+    raw
+  );
 };
 
 const resolveStatusVariant = (eventType: string) => {

@@ -32,7 +32,12 @@ import styles from '@/pages/AuthFilesPage.module.scss';
 function formatAuditRecordedAt(value: string | undefined): string {
   const raw = String(value ?? '').trim();
   if (!raw) return '-';
-  return formatInUtc8(raw, { dateStyle: 'medium', timeStyle: 'medium' }, undefined, raw);
+  return formatInUtc8(
+    raw,
+    { dateStyle: 'medium', timeStyle: 'medium', withZoneLabel: true },
+    undefined,
+    raw
+  );
 }
 
 export type AuthFilesPrefixProxyEditorModalProps = {

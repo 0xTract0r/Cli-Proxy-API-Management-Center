@@ -953,7 +953,16 @@
 
 .periodButtons {
   display: flex;
+  align-items: center;
   gap: 6px;
+}
+
+// 图表横轴 UTC+8 统一标注（不在每个刻度重复），用次级文字弱化展示
+.axisZoneNote {
+  margin-right: 2px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .chartsGrid {

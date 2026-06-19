@@ -11,6 +11,7 @@ import {
   type ModelPrice
 } from '@/utils/usage';
 import { buildChartOptions, getHourChartMinWidth } from '@/utils/usage/chartConfig';
+import { UTC8_PAREN_LABEL } from '@/utils/datetime';
 import type { UsagePayload } from './hooks/useUsageData';
 import styles from '@/pages/UsagePage.module.scss';
 
@@ -99,6 +100,10 @@ export function CostTrendChart({
       title={t('usage_stats.cost_trend')}
       extra={
         <div className={styles.periodButtons}>
+          {/* 图表横轴时间一律 UTC+8；此处统一标注一次，不在每个刻度上重复 */}
+          <span className={styles.axisZoneNote} aria-label={`Time zone ${UTC8_PAREN_LABEL}`}>
+            {UTC8_PAREN_LABEL}
+          </span>
           <Button
             variant={period === 'hour' ? 'primary' : 'secondary'}
             size="sm"
