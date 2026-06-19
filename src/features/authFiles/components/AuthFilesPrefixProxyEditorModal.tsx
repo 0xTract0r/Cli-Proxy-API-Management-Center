@@ -22,7 +22,18 @@ import type {
   AuthFileManagedHeaderHistoryEntry,
 } from '@/types/authFile';
 import { useThemeStore } from '@/stores';
+import { formatInUtc8 } from '@/utils/datetime';
 import styles from '@/pages/AuthFilesPage.module.scss';
+
+/**
+ * 审计时间戳 `recorded_at` 是后端原样 UTC 串（带 T/Z）。展示时一律转成
+ * UTC+8（Asia/Shanghai）；无法解析时回退原串，空值显示 '-'。
+ */
+function formatAuditRecordedAt(value: string | undefined): string {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '-';
+  return formatInUtc8(raw, { dateStyle: 'medium', timeStyle: 'medium' }, undefined, raw);
+}
 
 export type AuthFilesPrefixProxyEditorModalProps = {
   disableControls: boolean;
@@ -849,7 +860,7 @@ function IdentityAuditEntry({
     <div className={entryClassName} data-testid={`account-settings-identity-audit-entry-${variant}`}>
       <div className={styles.managedHeaderHistorySummary}>
         <div className={styles.managedHeaderHistoryMeta}>
-          <strong>{entry.recorded_at || '-'}</strong>
+          <strong>{formatAuditRecordedAt(entry.recorded_at)}</strong>
           <span>{identityAuditReasonLabel(entry.reason, t)}</span>
           {sourceLabel && (
             <span
@@ -914,7 +925,7 @@ function IdentityAuditEntry({
                 defaultValue: 'Recorded at',
               })}
             </span>
-            <strong>{entry.recorded_at || '-'}</strong>
+            <strong>{formatAuditRecordedAt(entry.recorded_at)}</strong>
           </div>
           <div className={styles.managedHeaderHistoryDetailItem}>
             <span>

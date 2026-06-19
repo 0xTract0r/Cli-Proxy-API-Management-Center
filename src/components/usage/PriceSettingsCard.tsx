@@ -12,6 +12,7 @@ import type {
   PricingSourceSnapshot,
   UsagePricingSnapshot
 } from '@/services/api/usage';
+import { formatDateTimeUtc8 } from '@/utils/datetime';
 import styles from '@/pages/UsagePage.module.scss';
 
 export interface PriceSettingsCardProps {
@@ -46,7 +47,7 @@ const formatTimestamp = (value?: string) => {
   if (date.getUTCFullYear() <= 1) {
     return '-';
   }
-  return date.toLocaleString();
+  return formatDateTimeUtc8(date, undefined, value);
 };
 
 const formatPrice = (value?: number) => {

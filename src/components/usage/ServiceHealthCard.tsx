@@ -8,6 +8,7 @@ import {
   type StatusBlockDetail,
 } from '@/utils/usage';
 import type { UsagePayload } from './hooks/useUsageData';
+import { formatSlashDateTimeUtc8 } from '@/utils/datetime';
 import styles from '@/pages/UsagePage.module.scss';
 
 const COLOR_STOPS = [
@@ -46,12 +47,8 @@ function rateToColor(rate: number): string {
 }
 
 function formatDateTime(timestamp: number): string {
-  const date = new Date(timestamp);
-  const month = (date.getMonth() + 1).toString().padStart(2, '0');
-  const day = date.getDate().toString().padStart(2, '0');
-  const h = date.getHours().toString().padStart(2, '0');
-  const m = date.getMinutes().toString().padStart(2, '0');
-  return `${month}/${day} ${h}:${m}`;
+  // 展示一律 UTC+8（Asia/Shanghai），不跟随浏览器本地时区。
+  return formatSlashDateTimeUtc8(timestamp);
 }
 
 export interface ServiceHealthCardProps {

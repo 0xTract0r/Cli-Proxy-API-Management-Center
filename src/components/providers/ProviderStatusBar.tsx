@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { StatusBarData, StatusBlockDetail } from '@/utils/recentRequests';
+import { formatShortClockUtc8 } from '@/utils/datetime';
 
 const defaultStyles: Record<string, string> = {};
 
@@ -27,10 +28,8 @@ function rateToColor(rate: number): string {
 }
 
 function formatTime(timestamp: number): string {
-  const date = new Date(timestamp);
-  const h = date.getHours().toString().padStart(2, '0');
-  const m = date.getMinutes().toString().padStart(2, '0');
-  return `${h}:${m}`;
+  // 展示一律 UTC+8（Asia/Shanghai），不跟随浏览器本地时区。
+  return formatShortClockUtc8(timestamp);
 }
 
 function formatSuccessRate(rate: number): string {

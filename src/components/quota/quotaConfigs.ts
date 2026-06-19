@@ -84,6 +84,7 @@ import {
   isXaiFile,
 } from '@/utils/quota';
 import { normalizeAuthIndex } from '@/utils/authIndex';
+import { formatInUtc8 } from '@/utils/datetime';
 import type { QuotaRenderHelpers } from './QuotaCard';
 import styles from '@/pages/QuotaPage.module.scss';
 
@@ -218,10 +219,11 @@ const loadCoreQuotaEntry = async (
 const formatCoreQuotaSnapshotTime = (value?: string | null): string | null => {
   const date = parseCoreQuotaTimestamp(value);
   if (!date) return null;
-  return new Intl.DateTimeFormat(undefined, {
+  // 展示一律 UTC+8（Asia/Shanghai），不跟随浏览器本地时区。
+  return formatInUtc8(date, {
     hour: '2-digit',
     minute: '2-digit',
-  }).format(date);
+  });
 };
 
 const formatCoreQuotaSnapshotLabel = (

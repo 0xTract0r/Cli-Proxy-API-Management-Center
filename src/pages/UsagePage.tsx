@@ -43,6 +43,7 @@ import {
   type UsageTimeRange
 } from '@/utils/usage';
 import { isPreviewSampleUsage } from '@/utils/usagePreview';
+import { formatTimeUtc8 } from '@/utils/datetime';
 import styles from './UsagePage.module.scss';
 
 // Register Chart.js components
@@ -322,7 +323,12 @@ export function UsagePage() {
           />
           {lastRefreshedAt && (
             <span className={styles.lastRefreshed}>
-              {t('usage_stats.last_updated')}: {lastRefreshedAt.toLocaleTimeString()}
+              {t('usage_stats.last_updated')}:{' '}
+              {formatTimeUtc8(lastRefreshedAt, {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+              })}
             </span>
           )}
         </div>

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { authFilesApi } from '@/services/api';
 import type { AuthFileItem, AuthFileReauthHistoryEntry } from '@/types';
+import { formatInUtc8 } from '@/utils/datetime';
 import styles from './AuthFilesReauthHistoryPanel.module.scss';
 
 const HISTORY_FETCH_LIMIT = 8;
@@ -16,10 +17,8 @@ const formatOccurredAt = (value: string | undefined, locale: string) => {
   if (!raw) return '';
   const parsed = Date.parse(raw);
   if (Number.isNaN(parsed)) return raw;
-  return new Intl.DateTimeFormat(locale || undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(parsed);
+  // 展示一律 UTC+8（Asia/Shanghai），不跟随浏览器本地时区。
+  return formatInUtc8(parsed, { dateStyle: 'medium', timeStyle: 'short' }, locale || undefined, raw);
 };
 
 const accountTransitionSummary = (event: AuthFileReauthHistoryEntry) => {
