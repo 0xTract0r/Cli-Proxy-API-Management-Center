@@ -12,6 +12,7 @@ import iconQwen from '@/assets/icons/qwen.svg';
 import iconVertex from '@/assets/icons/vertex.svg';
 import type { AuthFileItem } from '@/types';
 import { parseTimestamp } from '@/utils/timestamp';
+import { formatDateTimeUtc8 } from '@/utils/datetime';
 import {
   normalizeAuthIndex,
   normalizeUsageSourceId,
@@ -401,7 +402,7 @@ export const formatModified = (item: AuthFileItem): string => {
     Number.isFinite(asNumber) && !Number.isNaN(asNumber)
       ? new Date(asNumber < 1e12 ? asNumber * 1000 : asNumber)
       : (parseTimestamp(raw) ?? new Date(String(raw)));
-  return Number.isNaN(date.getTime()) ? '-' : date.toLocaleString();
+  return Number.isNaN(date.getTime()) ? '-' : formatDateTimeUtc8(date, undefined, '-');
 };
 
 // 检查模型是否被 OAuth 排除

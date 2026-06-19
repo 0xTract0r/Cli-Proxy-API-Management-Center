@@ -15,6 +15,7 @@ import {
 import { configApi, versionApi } from '@/services/api';
 import { apiKeysApi } from '@/services/api/apiKeys';
 import { classifyModels } from '@/utils/models';
+import { formatDateTimeUtc8 } from '@/utils/datetime';
 import { STORAGE_KEY_AUTH } from '@/utils/constants';
 import { INLINE_LOGO_JPEG } from '@/assets/logoInline';
 import iconGemini from '@/assets/icons/gemini.svg';
@@ -110,7 +111,7 @@ export function SystemPage() {
   const appVersion = __APP_VERSION__ || t('system_info.version_unknown');
   const apiVersion = auth.serverVersion || t('system_info.version_unknown');
   const buildTime = auth.serverBuildDate
-    ? new Date(auth.serverBuildDate).toLocaleString(i18n.language)
+    ? formatDateTimeUtc8(auth.serverBuildDate, i18n.language)
     : t('system_info.version_unknown');
 
   const getIconForCategory = (categoryId: string): string | null => {

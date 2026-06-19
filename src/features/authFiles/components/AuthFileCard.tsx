@@ -16,6 +16,7 @@ import {
 import { ProviderStatusBar } from '@/components/providers/ProviderStatusBar';
 import type { AuthFileItem } from '@/types';
 import { resolveAuthProvider } from '@/utils/quota';
+import { formatDateTimeUtc8 } from '@/utils/datetime';
 import { calculateStatusBarData, normalizeAuthIndex, type KeyStats } from '@/utils/usage';
 import { formatFileSize } from '@/utils/format';
 import {
@@ -224,7 +225,7 @@ export function AuthFileCard(props: AuthFileCardProps) {
     const raw = file.last_cyber_policy_at;
     if (typeof raw !== 'string' || raw.trim() === '') return '';
     const parsed = new Date(raw);
-    return Number.isNaN(parsed.getTime()) ? '' : parsed.toLocaleString();
+    return Number.isNaN(parsed.getTime()) ? '' : formatDateTimeUtc8(parsed);
   })();
   const cyberPolicyMarkerTitle =
     cyberPolicyFlagCount > 0

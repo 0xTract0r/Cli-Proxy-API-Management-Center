@@ -9,6 +9,7 @@ import type { GeminiKeyConfig, ProviderKeyConfig, OpenAIProviderConfig } from '@
 import type { AuthFileItem } from '@/types/authFile';
 import type { CredentialInfo } from '@/types/sourceInfo';
 import { buildSourceInfoMap, resolveSourceDisplay } from '@/utils/sourceResolver';
+import { formatDateTimeUtc8 } from '@/utils/datetime';
 import {
   calculateCacheMetricsFromDetails,
   collectUsageDetails,
@@ -170,7 +171,9 @@ export function RequestEventsDetailsCard({
           id: `${timestamp}-${model}-${sourceRaw || source}-${authIndex}-${index}`,
           timestamp,
           timestampMs: Number.isNaN(timestampMs) ? 0 : timestampMs,
-          timestampLabel: date ? date.toLocaleString(i18n.language) : timestamp || '-',
+          timestampLabel: date
+            ? formatDateTimeUtc8(date, i18n.language)
+            : timestamp || '-',
           model,
           sourceRaw: sourceRaw || '-',
           source,

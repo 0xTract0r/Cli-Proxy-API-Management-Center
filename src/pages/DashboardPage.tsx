@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/icons';
 import { useAuthStore, useConfigStore, useModelsStore } from '@/stores';
 import { apiKeysApi, providersApi, authFilesApi } from '@/services/api';
+import { formatDateUtc8, formatInUtc8 } from '@/utils/datetime';
 import styles from './DashboardPage.module.scss';
 
 interface QuickStat {
@@ -264,17 +265,26 @@ export function DashboardPage() {
   const greetingKey = `dashboard.greeting_${timeOfDay}`;
   const caringKey = `dashboard.caring_${timeOfDay}`;
 
-  const formattedDate = currentTime.toLocaleDateString(i18n.language, {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  });
+  // 展示一律 UTC+8（Asia/Shanghai），不跟随浏览器本地时区。
+  const formattedDate = formatInUtc8(
+    currentTime,
+    {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    },
+    i18n.language
+  );
 
-  const formattedTime = currentTime.toLocaleTimeString(i18n.language, {
-    hour: '2-digit',
-    minute: '2-digit'
-  });
+  const formattedTime = formatInUtc8(
+    currentTime,
+    {
+      hour: '2-digit',
+      minute: '2-digit'
+    },
+    i18n.language
+  );
 
   return (
     <div className={styles.dashboard}>
@@ -323,7 +333,12 @@ export function DashboardPage() {
           </div>
           {serverBuildDate && (
             <span className={styles.buildDate}>
-              {new Date(serverBuildDate).toLocaleDateString(i18n.language)}
+              {formatDateUtc8(
+                serverBuildDate,
+                { year: 'numeric', month: 'numeric', day: 'numeric' },
+                i18n.language,
+                ''
+              )}
             </span>
           )}
         </div>

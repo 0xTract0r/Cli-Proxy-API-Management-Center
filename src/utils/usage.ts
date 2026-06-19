@@ -13,6 +13,7 @@ import {
   finalizeLatencyStats,
 } from './usage/latency';
 import { maskApiKey } from './format';
+import { formatHourAxisUtc8, formatDayAxisUtc8 } from './datetime';
 
 export type { DurationFormatOptions, LatencyStats } from './usage/latency';
 export {
@@ -1334,10 +1335,8 @@ export function formatHourLabel(date: Date): string {
   if (!(date instanceof Date)) {
     return '';
   }
-  const month = (date.getMonth() + 1).toString().padStart(2, '0');
-  const day = date.getDate().toString().padStart(2, '0');
-  const hour = date.getHours().toString().padStart(2, '0');
-  return `${month}-${day} ${hour}:00`;
+  // 图表横轴一律 UTC+8（Asia/Shanghai）展示，不跟随浏览器本地时区。
+  return formatHourAxisUtc8(date);
 }
 
 /**
@@ -1347,10 +1346,8 @@ export function formatDayLabel(date: Date): string {
   if (!(date instanceof Date)) {
     return '';
   }
-  const year = date.getFullYear();
-  const month = (date.getMonth() + 1).toString().padStart(2, '0');
-  const day = date.getDate().toString().padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  // 图表横轴一律 UTC+8（Asia/Shanghai）展示，不跟随浏览器本地时区。
+  return formatDayAxisUtc8(date);
 }
 
 /**

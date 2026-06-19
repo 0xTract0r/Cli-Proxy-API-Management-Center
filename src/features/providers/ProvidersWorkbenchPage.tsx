@@ -18,6 +18,7 @@ import type {
 import { ProviderSheet, type ProviderSheetHandle } from './sheets/ProviderSheet';
 import { useProviderWorkbench } from './useProviderWorkbench';
 import type { ProviderBrand, ProviderResource } from './types';
+import { formatInUtc8 } from '@/utils/datetime';
 import styles from './ProvidersWorkbenchPage.module.scss';
 
 type SheetMode = 'detail' | 'create' | 'edit';
@@ -33,10 +34,8 @@ const formatDateTime = (iso: string, locale?: string) => {
   try {
     const date = new Date(iso);
     if (Number.isNaN(date.getTime())) return iso;
-    return new Intl.DateTimeFormat(locale, {
-      dateStyle: 'medium',
-      timeStyle: 'short',
-    }).format(date);
+    // 展示一律 UTC+8（Asia/Shanghai），不跟随浏览器本地时区。
+    return formatInUtc8(date, { dateStyle: 'medium', timeStyle: 'short' }, locale, iso);
   } catch {
     return iso;
   }

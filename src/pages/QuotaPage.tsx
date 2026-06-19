@@ -19,6 +19,7 @@ import {
   XAI_CONFIG,
 } from '@/components/quota';
 import type { AuthFileItem } from '@/types';
+import { formatInUtc8 } from '@/utils/datetime';
 import styles from './QuotaPage.module.scss';
 
 type NormalizedQuotaRefreshPolicy = {
@@ -109,12 +110,13 @@ const pickQuotaTimestamp = (
 
 const formatRefreshTime = (value: Date | null) => {
   if (!value) return '';
-  return new Intl.DateTimeFormat(undefined, {
+  // 展示一律 UTC+8（Asia/Shanghai），不跟随浏览器本地时区。
+  return formatInUtc8(value, {
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
-  }).format(value);
+  });
 };
 
 export function QuotaPage() {

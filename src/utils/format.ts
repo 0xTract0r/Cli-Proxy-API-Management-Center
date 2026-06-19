@@ -1,4 +1,5 @@
 import { parseTimestamp } from './timestamp';
+import { formatDateTimeUtc8 } from './datetime';
 
 /**
  * 格式化工具函数
@@ -38,7 +39,8 @@ export function formatFileSize(bytes: number): string {
 }
 
 /**
- * 将 Unix 时间戳（秒/毫秒/微秒/纳秒）格式化为本地时间字符串
+ * 将 Unix 时间戳（秒/毫秒/微秒/纳秒）格式化为 UTC+8 时间字符串。
+ * 注意：展示一律走 Asia/Shanghai，不跟随浏览器本地时区。
  */
 export function formatUnixTimestamp(value: unknown, locale?: string): string {
   if (value === null || value === undefined || value === '') return '';
@@ -65,5 +67,5 @@ export function formatUnixTimestamp(value: unknown, locale?: string): string {
   })();
 
   if (Number.isNaN(date.getTime())) return '';
-  return locale ? date.toLocaleString(locale) : date.toLocaleString();
+  return formatDateTimeUtc8(date, locale);
 }
