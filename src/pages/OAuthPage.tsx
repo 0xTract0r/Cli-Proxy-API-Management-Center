@@ -155,9 +155,9 @@ const FINGERPRINT_PRESETS: Record<
   { profile: string; tls: string; headers: string }
 > = {
   codex: {
-    profile: 'codex_proxy_compatible_v1',
-    tls: 'codex_proxy_compatible_v1',
-    headers: 'Codex Desktop managed headers',
+    profile: 'codex_rustls_native_v1',
+    tls: 'codex_rustls_native_v1',
+    headers: 'Codex CLI native request identity',
   },
   anthropic: {
     profile: 'claude_cli_clienthello_v1',

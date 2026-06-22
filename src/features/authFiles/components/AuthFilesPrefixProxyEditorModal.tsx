@@ -601,6 +601,8 @@ function RuntimeTlsSummary({
   const provider = readString(runtimeProfile, 'provider');
   const tlsStatus = readString(runtimeProfile, 'tls_status');
   const transportStatus = readString(runtimeProfile, 'transport_status');
+  const tlsFamily = readString(runtimeProfile, 'tls_family');
+  const transportKind = readString(runtimeProfile, 'transport_kind');
   const isClaude = provider.toLowerCase() === 'claude';
   const isCodex = provider.toLowerCase() === 'codex';
 
@@ -616,7 +618,8 @@ function RuntimeTlsSummary({
           {runtimeProfile?.core_managed === true && <span>Core managed</span>}
           <span>{readString(runtimeProfile, 'profile_id')}</span>
           <span>{readString(runtimeProfile, 'tls_profile_id')}</span>
-          <span>Go approximation</span>
+          {transportKind !== '-' && <span>{transportKind}</span>}
+          {tlsFamily !== '-' && <span>{tlsFamily}</span>}
         </div>
       </div>
       <div className={styles.runtimeTlsSummaryGrid}>
@@ -656,8 +659,9 @@ function RuntimeTlsSummary({
         )}
         {isCodex && (
           <p>
-            Codex default is <strong>codex_proxy_compatible_v1</strong>: a codex-proxy-compatible
-            profile using core-managed headers and account-isolated transport.
+            Codex default TLS is <strong>codex_rustls_native_v1</strong>: a uTLS profile replicating
+            the real codex-rs rustls ClientHello (target JA3 e4d448cd), with core-managed headers and
+            account-isolated transport.
           </p>
         )}
         <p>{tlsStatus}</p>
@@ -1442,7 +1446,7 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                   <div className="hint">
                     {t('auth_files.account_settings_transport_profile_hint', {
                       defaultValue:
-                        'Leave empty for the core default transport. Claude defaults to claude_cli_clienthello_v1, replicating the real claude-cli Node/OpenSSL ClientHello (target JA3 e97f5146, ALPN http/1.1 only); legacy reqwest/rustls and Chrome-like uTLS presets such as claude_utls_chrome_133 are explicit opt-in only. Codex follows codex-proxy-compatible transport with Go approximation until the Rust sidecar is added.',
+                        'Leave empty for the core default transport. Claude defaults to claude_cli_clienthello_v1, replicating the real claude-cli Node/OpenSSL ClientHello (target JA3 e97f5146, ALPN http/1.1 only); legacy reqwest/rustls and Chrome-like uTLS presets such as claude_utls_chrome_133 are explicit opt-in only. Codex defaults to codex_rustls_native_v1, a uTLS replica of the real codex-rs rustls ClientHello (target JA3 e4d448cd).',
                     })}
                   </div>
                 </div>
@@ -1468,7 +1472,7 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                   <div className="hint">
                     {t('auth_files.account_settings_tls_profile_hint', {
                       defaultValue:
-                        'Leave empty for the core default TLS behavior. Claude default TLS is claude_cli_clienthello_v1, a uTLS HelloCustom replicating the real claude-cli Node/OpenSSL ClientHello (target JA3 e97f5146, ALPN http/1.1 only); legacy reqwest/rustls and old Chrome-like aliases remain explicit opt-in only. Codex can enforce Go transport knobs, but exact Rust wire parity is not shipped yet.',
+                        'Leave empty for the core default TLS behavior. Claude default TLS is claude_cli_clienthello_v1, a uTLS HelloCustom replicating the real claude-cli Node/OpenSSL ClientHello (target JA3 e97f5146, ALPN http/1.1 only); legacy reqwest/rustls and old Chrome-like aliases remain explicit opt-in only. Codex default TLS is codex_rustls_native_v1, a uTLS replica of the real codex-rs rustls ClientHello (target JA3 e4d448cd).',
                     })}
                   </div>
                     </div>
