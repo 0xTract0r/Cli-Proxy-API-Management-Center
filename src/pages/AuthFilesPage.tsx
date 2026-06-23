@@ -65,6 +65,7 @@ import {
   writePersistedAuthFilesCompactMode,
   type AuthFilesSortMode,
 } from '@/features/authFiles/uiState';
+import { prefetchSnapshotQuota } from '@/components/quota';
 import { useAuthStore, useNotificationStore, useThemeStore } from '@/stores';
 import type { AuthFileItem } from '@/types';
 import styles from './AuthFilesPage.module.scss';
@@ -537,6 +538,16 @@ export function AuthFilesPage() {
     },
     isCurrentLayer ? WARNING_AUTO_REFRESH_INTERVAL_MS : null
   );
+
+  // 进认证文件页 / 文件列表就绪后，自动加载“走缓存快照”的额度（仅 claude / codex）。
+  // getSnapshots 是聚合端点，prefetchSnapshotQuota 内部一次抓取分发给所有匹配账号，
+  // 整屏只调一次；且只填充还没有值的卡，不覆盖手动刷新或已加载的状态。
+  // antigravity / gemini-cli / kimi / xai 直查上游、开销大，保留手动刷新，不在这里触发。
+  useEffect(() => {
+    if (!isCurrentLayer || loading || disableControls) return;
+    if (files.length === 0) return;
+    void prefetchSnapshotQuota(files, t).catch(() => {});
+  }, [isCurrentLayer, loading, disableControls, files, t]);
 
   const warningFilesForAutoRefresh = useMemo(
     () =>
