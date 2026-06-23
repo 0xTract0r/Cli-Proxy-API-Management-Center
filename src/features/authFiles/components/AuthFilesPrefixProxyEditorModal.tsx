@@ -1058,6 +1058,59 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
           defaultValue:
             'Class A stable identity fields are pinned per account; Class B version-sensitive fields use a high-water mark that only moves forward.',
         });
+  // 按 provider 选择 transport / TLS / runtime 文案，避免对 codex（或 gemini 等）账号
+  // 无条件展示 claude 默认 TLS 说明。claude/codex 各显示自己的真实 ClientHello 说明，
+  // 其它/未知 provider 显示中性的「留空使用 core 默认」文案。
+  const pickProviderText = (
+    claudeKey: string,
+    claudeDefault: string,
+    codexKey: string,
+    codexDefault: string,
+    genericKey: string,
+    genericDefault: string
+  ): string => {
+    if (isCodexProvider) {
+      return t(codexKey, { defaultValue: codexDefault });
+    }
+    if (isClaudeProvider) {
+      return t(claudeKey, { defaultValue: claudeDefault });
+    }
+    return t(genericKey, { defaultValue: genericDefault });
+  };
+  const transportProfilePlaceholder = isCodexProvider
+    ? 'Leave empty for core default transport.\nCodex example:\n{\n  "preset": "codex_rustls_native_v1"\n}'
+    : isClaudeProvider
+      ? 'Leave empty for core default transport.\nClaude CLI example:\n{\n  "preset": "claude_cli_clienthello_v1"\n}'
+      : 'Leave empty for core default transport.';
+  const tlsProfilePlaceholder = isCodexProvider
+    ? 'Leave empty for core default TLS.\nCodex example:\n{\n  "preset": "codex_rustls_native_v1"\n}'
+    : isClaudeProvider
+      ? 'Leave empty for core default TLS.\nClaude CLI example:\n{\n  "preset": "claude_cli_clienthello_v1"\n}'
+      : 'Leave empty for core default TLS.';
+  const transportProfileHint = pickProviderText(
+    'auth_files.account_settings_transport_profile_hint_claude',
+    'Leave empty for the core default transport. Claude defaults to claude_cli_clienthello_v1, replicating the real claude-cli Node/OpenSSL ClientHello (target JA3 e97f5146, ALPN http/1.1 only); legacy reqwest/rustls and Chrome-like uTLS presets such as claude_utls_chrome_133 are explicit opt-in only.',
+    'auth_files.account_settings_transport_profile_hint_codex',
+    'Leave empty for the core default transport. Codex defaults to codex_rustls_native_v1, a uTLS replica of the real codex-rs rustls ClientHello (target JA3 e4d448cd), with core-managed headers and account-isolated transport.',
+    'auth_files.account_settings_transport_profile_hint_generic',
+    'Leave empty for the core default transport. The core resolves the transport profile for this account.'
+  );
+  const tlsProfileHint = pickProviderText(
+    'auth_files.account_settings_tls_profile_hint_claude',
+    'Leave empty for the core default TLS behavior. Claude default TLS is claude_cli_clienthello_v1, a uTLS HelloCustom replicating the real claude-cli Node/OpenSSL ClientHello (target JA3 e97f5146, ALPN http/1.1 only); legacy reqwest/rustls and old Chrome-like aliases remain explicit opt-in only.',
+    'auth_files.account_settings_tls_profile_hint_codex',
+    'Leave empty for the core default TLS behavior. Codex default TLS is codex_rustls_native_v1, a uTLS replica of the real codex-rs rustls ClientHello (target JA3 e4d448cd), with core-managed headers and account-isolated transport.',
+    'auth_files.account_settings_tls_profile_hint_generic',
+    'Leave empty for the core default TLS behavior. The core resolves the TLS profile for this account.'
+  );
+  const runtimeProfileHint = pickProviderText(
+    'auth_files.account_settings_runtime_profile_hint_claude',
+    'Resolved by the core for this account. Claude defaults to claude_cli_clienthello_v1 (real claude-cli Node/OpenSSL ClientHello, ALPN http/1.1 only); legacy reqwest/rustls and Chrome-like uTLS remain explicit opt-in only.',
+    'auth_files.account_settings_runtime_profile_hint_codex',
+    'Resolved by the core for this account. Codex defaults to codex_rustls_native_v1, a uTLS replica of the real codex-rs rustls ClientHello (target JA3 e4d448cd), with core-managed headers and account-isolated transport.',
+    'auth_files.account_settings_runtime_profile_hint_generic',
+    'Resolved by the core for this account.'
+  );
   const managedHeaderEntries = Object.entries(editor?.managedHeaders || {}).sort(
     ([left], [right]) => left.localeCompare(right)
   );
@@ -1433,7 +1486,7 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                   </label>
                   <EditableJsonCodeField
                     value={editor.transportProfileText}
-                    placeholder={`Leave empty for core default transport.\nClaude CLI example:\n{\n  "preset": "claude_cli_clienthello_v1"\n}`}
+                    placeholder={transportProfilePlaceholder}
                     invalid={Boolean(editor.transportProfileError)}
                     disabled={disableControls || editor.saving}
                     testId="account-settings-transport-profile-editor"
@@ -1443,12 +1496,7 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                   {editor.transportProfileError && (
                     <div className="error-box">{editor.transportProfileError}</div>
                   )}
-                  <div className="hint">
-                    {t('auth_files.account_settings_transport_profile_hint', {
-                      defaultValue:
-                        'Leave empty for the core default transport. Claude defaults to claude_cli_clienthello_v1, replicating the real claude-cli Node/OpenSSL ClientHello (target JA3 e97f5146, ALPN http/1.1 only); legacy reqwest/rustls and Chrome-like uTLS presets such as claude_utls_chrome_133 are explicit opt-in only. Codex defaults to codex_rustls_native_v1, a uTLS replica of the real codex-rs rustls ClientHello (target JA3 e4d448cd).',
-                    })}
-                  </div>
+                  <div className="hint">{transportProfileHint}</div>
                 </div>
 
                 <div className="form-group">
@@ -1459,7 +1507,7 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                   </label>
                   <EditableJsonCodeField
                     value={editor.tlsProfileText}
-                    placeholder={`Leave empty for core default TLS.\nClaude CLI example:\n{\n  "preset": "claude_cli_clienthello_v1"\n}`}
+                    placeholder={tlsProfilePlaceholder}
                     invalid={Boolean(editor.tlsProfileError)}
                     disabled={disableControls || editor.saving}
                     testId="account-settings-tls-profile-editor"
@@ -1469,12 +1517,7 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                   {editor.tlsProfileError && (
                     <div className="error-box">{editor.tlsProfileError}</div>
                   )}
-                  <div className="hint">
-                    {t('auth_files.account_settings_tls_profile_hint', {
-                      defaultValue:
-                        'Leave empty for the core default TLS behavior. Claude default TLS is claude_cli_clienthello_v1, a uTLS HelloCustom replicating the real claude-cli Node/OpenSSL ClientHello (target JA3 e97f5146, ALPN http/1.1 only); legacy reqwest/rustls and old Chrome-like aliases remain explicit opt-in only. Codex default TLS is codex_rustls_native_v1, a uTLS replica of the real codex-rs rustls ClientHello (target JA3 e4d448cd).',
-                    })}
-                  </div>
+                  <div className="hint">{tlsProfileHint}</div>
                     </div>
                   </div>
                 </details>
@@ -1750,12 +1793,7 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                       label={readonlyBadge}
                       onCopyText={onCopyText}
                     />
-                    <div className="hint">
-                      {t('auth_files.account_settings_runtime_profile_hint', {
-                        defaultValue:
-                          'Resolved by the core for this account. Claude defaults to claude_cli_clienthello_v1 (real claude-cli Node/OpenSSL ClientHello, ALPN http/1.1 only); legacy reqwest/rustls and Chrome-like uTLS remain explicit opt-in only.',
-                      })}
-                    </div>
+                    <div className="hint">{runtimeProfileHint}</div>
                   </div>
                 )}
 
