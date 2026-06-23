@@ -39,6 +39,7 @@ import {
   parseCoreQuotaTimestamp,
   quotaApi,
   type CoreQuotaSnapshotEntry,
+  type CoreQuotaSnapshotsResponse,
 } from '@/services/api';
 import { useQuotaStore } from '@/stores';
 import {
@@ -194,7 +195,9 @@ const findCoreQuotaEntry = (
 const loadCoreQuotaEntry = async (
   file: AuthFileItem,
   provider: string,
-  refresh: boolean
+  refresh: boolean,
+  // 进页面批量自动加载时，先一次性抓好的聚合快照可以从这里传入，避免每张卡各发一次 getSnapshots。
+  snapshots?: CoreQuotaSnapshotsResponse
 ): Promise<CoreQuotaSnapshotEntry> => {
   const payload = refresh
     ? await quotaApi.refresh({
@@ -202,7 +205,7 @@ const loadCoreQuotaEntry = async (
         name: normalizeStringValue(file.name) ?? undefined,
         provider,
       })
-    : await quotaApi.getSnapshots();
+    : (snapshots ?? (await quotaApi.getSnapshots()));
   const entry = findCoreQuotaEntry(payload.entries, file, provider);
   if (!entry) {
     throw new Error('Quota snapshot is not available yet');
@@ -530,10 +533,11 @@ const buildCodexQuotaWindows = (payload: CodexUsagePayload, t: TFunction): Codex
 const fetchCodexQuota = async (
   file: AuthFileItem,
   t: TFunction,
-  refresh = false
+  refresh = false,
+  snapshots?: CoreQuotaSnapshotsResponse
 ): Promise<CodexQuotaFetchResult> => {
   const planTypeFromFile = resolveCodexPlanType(file);
-  const entry = await loadCoreQuotaEntry(file, 'codex', refresh);
+  const entry = await loadCoreQuotaEntry(file, 'codex', refresh, snapshots);
   const planTypeFromSnapshot = normalizePlanType(entry.plan_type);
   if (entry.status === CORE_QUOTA_REAUTH_REQUIRED_STATUS) {
     return {
@@ -1139,9 +1143,10 @@ const resolveClaudePlanType = (profile: ClaudeProfileResponse | null): string | 
 const fetchClaudeQuota = async (
   file: AuthFileItem,
   t: TFunction,
-  refresh = false
+  refresh = false,
+  snapshots?: CoreQuotaSnapshotsResponse
 ): Promise<ClaudeQuotaFetchResult> => {
-  const entry = await loadCoreQuotaEntry(file, 'claude', refresh);
+  const entry = await loadCoreQuotaEntry(file, 'claude', refresh, snapshots);
   const snapshotPlanType = normalizePlanType(entry.plan_type);
   if (entry.status === CORE_QUOTA_REAUTH_REQUIRED_STATUS) {
     return {
@@ -1367,6 +1372,130 @@ export const CODEX_CONFIG: QuotaConfig<
   controlClassName: styles.codexControl,
   gridClassName: styles.codexGrid,
   renderQuotaItems: renderCodexItems,
+};
+
+/**
+ * 进认证文件页时一次性自动加载“走缓存快照”的额度（仅 claude / codex）。
+ *
+ * 设计要点：
+ * - getSnapshots 是聚合端点，这里**只调一次**，把同一份响应分发给所有 claude/codex 账号，
+ *   不让一屏每张卡各发一次请求。
+ * - antigravity / gemini-cli / kimi / xai 的 fetchQuota 直查上游、开销大，**不在这里自动触发**，
+ *   仍由用户手动点刷新。
+ * - 自动加载只填充“还没有值”的卡（idle / 未加载）；已经 loading / success / error / 手动刷新过的
+ *   状态一律不覆盖，避免和手动刷新打架。
+ * - 静默执行：失败只写入卡片的 error 态，不弹全局通知（自动加载不该打扰用户）。
+ */
+export const SNAPSHOT_AUTOLOAD_QUOTA_TYPES = ['claude', 'codex'] as const;
+
+export type SnapshotAutoloadQuotaType = (typeof SNAPSHOT_AUTOLOAD_QUOTA_TYPES)[number];
+
+const isSnapshotAutoloadFile = (
+  file: AuthFileItem
+): { type: SnapshotAutoloadQuotaType } | null => {
+  if (isDisabledAuthFile(file) || isRuntimeOnlyAuthFile(file)) return null;
+  if (CLAUDE_CONFIG.filterFn(file)) return { type: 'claude' };
+  if (CODEX_CONFIG.filterFn(file)) return { type: 'codex' };
+  return null;
+};
+
+export const prefetchSnapshotQuota = async (
+  files: AuthFileItem[],
+  t: TFunction
+): Promise<void> => {
+  const targets = files
+    .map((file) => {
+      const matched = isSnapshotAutoloadFile(file);
+      return matched ? { file, type: matched.type } : null;
+    })
+    .filter((entry): entry is { file: AuthFileItem; type: SnapshotAutoloadQuotaType } => entry !== null);
+
+  if (targets.length === 0) return;
+
+  const store = useQuotaStore.getState();
+
+  // 仅对“还没有值”的卡自动加载，已 loading / 已有状态的不覆盖。
+  const pending = targets.filter(({ file, type }) => {
+    const current =
+      type === 'claude' ? store.claudeQuota[file.name] : store.codexQuota[file.name];
+    return !current || current.status === undefined;
+  });
+
+  if (pending.length === 0) return;
+
+  // 先标记 loading，再用同一份聚合快照逐个填充——整屏只调一次 getSnapshots。
+  store.setClaudeQuota((prev) => {
+    const next = { ...prev };
+    pending.forEach(({ file, type }) => {
+      if (type === 'claude') next[file.name] = CLAUDE_CONFIG.buildLoadingState();
+    });
+    return next;
+  });
+  store.setCodexQuota((prev) => {
+    const next = { ...prev };
+    pending.forEach(({ file, type }) => {
+      if (type === 'codex') next[file.name] = CODEX_CONFIG.buildLoadingState();
+    });
+    return next;
+  });
+
+  let snapshots: CoreQuotaSnapshotsResponse;
+  try {
+    snapshots = await quotaApi.getSnapshots();
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : t('common.unknown_error');
+    const status = getStatusFromError(err);
+    const latest = useQuotaStore.getState();
+    latest.setClaudeQuota((prev) => {
+      const next = { ...prev };
+      pending.forEach(({ file, type }) => {
+        if (type === 'claude') next[file.name] = CLAUDE_CONFIG.buildErrorState(message, status);
+      });
+      return next;
+    });
+    latest.setCodexQuota((prev) => {
+      const next = { ...prev };
+      pending.forEach(({ file, type }) => {
+        if (type === 'codex') next[file.name] = CODEX_CONFIG.buildErrorState(message, status);
+      });
+      return next;
+    });
+    return;
+  }
+
+  await Promise.all(
+    pending.map(async ({ file, type }) => {
+      try {
+        if (type === 'claude') {
+          const data = await fetchClaudeQuota(file, t, false, snapshots);
+          useQuotaStore.getState().setClaudeQuota((prev) => ({
+            ...prev,
+            [file.name]: CLAUDE_CONFIG.buildSuccessState(data),
+          }));
+        } else {
+          const data = await fetchCodexQuota(file, t, false, snapshots);
+          useQuotaStore.getState().setCodexQuota((prev) => ({
+            ...prev,
+            [file.name]: CODEX_CONFIG.buildSuccessState(data),
+          }));
+        }
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : t('common.unknown_error');
+        const status = getStatusFromError(err);
+        if (type === 'claude') {
+          useQuotaStore.getState().setClaudeQuota((prev) => ({
+            ...prev,
+            [file.name]: CLAUDE_CONFIG.buildErrorState(message, status),
+          }));
+        } else {
+          useQuotaStore.getState().setCodexQuota((prev) => ({
+            ...prev,
+            [file.name]: CODEX_CONFIG.buildErrorState(message, status),
+          }));
+        }
+      }
+    })
+  );
 };
 
 export const GEMINI_CLI_CONFIG: QuotaConfig<

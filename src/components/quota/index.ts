@@ -12,5 +12,6 @@ export {
   GEMINI_CLI_CONFIG,
   KIMI_CONFIG,
   XAI_CONFIG,
+  prefetchSnapshotQuota,
 } from './quotaConfigs';
 export type { QuotaConfig } from './quotaConfigs';
