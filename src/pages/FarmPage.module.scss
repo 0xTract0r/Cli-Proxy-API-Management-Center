@@ -1,0 +1,36 @@
+@use '../styles/variables' as *;
+
+.container {
+  width: 100%;
+}
+
+.pageTitle {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 $spacing-xs 0;
+}
+
+.subtitle {
+  margin: 0 0 $spacing-xl 0;
+  font-size: 14px;
+  color: var(--muted-foreground);
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-xl;
+}
+
+.sectionDescription {
+  margin: 0 0 $spacing-md 0;
+  font-size: 13px;
+  color: var(--muted-foreground);
+}
+
+.createContainerBar {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+}

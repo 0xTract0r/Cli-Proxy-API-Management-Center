@@ -123,7 +123,8 @@
     "usage_stats": "Usage Statistics",
     "config_management": "Config Panel",
     "logs": "Logs Viewer",
-    "system_info": "Management Center Info"
+    "system_info": "Management Center Info",
+    "farm": "Device Farm"
   },
   "nav_groups": {
     "operate": "Operate",
@@ -140,7 +141,8 @@
     "usage_stats": "Requests, tokens & cost",
     "logs": "Request tracing",
     "config_management": "Gateway configuration",
-    "system_info": "Runtime & diagnostics"
+    "system_info": "Runtime & diagnostics",
+    "farm": "Residential proxy container fleet"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -1847,6 +1849,89 @@
     },
     "modelCatalog": {
       "notLoaded": "Not loaded"
+    }
+  },
+  "farm": {
+    "title": "Device Farm",
+    "subtitle": "Manage the residential-proxy container pool of the standalone farm orchestrator: keepalive status, account binding and unbinding.",
+    "config": {
+      "title": "Orchestrator Connection",
+      "desc": "The farm orchestrator is a backend independent from this management center; configure its base URL and admin key to load the container pool.",
+      "status_ready": "Configured",
+      "status_missing": "Not configured",
+      "base_url_label": "Orchestrator base URL",
+      "base_url_placeholder": "e.g. http://127.0.0.1:18517",
+      "admin_key_label": "Admin key",
+      "admin_key_placeholder": "Orchestrator FARM_MGMT_KEY",
+      "show_key": "Show",
+      "hide_key": "Hide",
+      "save_success": "Farm orchestrator configuration saved"
+    },
+    "accounts": {
+      "title": "Account Health",
+      "desc": "Accounts available for binding in this environment (from CPA's existing auth file health checks).",
+      "empty_title": "No accounts",
+      "empty_desc": "No accounts available in this environment yet; upload auth files on the CPA side first.",
+      "column_name": "Account",
+      "column_status": "Status",
+      "status_active": "Active",
+      "status_disabled": "Disabled"
+    },
+    "containers": {
+      "title": "Container Pool",
+      "desc": "Container status polls automatically on an interval; binding/unbinding starts or stops the container immediately.",
+      "empty_title": "Container pool is empty",
+      "empty_desc": "No containers in the pool yet. Enter an id above to create one.",
+      "not_configured_title": "Orchestrator not configured",
+      "not_configured_desc": "Fill in the orchestrator base URL and admin key above and save before viewing the container pool.",
+      "column_device": "Container / Device",
+      "column_status": "Status",
+      "column_keepalive": "Last Keepalive",
+      "column_token_usage": "Token Usage",
+      "column_binding": "Bound Account",
+      "column_actions": "Actions",
+      "action_bind": "Bind",
+      "action_unbind": "Unbind",
+      "no_binding": "Unbound",
+      "never": "Never",
+      "create_placeholder": "Container id suffix, e.g. acct-07",
+      "create_button": "New Container",
+      "create_success": "Container {{id}} created"
+    },
+    "status": {
+      "created": "Created",
+      "starting": "Starting",
+      "running": "Running",
+      "degraded": "Degraded",
+      "down": "Down"
+    },
+    "env": {
+      "test": "Test",
+      "prod": "Production"
+    },
+    "bind_modal": {
+      "title": "Bind Account",
+      "container_label": "Container",
+      "container_placeholder": "Select an unbound container",
+      "env_label": "Environment",
+      "account_label": "Account",
+      "account_placeholder": "Select an account",
+      "submit": "Confirm Bind",
+      "no_unbound_containers": "No containers available to bind. Create one first.",
+      "no_accounts": "No accounts available in this environment."
+    },
+    "unbind_confirm_title": "Unbind Container",
+    "unbind_confirm_message": "Unbind container {{id}}? The container will stop running and the bound account's proxy credentials will be cleared.",
+    "notification": {
+      "bind_success": "Container {{id}} bound and started",
+      "bind_pending": "Container {{id}} bound, but CPA-side device_id sync is not yet live",
+      "unbind_success": "Container {{id}} unbound"
+    },
+    "error": {
+      "load_failed": "Failed to load",
+      "bind_failed": "Bind failed",
+      "unbind_failed": "Unbind failed",
+      "create_failed": "Failed to create container"
     }
   }
 }

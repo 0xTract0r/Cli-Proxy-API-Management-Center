@@ -16,6 +16,7 @@ import {
   IconSidebarAuthFiles,
   IconSidebarConfig,
   IconSidebarDashboard,
+  IconSidebarFarm,
   IconSidebarLogs,
   IconSidebarOauth,
   IconSidebarProviders,
@@ -46,6 +47,7 @@ const sidebarIcons: Record<string, ReactNode> = {
   config: <IconSidebarConfig size={18} />,
   logs: <IconSidebarLogs size={18} />,
   system: <IconSidebarSystem size={18} />,
+  farm: <IconSidebarFarm size={18} />,
 };
 
 // Header action icons - smaller size for header buttons
@@ -461,6 +463,12 @@ export function MainLayout() {
           labelKey: 'nav.system_info',
           metaKey: 'nav_meta.system_info',
           icon: sidebarIcons.system,
+        },
+        {
+          path: '/farm',
+          labelKey: 'nav.farm',
+          metaKey: 'nav_meta.farm',
+          icon: sidebarIcons.farm,
         },
       ],
     },

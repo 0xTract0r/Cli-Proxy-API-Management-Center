@@ -1,0 +1,42 @@
+@use '../../../styles/variables' as *;
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-sm;
+  padding: $spacing-lg;
+  border: 1px solid var(--border-color);
+  border-radius: $radius-lg;
+  background: var(--card-bg, var(--surface-bg));
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-md;
+}
+
+.title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.envSelect {
+  width: 140px;
+}
+
+.desc {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted-foreground);
+}
+
+.loadingState {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+  padding: $spacing-md 0;
+  color: var(--muted-foreground);
+}

@@ -1,0 +1,56 @@
+@use '../../../styles/variables' as *;
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-md;
+  padding: $spacing-lg;
+  border: 1px solid var(--border-color);
+  border-radius: $radius-lg;
+  background: var(--card-bg, var(--surface-bg));
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-md;
+}
+
+.title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.desc {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted-foreground);
+}
+
+.fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: $spacing-md;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.toggleVisibility {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  padding: 2px;
+
+  &:hover {
+    color: var(--text-primary);
+  }
+}
