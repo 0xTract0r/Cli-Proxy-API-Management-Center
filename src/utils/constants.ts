@@ -41,6 +41,14 @@ export const MAX_AUTH_FILE_SIZE = 10 * 1024 * 1024;
 export const STORAGE_KEY_AUTH = 'cli-proxy-auth';
 export const STORAGE_KEY_THEME = 'cli-proxy-theme';
 export const STORAGE_KEY_LANGUAGE = 'cli-proxy-language';
+// 农场编排器是独立后端（独立 base URL + 独立 admin key），不复用 CPA 管理会话，
+// 因此单独存一份配置，不并入 STORAGE_KEY_AUTH。
+export const STORAGE_KEY_FARM = 'cli-proxy-farm';
+
+// 农场编排器请求超时（绑定/解绑涉及远端 docker run/stop，放宽于常规管理请求）
+export const FARM_REQUEST_TIMEOUT_MS = 30 * 1000;
+// 容器池轮询间隔：够快看到状态变化，又不至于把编排器打爆
+export const FARM_CONTAINERS_POLL_INTERVAL_MS = 15 * 1000;
 
 // 语言配置
 export const LANGUAGE_ORDER = defineLanguageOrder(['zh-CN', 'zh-TW', 'en', 'ru'] as const);
