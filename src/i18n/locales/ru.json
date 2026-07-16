@@ -501,6 +501,7 @@
     "account_settings_managed_header_history_no_diff": "Изменения на уровне полей не записаны",
     "account_settings_synthetic_device_id": "Синтетический device ID",
     "account_settings_device_id_section_title_farm": "Источник Device ID",
+    "account_settings_device_id_section_title_unknown": "Device ID (статус привязки неизвестен)",
     "account_settings_synthetic_device_id_masked": "Маскированный device ID",
     "account_settings_synthetic_device_id_synthetic_badge": "Синтетический псевдоним",
     "account_settings_synthetic_device_id_pending": "Ещё не получен",
@@ -512,6 +513,11 @@
     "account_settings_device_id_real_from_container": "Реальный, синхронизирован с контейнером · привязан к {{container}} · {{farm}}",
     "account_settings_device_id_drift_warning": "Текущее значение разошлось с закреплённым; при следующей сверке будет восстановлено",
     "account_settings_device_id_neutral_label": "Статус привязки неизвестен",
+    "account_settings_device_id_provenance_source_label": "Источник",
+    "account_settings_device_id_provenance_container_label": "Привязанный контейнер",
+    "account_settings_device_id_provenance_env_label": "Окружение",
+    "account_settings_device_id_provenance_container_status_label": "Статус контейнера",
+    "account_settings_device_id_provenance_note_label": "Что это значит",
     "account_settings_raw_json_details": "Расширенный предпросмотр исходного JSON",
     "account_settings_enabled_hint": "Включено — аккаунт может выбираться средой выполнения. Выключение пишет disabled=true без удаления данных.",
     "account_settings_refresh_enabled": "Автоматическое обновление токена",
@@ -555,6 +561,8 @@
     "account_settings_save_summary_label": "Будет сохранено",
     "account_settings_save_summary_hint": "Предпросмотр PATCH-запроса для аккаунта, который отправит «Сохранить».",
     "proxy_url_hint": "Необязательный исходящий прокси для аккаунта; оставьте пустым, чтобы использовать глобальные настройки прокси.",
+    "account_settings_proxy_url_show": "Показать URL прокси",
+    "account_settings_proxy_url_hide": "Скрыть URL прокси",
     "account_settings_identity_audit_reason_managed_refresh": "Обновление управляемых заголовков",
     "account_settings_identity_audit_reason_observed": "Наблюдаемый профиль клиента",
     "account_settings_identity_audit_reason_runtime_identity": "Обновление идентичности рантайма",
@@ -1876,7 +1884,9 @@
       "column_name": "Аккаунт",
       "column_status": "Статус",
       "status_active": "Активен",
-      "status_disabled": "Отключён"
+      "status_disabled": "Отключён",
+      "status_pending": "Ожидание",
+      "status_error": "Ошибка"
     },
     "containers": {
       "title": "Пул контейнеров",
@@ -1950,6 +1960,7 @@
       "mem": "Память",
       "cpu": "CPU",
       "limit": "Лимит",
+      "noLimit": "без лимита",
       "hostTitle": "Хост",
       "hostNote": "Включает процессы вне фермы на всей машине",
       "empty": "Данных о ресурсах контейнеров пока нет"
@@ -1959,6 +1970,7 @@
       "lastRefresh": "Последнее обновление",
       "reauthUrl": "Ссылка на повторную авторизацию",
       "disabled": "Отключён",
+      "disabledBadge": "Отключён",
       "degradedHint": "Есть трафик LLM, но нет телеметрии — сигналы здоровья могут быть асимметричны, это не обязательно реальный сбой"
     },
     "bind_modal": {

@@ -40,6 +40,24 @@ const DEVICE_ID_SOURCE_VARIANT: Record<FarmDeviceIDSource, 'success' | 'warning'
   unknown: 'muted',
 };
 
+// 账号真实状态徽标着色，参照 FarmContainerTable.tsx 的 STATUS_BADGE_VARIANT 范式，
+// 但按语义分组而非逐值枚举（account.status 是 CPA 透传的自由字符串，未必收敛到
+// coreauth.Status 的 active/pending/error/disabled 四值）：error/fatal→error（真实
+// 故障）；warn/degraded→warning（需要关注）；active/running/healthy/ok/valid→success
+// （健康态）；其它未知值一律 muted 中性回退。修复前的 bug：徽标只按 account.disabled
+// 布尔选色（非 disabled 恒绿、disabled 恒红），完全忽略真实 status 严重度。
+const ACCOUNT_STATUS_VARIANT: Record<string, 'success' | 'warning' | 'error' | 'muted'> = {
+  error: 'error',
+  fatal: 'error',
+  warn: 'warning',
+  degraded: 'warning',
+  active: 'success',
+  running: 'success',
+  healthy: 'success',
+  ok: 'success',
+  valid: 'success',
+};
+
 /**
  * 账号健康区：复用 GET /api/farm/accounts?env=<env>（编排器透传 CPA 该
  * 环境既有 GET /auth-files 健康列表，见 handlers.go handleListAccounts），
@@ -93,7 +111,6 @@ export function FarmAccountsPanel() {
                 })}
               </TableHead>
               <TableHead>{t('farm.accountHealth.lastRefresh')}</TableHead>
-              <TableHead>{t('farm.accountHealth.disabled')}</TableHead>
               <TableHead>{t('farm.accountHealth.reauthUrl')}</TableHead>
             </TableRow>
           </TableHeader>
@@ -107,17 +124,27 @@ export function FarmAccountsPanel() {
               const showDegradedHint =
                 account.farm_bound && account.farm_container_status === 'degraded' && hasLlmTraffic;
 
+              // 真实状态严重度徽标：按 account.status 查表，不再按 account.disabled
+              // 布尔选色。disabled 是良性暂停态（operator 主动关闭，非故障），单独
+              // 用一个中性 muted 徽标承载，与状态徽标并列展示，不覆盖/掩盖真实 status。
+              const normalizedStatus = (account.status || 'active').trim().toLowerCase();
+              const statusVariant = ACCOUNT_STATUS_VARIANT[normalizedStatus] ?? 'muted';
+              const statusLabel = t(`farm.accounts.status_${normalizedStatus}`, {
+                defaultValue: account.status || t('farm.accounts.status_active'),
+              });
+
               return (
                 <TableRow key={account.name} data-testid={`farm-account-row-${account.name}`}>
                   <TableCell data-label={t('farm.accounts.column_name')}>{account.name}</TableCell>
                   <TableCell data-label={t('farm.accounts.column_status')}>
                     <div className={styles.statusCell}>
                       <div className={styles.badgeGroup}>
-                        <span className={`status-badge ${account.disabled ? 'error' : 'success'}`}>
-                          {account.disabled
-                            ? t('farm.accounts.status_disabled')
-                            : account.status || t('farm.accounts.status_active')}
-                        </span>
+                        <span className={`status-badge ${statusVariant}`}>{statusLabel}</span>
+                        {account.disabled ? (
+                          <span className="status-badge muted">
+                            {t('farm.accountHealth.disabledBadge', { defaultValue: 'Disabled' })}
+                          </span>
+                        ) : null}
                         {account.farm_bound && account.farm_container_status ? (
                           <span
                             className={`status-badge ${
@@ -146,13 +173,28 @@ export function FarmAccountsPanel() {
                       defaultValue: 'Device ID source',
                     })}
                   >
-                    <span
-                      className={`status-badge ${DEVICE_ID_SOURCE_VARIANT[account.device_id_source] ?? 'muted'}`}
-                    >
-                      {t(`auth_files.account_settings_device_id_source_${account.device_id_source}`, {
-                        defaultValue: account.device_id_source,
-                      })}
-                    </span>
+                    <div className={styles.deviceSourceCell}>
+                      <span
+                        className={`status-badge ${DEVICE_ID_SOURCE_VARIANT[account.device_id_source] ?? 'muted'}`}
+                      >
+                        {t(`auth_files.account_settings_device_id_source_${account.device_id_source}`, {
+                          defaultValue: account.device_id_source,
+                        })}
+                      </span>
+                      {account.farm_bound && account.farm_container_id ? (
+                        <div
+                          className={styles.deviceSourceMeta}
+                          data-testid={`farm-account-device-id-meta-${account.name}`}
+                        >
+                          <span className={styles.mono}>{account.farm_container_id}</span>
+                          {account.farm_env ? (
+                            <span className={styles.chip}>
+                              {t(`farm.env.${account.farm_env}`, { defaultValue: account.farm_env })}
+                            </span>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
                   </TableCell>
                   <TableCell data-label={t('farm.accountHealth.lastRefresh')}>
                     <span className={styles.mono}>
@@ -160,9 +202,6 @@ export function FarmAccountsPanel() {
                         ? formatDateTimeUtc8(account.last_refresh, i18n.language)
                         : t('farm.containers.never')}
                     </span>
-                  </TableCell>
-                  <TableCell data-label={t('farm.accountHealth.disabled')}>
-                    {account.disabled ? t('common.yes') : t('common.no')}
                   </TableCell>
                   <TableCell data-label={t('farm.accountHealth.reauthUrl')}>
                     {account.reauth_url ? (

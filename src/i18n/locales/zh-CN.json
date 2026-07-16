@@ -536,6 +536,7 @@
     "account_settings_identity_audit_hint": "只读、仅追加的每账号身份变更审计。记录 B 类高水位版本标记何时前进、哪些字段变化，以及每个版本号的来源（真实客户端观测 / 在线 npm / 默认基线）；用户不可编辑。",
     "account_settings_synthetic_device_id": "合成 device ID",
     "account_settings_device_id_section_title_farm": "device ID 来源",
+    "account_settings_device_id_section_title_unknown": "Device ID（绑定关系未知）",
     "account_settings_synthetic_device_id_masked": "脱敏 device ID",
     "account_settings_synthetic_device_id_synthetic_badge": "合成假名",
     "account_settings_synthetic_device_id_pending": "尚未派生",
@@ -547,6 +548,11 @@
     "account_settings_device_id_real_from_container": "真实容器同步 · 绑定 {{container}} · {{farm}}",
     "account_settings_device_id_drift_warning": "实时值与钉值漂移，对账将兜回",
     "account_settings_device_id_neutral_label": "绑定关系不可知",
+    "account_settings_device_id_provenance_source_label": "来源",
+    "account_settings_device_id_provenance_container_label": "绑定容器",
+    "account_settings_device_id_provenance_env_label": "环境",
+    "account_settings_device_id_provenance_container_status_label": "容器状态",
+    "account_settings_device_id_provenance_note_label": "含义说明",
     "account_settings_section_editable": "可编辑账号设置",
     "account_settings_section_editable_desc": "只有本区字段会随保存写入（每账号 PATCH）。",
     "account_settings_section_editable_badge": "可编辑",
@@ -561,6 +567,8 @@
     "account_settings_save_summary_label": "本次将保存",
     "account_settings_save_summary_hint": "下方是点击保存时将发送的每账号 PATCH 预览。",
     "proxy_url_hint": "可选的每账号出站代理；留空则沿用全局代理设置。",
+    "account_settings_proxy_url_show": "显示代理地址",
+    "account_settings_proxy_url_hide": "隐藏代理地址",
     "account_settings_identity_audit_reason_managed_refresh": "托管 header 刷新",
     "account_settings_identity_audit_reason_observed": "观测到客户端画像",
     "account_settings_identity_audit_reason_runtime_identity": "运行时身份刷新",
@@ -1883,7 +1891,9 @@
       "column_name": "账号",
       "column_status": "状态",
       "status_active": "正常",
-      "status_disabled": "已禁用"
+      "status_disabled": "已禁用",
+      "status_pending": "待处理",
+      "status_error": "错误"
     },
     "containers": {
       "title": "容器池",
@@ -1957,6 +1967,7 @@
       "mem": "内存",
       "cpu": "CPU",
       "limit": "上限",
+      "noLimit": "无上限",
       "hostTitle": "整机",
       "hostNote": "整机含非农场进程",
       "empty": "暂无容器资源数据"
@@ -1966,6 +1977,7 @@
       "lastRefresh": "最近刷新",
       "reauthUrl": "重新授权链接",
       "disabled": "已禁用",
+      "disabledBadge": "已禁用",
       "degradedHint": "有 LLM 请求但无遥测上报——健康信号可能不对称，未必是真实故障"
     },
     "bind_modal": {

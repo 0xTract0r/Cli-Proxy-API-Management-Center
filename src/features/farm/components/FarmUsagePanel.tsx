@@ -54,7 +54,9 @@ export function FarmUsagePanel() {
           {t('common.refresh')}
         </Button>
       </div>
-      {note ? <p className={styles.note}>{note}</p> : null}
+      {note ? (
+        <p className={styles.note}>{t('farm.usage.sinceNote', { defaultValue: note })}</p>
+      ) : null}
 
       {loading ? (
         <div className={styles.loadingState}>

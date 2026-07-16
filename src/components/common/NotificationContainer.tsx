@@ -1,14 +1,23 @@
+import type { ComponentType } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNotificationStore } from '@/stores';
-import { IconX } from '@/components/ui/icons';
-import type { Notification } from '@/types';
+import { IconAlertTriangle, IconCheckCircle2, IconInfo, IconX } from '@/components/ui/icons';
+import type { Notification, NotificationType } from '@/types';
 
 interface AnimatedNotification extends Notification {
   isExiting?: boolean;
 }
 
 const ANIMATION_DURATION = 300; // ms
+
+// 每种通知类型对应的语义图标；error / warning 共用告警三角，靠色带与图标颜色区分
+const NOTIFICATION_ICONS: Record<NotificationType, ComponentType<{ size?: number }>> = {
+  success: IconCheckCircle2,
+  error: IconAlertTriangle,
+  warning: IconAlertTriangle,
+  info: IconInfo
+};
 
 export function NotificationContainer() {
   const { t } = useTranslation();
@@ -60,22 +69,29 @@ export function NotificationContainer() {
 
   return (
     <div className="notification-container">
-      {animatedNotifications.map((notification) => (
-        <div
-          key={notification.id}
-          className={`notification ${notification.type} ${notification.isExiting ? 'exiting' : 'entering'}`}
-        >
-          <div className="message">{notification.message}</div>
-          <button
-            type="button"
-            className="close-btn"
-            onClick={() => handleClose(notification.id)}
-            aria-label={t('common.close')}
+      {animatedNotifications.map((notification) => {
+        const Icon = NOTIFICATION_ICONS[notification.type] ?? IconInfo;
+        return (
+          <div
+            key={notification.id}
+            className={`notification ${notification.type} ${notification.isExiting ? 'exiting' : 'entering'}`}
           >
-            <IconX size={16} />
-          </button>
-        </div>
-      ))}
+            <span className="notification-accent" aria-hidden="true" />
+            <span className="notification-icon" aria-hidden="true">
+              <Icon size={18} />
+            </span>
+            <div className="message">{notification.message}</div>
+            <button
+              type="button"
+              className="close-btn"
+              onClick={() => handleClose(notification.id)}
+              aria-label={t('common.close')}
+            >
+              <IconX size={16} />
+            </button>
+          </div>
+        );
+      })}
     </div>
   );
 }

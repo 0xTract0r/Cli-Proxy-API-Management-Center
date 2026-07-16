@@ -74,6 +74,36 @@
   color: var(--muted-foreground);
 }
 
+// device_id source 列：来源徽标之外，farm_bound 账号再补显绑定容器 id + 环境，
+// 帮助 operator 不用跳去容器表就能核对"这条 device_id 到底来自哪个容器"。
+.deviceSourceCell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.deviceSourceMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+// 与 FarmContainerTable 的 binding env chip 同一视觉语言（中性小标签），
+// 不跨组件文件耦合导出，各自维护一份。
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--radius-md, $radius-md);
+  border: 1px solid var(--border-color);
+  background: var(--muted-bg);
+  color: var(--muted-foreground);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .reauthLink {
   color: var(--primary-color);
   font-size: 13px;
