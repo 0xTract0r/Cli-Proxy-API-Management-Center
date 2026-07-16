@@ -3,9 +3,12 @@
  */
 
 // 颜色
+// 语义四档：success 绿 / warning 琥珀 / error 红 / info(muted) 灰。
+// warning 曾与 error 同为 #c65746（同红），无法区分；改为设计系统琥珀令牌
+// (--amber-color #d97706)，与 error 红明确分档。
 $primary-color: #8b8680;
 $success-color: #10b981;
-$warning-color: #c65746;
+$warning-color: #d97706;
 $error-color: #c65746;
 $info-color: #8b8680;
 

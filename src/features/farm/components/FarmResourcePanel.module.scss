@@ -68,6 +68,43 @@
   color: var(--text-primary);
 }
 
+// 每容器 mem/cpu 单元格：status-badge 数值行 + 下方细进度条纵向排列。
+.metricCell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+// 细进度条：高度收窄、圆角，按 pctVariant 语义上色（success/warning/error/muted）。
+// width:100% 让它在 hostRow 这类 flex-wrap 容器里独占一行，与 .note 的做法一致。
+.bar {
+  width: 100%;
+  height: 4px;
+  border-radius: $radius-full;
+  background: var(--bg-tertiary, rgba(127, 127, 127, 0.16));
+  overflow: hidden;
+}
+
+.barFill {
+  height: 100%;
+  border-radius: $radius-full;
+  background: $success-color;
+  transition: width 0.2s ease;
+
+  &[data-variant='warning'] {
+    background: $warning-color;
+  }
+
+  &[data-variant='error'] {
+    background: $error-color;
+  }
+
+  &[data-variant='muted'] {
+    background: var(--muted-foreground);
+  }
+}
+
 // 窄屏（≤768 平板/手机）响应式降级：把资源占用宽表整表改成堆叠卡片，与同页
 // 另 3 张农场表（容器 / 账号 / 用量）保持完全一致的卡片式模式。每行渲染成一张
 // 卡片，字段以「标签（列头）+ 值」纵向排列，标签取自各单元格的 data-label

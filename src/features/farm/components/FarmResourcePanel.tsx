@@ -28,6 +28,37 @@ function formatPct(pct: number | undefined): string {
   return `${pct.toFixed(1)}%`;
 }
 
+// 容器 MEMORY/LIMIT 兜底：cgroup 未显式设置内存上限时，Docker 会把 limit 报告成
+// 宿主总内存（甚至更大），此时按数字原样展示会被误读成"这个容器的上限是
+// 31.34GB"，严重误导。用 0（无 limit）或 ≈ 宿主总量（>= 98%，判定为"实际透传
+// 宿主总量"）两种口径识别"没有真实 limit"，改为展示"no limit"文案而非数字，
+// 且不画内存进度条（没有有意义的分母，画出来的百分比同样是误导）。
+function hasRealLimit(memLimitBytes: number, hostMemTotalBytes: number | undefined): boolean {
+  if (!memLimitBytes || memLimitBytes <= 0) return false;
+  if (typeof hostMemTotalBytes === 'number' && hostMemTotalBytes > 0) {
+    if (memLimitBytes >= hostMemTotalBytes * 0.98) return false;
+  }
+  return true;
+}
+
+// 细进度条：复用 pctVariant 的颜色语义（success/warning/error/muted），无有效
+// 百分比（如没有真实 limit）时不渲染。
+function ResourceBar({
+  pct,
+  variant,
+}: {
+  pct: number | undefined;
+  variant: 'success' | 'warning' | 'error' | 'muted';
+}) {
+  if (typeof pct !== 'number' || !Number.isFinite(pct)) return null;
+  const width = Math.min(100, Math.max(0, pct));
+  return (
+    <div className={styles.bar}>
+      <div className={styles.barFill} data-variant={variant} style={{ width: `${width}%` }} />
+    </div>
+  );
+}
+
 /**
  * 资源占用面板：消费 GET /api/farm/resources（已绑定且 running 的农场容器
  * docker stats --no-stream 快照 + 整机资源水位）。host.note 固定携带
@@ -71,7 +102,10 @@ export function FarmResourcePanel() {
               <span className={styles.hostMeta}>
                 load1 {host.load1.toFixed(2)} · {host.cpu_count} CPU
               </span>
-              <p className={styles.note}>{host.note}</p>
+              <ResourceBar pct={host.mem_pct} variant={pctVariant(host.mem_pct)} />
+              <p className={styles.note}>
+                {t('farm.resources.hostNote', { defaultValue: host.note })}
+              </p>
             </div>
           ) : null}
 
@@ -94,32 +128,47 @@ export function FarmResourcePanel() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {containers.map((item) => (
-                  <TableRow
-                    key={item.container_id}
-                    data-testid={`farm-resource-row-${item.container_id}`}
-                  >
-                    <TableCell data-label={t('farm.containers.column_device')}>
-                      <span className={styles.mono}>{item.container_id}</span>
-                    </TableCell>
-                    <TableCell data-label={t('farm.accounts.column_name')}>
-                      {item.account_id}
-                    </TableCell>
-                    <TableCell
-                      data-label={`${t('farm.resources.mem')} / ${t('farm.resources.limit')}`}
+                {containers.map((item) => {
+                  const memLimited = hasRealLimit(item.mem_limit_bytes, host?.mem_total_bytes);
+                  const memVariant = memLimited ? pctVariant(item.mem_pct) : 'muted';
+                  const cpuVariant = pctVariant(item.cpu_pct);
+                  return (
+                    <TableRow
+                      key={item.container_id}
+                      data-testid={`farm-resource-row-${item.container_id}`}
                     >
-                      <span className={`status-badge ${pctVariant(item.mem_pct)}`}>
-                        {formatFileSize(item.mem_used_bytes)} / {formatFileSize(item.mem_limit_bytes)}{' '}
-                        ({formatPct(item.mem_pct)})
-                      </span>
-                    </TableCell>
-                    <TableCell data-label={t('farm.resources.cpu')}>
-                      <span className={`status-badge ${pctVariant(item.cpu_pct)}`}>
-                        {formatPct(item.cpu_pct)}
-                      </span>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                      <TableCell data-label={t('farm.containers.column_device')}>
+                        <span className={styles.mono}>{item.container_id}</span>
+                      </TableCell>
+                      <TableCell data-label={t('farm.accounts.column_name')}>
+                        {item.account_id}
+                      </TableCell>
+                      <TableCell
+                        data-label={`${t('farm.resources.mem')} / ${t('farm.resources.limit')}`}
+                      >
+                        <div className={styles.metricCell}>
+                          <span className={`status-badge ${memVariant}`}>
+                            {formatFileSize(item.mem_used_bytes)} /{' '}
+                            {memLimited
+                              ? `${formatFileSize(item.mem_limit_bytes)} (${formatPct(item.mem_pct)})`
+                              : t('farm.resources.noLimit', { defaultValue: 'no limit' })}
+                          </span>
+                          {memLimited ? (
+                            <ResourceBar pct={item.mem_pct} variant={memVariant} />
+                          ) : null}
+                        </div>
+                      </TableCell>
+                      <TableCell data-label={t('farm.resources.cpu')}>
+                        <div className={styles.metricCell}>
+                          <span className={`status-badge ${cpuVariant}`}>
+                            {formatPct(item.cpu_pct)}
+                          </span>
+                          <ResourceBar pct={item.cpu_pct} variant={cpuVariant} />
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           )}

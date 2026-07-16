@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import CodeMirror from '@uiw/react-codemirror';
 import { json } from '@codemirror/lang-json';
 import { search, searchKeymap, highlightSelectionMatches } from '@codemirror/search';
@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/Button';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { Input } from '@/components/ui/Input';
 import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
+import { IconEye, IconEyeOff } from '@/components/ui/icons';
 import type {
   PrefixProxyEditorField,
   PrefixProxyEditorFieldValue,
@@ -22,6 +23,7 @@ import type {
   AuthFileHeaderMap,
   AuthFileManagedHeaderHistoryEntry,
 } from '@/types/authFile';
+import type { FarmDeviceIDSource } from '@/types/farm';
 import { useThemeStore } from '@/stores';
 import { formatInUtc8 } from '@/utils/datetime';
 import styles from '@/pages/AuthFilesPage.module.scss';
@@ -76,6 +78,18 @@ const ROUTINE_VERSION_FIELDS = new Set([
 ]);
 
 const ROUTINE_REASONS = new Set(['managed-header-refresh', 'observed-client-profile']);
+
+// device_id 来源徽标 severity：container_synced=真实容器同步(success)，
+// drift=正在漂移待对账(warning)，synthetic=确认非农场绑定按账号派生合成
+// (muted，正常态非异常)，unknown=后端无法确定绑定关系(muted，中性回退非
+// 异常)。口径与 features/farm/components/FarmAccountsPanel.tsx 的
+// DEVICE_ID_SOURCE_VARIANT 保持一致（两处场景独立，未跨模块共享常量）。
+const DEVICE_ID_SOURCE_BADGE_VARIANT: Record<FarmDeviceIDSource, 'success' | 'warning' | 'muted'> = {
+  container_synced: 'success',
+  drift: 'warning',
+  synthetic: 'muted',
+  unknown: 'muted',
+};
 
 function stripHistoryFieldPrefix(field: string): string {
   return field.replace(/^(versioned_capabilities|summary_headers|managed_headers|headers)\./, '');
@@ -1023,6 +1037,22 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
   const { disableControls, editor, updatedText, dirty, onClose, onCopyText, onSave, onChange } =
     props;
 
+  // proxy_url 含 user:pass@ 凭据，默认遮罩展示（复刻 FarmConfigPanel admin
+  // key 的 type=password + reveal 切换范式）；切换到另一个账号（fileName
+  // 变化）时收起 reveal，避免上一个账号的明文残留可见状态带到下一个账号。
+  // 用 render 期间对比 + setState 的官方推荐模式（"Adjusting state when a
+  // prop changes"）而非 useEffect，避免触发
+  // react-hooks/set-state-in-effect（同一约束在
+  // useAuthFileFarmDeviceProvenance.ts 里也有说明）。
+  const [showProxyUrl, setShowProxyUrl] = useState(false);
+  const [proxyUrlRevealFileName, setProxyUrlRevealFileName] = useState<string | null>(
+    editor?.fileName ?? null
+  );
+  if ((editor?.fileName ?? null) !== proxyUrlRevealFileName) {
+    setProxyUrlRevealFileName(editor?.fileName ?? null);
+    if (showProxyUrl) setShowProxyUrl(false);
+  }
+
   const managedHeaderState = editor?.managedHeaderState || null;
   // 旧 payload 仍可能带 policy_version；仅用于推断 provider，不再作为「自动升级策略版本」展示。
   const managedHeaderPolicy = managedHeaderState?.policy_version || '';
@@ -1050,6 +1080,17 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
     ? t(`farm.env.${boundFarmEnvRaw}`, { defaultValue: boundFarmEnvRaw })
     : '';
   const pinnedDeviceIdMasked = farmDeviceProvenance.entry?.pinned_device_id_masked || '';
+  const boundFarmContainerStatus = farmDeviceProvenance.entry?.farm_container_status || '';
+  // 只有确认农场绑定（container_synced/drift）才展示绑定容器/环境/容器状态
+  // 字段；synthetic 与 unknown 都不谎称有具体容器绑定信息。
+  const showFarmBindingDetails = isFarmContainerSynced || isFarmDrift;
+  // 来源徽标短标签（复用 FarmAccountsPanel 已注册的 device_id_source_*
+  // key），与下方 deviceIdBadgeText/deviceIdHintText 的完整说明句分工：
+  // 徽标只放简短标签，完整语境放进 hint。
+  const deviceIdSourceLabel = t(
+    `auth_files.account_settings_device_id_source_${farmDeviceProvenance.source}`,
+    { defaultValue: farmDeviceProvenance.source }
+  );
   // device_id 展示 chip 文案：container_synced/drift/unknown 都不再写"合成
   // 假名"（该措辞只对确认非农场绑定的 synthetic 态准确），四态口径见 spec
   // 「device_id 展示口径全站对齐」。
@@ -1422,6 +1463,10 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                     defaultValue: 'Proxy URL (proxy_url) *',
                   })}
                   value={editor.proxyUrl}
+                  // proxy_url 内含 user:pass@ 凭据，默认遮罩整串（复刻
+                  // FarmConfigPanel admin key 的 type=password 范式），
+                  // 点击 reveal 才切换成明文。
+                  type={showProxyUrl ? 'text' : 'password'}
                   placeholder={t('auth_files.proxy_url_placeholder')}
                   hint={t('auth_files.proxy_url_required_hint', {
                     defaultValue:
@@ -1442,6 +1487,35 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                   disabled={disableControls || editor.saving}
                   data-testid="account-settings-proxy-url-input"
                   onChange={(e) => onChange('proxyUrl', e.target.value)}
+                  rightElement={
+                    <button
+                      type="button"
+                      onClick={() => setShowProxyUrl((prev) => !prev)}
+                      disabled={disableControls || editor.saving}
+                      data-testid="account-settings-proxy-url-reveal-toggle"
+                      aria-label={
+                        showProxyUrl
+                          ? t('auth_files.account_settings_proxy_url_hide', {
+                              defaultValue: 'Hide proxy URL',
+                            })
+                          : t('auth_files.account_settings_proxy_url_show', {
+                              defaultValue: 'Show proxy URL',
+                            })
+                      }
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--muted-foreground)',
+                        cursor: 'pointer',
+                        padding: 2,
+                      }}
+                    >
+                      {showProxyUrl ? <IconEyeOff size={16} /> : <IconEye size={16} />}
+                    </button>
+                  }
                 />
 
                 {/* 代理状态行（F4）：紧贴 Proxy URL 之后，留在可编辑区内。 */}
@@ -1609,13 +1683,21 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                         ? t('auth_files.account_settings_device_id_section_title_farm', {
                             defaultValue: 'Device ID source',
                           })
-                        : t('auth_files.account_settings_synthetic_device_id', {
-                            defaultValue: 'Synthetic device ID',
-                          })}
+                        : isConfirmedNonFarmSynthetic
+                          ? t('auth_files.account_settings_synthetic_device_id', {
+                              defaultValue: 'Synthetic device ID',
+                            })
+                          : t('auth_files.account_settings_device_id_section_title_unknown', {
+                              defaultValue: 'Device ID (binding unknown)',
+                            })}
                     </label>
+                    {/* G5：device_id 来源集中呈现——值/来源/绑定容器/环境拆成
+                        独立标注字段并列展示，而不是塞进一句 badge 文本；四态
+                        判定仍完全来自 useAuthFileFarmDeviceProvenance，这里
+                        只重排渲染。 */}
                     <div
                       className={styles.managedHeaderPanel}
-                      data-testid="account-settings-synthetic-device-id-panel"
+                      data-testid="account-settings-device-id-provenance-panel"
                     >
                       <div className={styles.managedHeaderPolicyGrid}>
                         <div
@@ -1631,14 +1713,7 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                             <strong>
                               <code className={styles.managedHeaderValue} title={deviceIdDisplayedValue}>
                                 {deviceIdDisplayedValue}
-                              </code>{' '}
-                              <span
-                                className={styles.managedHeaderChip}
-                                title={deviceIdBadgeText}
-                                data-testid="account-settings-device-id-source-badge"
-                              >
-                                {deviceIdBadgeText}
-                              </span>
+                              </code>
                             </strong>
                           ) : (
                             <strong data-testid="account-settings-synthetic-device-id-placeholder">
@@ -1648,6 +1723,102 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                             </strong>
                           )}
                         </div>
+
+                        <div
+                          className={styles.managedHeaderPolicyItem}
+                          data-testid="account-settings-device-id-provenance-source"
+                        >
+                          <span>
+                            {t('auth_files.account_settings_device_id_provenance_source_label', {
+                              defaultValue: 'Source',
+                            })}
+                          </span>
+                          <strong>
+                            <span
+                              className={`status-badge ${DEVICE_ID_SOURCE_BADGE_VARIANT[farmDeviceProvenance.source]}`}
+                              title={deviceIdHintText}
+                              data-testid="account-settings-device-id-source-badge"
+                            >
+                              {deviceIdSourceLabel}
+                            </span>
+                          </strong>
+                        </div>
+
+                        {showFarmBindingDetails && (
+                          <div
+                            className={styles.managedHeaderPolicyItem}
+                            data-testid="account-settings-device-id-provenance-container"
+                          >
+                            <span>
+                              {t('auth_files.account_settings_device_id_provenance_container_label', {
+                                defaultValue: 'Bound container',
+                              })}
+                            </span>
+                            <strong>
+                              {boundFarmContainerId ? (
+                                <code
+                                  className={styles.managedHeaderValue}
+                                  title={boundFarmContainerId}
+                                >
+                                  {boundFarmContainerId}
+                                </code>
+                              ) : (
+                                '-'
+                              )}
+                            </strong>
+                          </div>
+                        )}
+
+                        {showFarmBindingDetails && (
+                          <div
+                            className={styles.managedHeaderPolicyItem}
+                            data-testid="account-settings-device-id-provenance-env"
+                          >
+                            <span>
+                              {t('auth_files.account_settings_device_id_provenance_env_label', {
+                                defaultValue: 'Environment',
+                              })}
+                            </span>
+                            <strong>{boundFarmEnvLabel || '-'}</strong>
+                          </div>
+                        )}
+
+                        {showFarmBindingDetails && boundFarmContainerStatus && (
+                          <div
+                            className={styles.managedHeaderPolicyItem}
+                            data-testid="account-settings-device-id-provenance-container-status"
+                          >
+                            <span>
+                              {t(
+                                'auth_files.account_settings_device_id_provenance_container_status_label',
+                                { defaultValue: 'Container status' }
+                              )}
+                            </span>
+                            <strong>
+                              {t(`farm.status.${boundFarmContainerStatus}`, {
+                                defaultValue: boundFarmContainerStatus,
+                              })}
+                            </strong>
+                          </div>
+                        )}
+
+                        {isConfirmedNonFarmSynthetic && (
+                          <div
+                            className={`${styles.managedHeaderPolicyItem} ${styles.managedHeaderPolicyItemWide}`}
+                            data-testid="account-settings-device-id-provenance-synthetic-note"
+                          >
+                            <span>
+                              {t('auth_files.account_settings_device_id_provenance_note_label', {
+                                defaultValue: 'What this means',
+                              })}
+                            </span>
+                            <strong>
+                              {t('auth_files.account_settings_synthetic_device_id_synthetic_badge', {
+                                defaultValue: 'Synthetic pseudonym',
+                              })}
+                            </strong>
+                          </div>
+                        )}
                       </div>
                     </div>
                     <div className="hint">{deviceIdHintText}</div>

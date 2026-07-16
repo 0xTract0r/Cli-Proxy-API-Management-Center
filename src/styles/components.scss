@@ -169,9 +169,11 @@ textarea {
   }
 
   &.warning {
-    color: $warning-color;
+    // 琥珀在浅底文字易发虚，文字取更深一档琥珀把对比度顶到 WCAG AA 附近；
+    // 边框/底色仍用基准琥珀，保持清晰的琥珀语义色带。
+    color: color.adjust($warning-color, $lightness: -12%);
     border-color: rgba($warning-color, 0.35);
-    background: rgba($warning-color, 0.08);
+    background: rgba($warning-color, 0.1);
   }
 
   &.error {
@@ -219,7 +221,10 @@ textarea {
 }
 
 .notification {
+  position: relative;
+  overflow: hidden;
   padding: $spacing-md;
+  padding-left: calc(#{$spacing-md} + 3px); // 让出左侧色带
   border-radius: $radius-md;
   box-shadow: var(--shadow);
   border: 1px solid var(--border-color);
@@ -239,14 +244,68 @@ textarea {
     animation: notification-exit 0.3s ease-in forwards;
   }
 
+  // 左侧细色带：按类型着色，默认走中性边框色
+  .notification-accent {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 3px;
+    background: var(--border-color);
+  }
+
+  // 类型图标：与色带同色，视觉快速区分语义
+  .notification-icon {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+
+    svg {
+      display: block;
+    }
+  }
+
   &.success {
     border-color: rgba($success-color, 0.4);
+
+    .notification-accent {
+      background: $success-color;
+    }
+    .notification-icon {
+      color: $success-color;
+    }
   }
   &.warning {
     border-color: rgba($warning-color, 0.4);
+
+    .notification-accent {
+      background: $warning-color;
+    }
+    .notification-icon {
+      color: color.adjust($warning-color, $lightness: -8%);
+    }
   }
   &.error {
     border-color: rgba($error-color, 0.4);
+
+    .notification-accent {
+      background: $error-color;
+    }
+    .notification-icon {
+      color: $error-color;
+    }
+  }
+  &.info {
+    border-color: rgba($info-color, 0.4);
+
+    .notification-accent {
+      background: $info-color;
+    }
+    .notification-icon {
+      color: $info-color;
+    }
   }
 
   .message {

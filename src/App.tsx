@@ -1,13 +1,21 @@
 import { useEffect } from 'react';
-import { Outlet, RouterProvider, createHashRouter } from 'react-router-dom';
+import { Outlet, RouterProvider, createHashRouter, useLocation } from 'react-router-dom';
 import { LoginPage } from '@/pages/LoginPage';
 import { NotificationContainer } from '@/components/common/NotificationContainer';
 import { ConfirmationModal } from '@/components/common/ConfirmationModal';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/router/ProtectedRoute';
-import { useLanguageStore, useThemeStore } from '@/stores';
+import { useLanguageStore, useNotificationStore, useThemeStore } from '@/stores';
 
 function RootShell() {
+  const { pathname } = useLocation();
+  const clearAll = useNotificationStore((state) => state.clearAll);
+
+  // 切换路由时清掉上一页残留的 toast，避免跨页残留
+  useEffect(() => {
+    clearAll();
+  }, [pathname, clearAll]);
+
   return (
     <>
       <NotificationContainer />
