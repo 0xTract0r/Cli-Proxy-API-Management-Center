@@ -86,9 +86,7 @@ export function FarmResourcePanel() {
               <TableHeader>
                 <TableRow>
                   <TableHead>{t('farm.containers.column_device')}</TableHead>
-                  <TableHead className={styles.colSecondary}>
-                    {t('farm.accounts.column_name')}
-                  </TableHead>
+                  <TableHead>{t('farm.accounts.column_name')}</TableHead>
                   <TableHead>
                     {t('farm.resources.mem')} / {t('farm.resources.limit')}
                   </TableHead>
@@ -101,17 +99,21 @@ export function FarmResourcePanel() {
                     key={item.container_id}
                     data-testid={`farm-resource-row-${item.container_id}`}
                   >
-                    <TableCell>
+                    <TableCell data-label={t('farm.containers.column_device')}>
                       <span className={styles.mono}>{item.container_id}</span>
                     </TableCell>
-                    <TableCell className={styles.colSecondary}>{item.account_id}</TableCell>
-                    <TableCell>
+                    <TableCell data-label={t('farm.accounts.column_name')}>
+                      {item.account_id}
+                    </TableCell>
+                    <TableCell
+                      data-label={`${t('farm.resources.mem')} / ${t('farm.resources.limit')}`}
+                    >
                       <span className={`status-badge ${pctVariant(item.mem_pct)}`}>
                         {formatFileSize(item.mem_used_bytes)} / {formatFileSize(item.mem_limit_bytes)}{' '}
                         ({formatPct(item.mem_pct)})
                       </span>
                     </TableCell>
-                    <TableCell>
+                    <TableCell data-label={t('farm.resources.cpu')}>
                       <span className={`status-badge ${pctVariant(item.cpu_pct)}`}>
                         {formatPct(item.cpu_pct)}
                       </span>

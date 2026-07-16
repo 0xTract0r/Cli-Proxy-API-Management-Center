@@ -87,15 +87,13 @@ export function FarmAccountsPanel() {
             <TableRow>
               <TableHead>{t('farm.accounts.column_name')}</TableHead>
               <TableHead>{t('farm.accounts.column_status')}</TableHead>
-              <TableHead className={styles.colSecondary}>
+              <TableHead>
                 {t('farm.accountHealth.deviceIdSourceColumn', {
                   defaultValue: 'Device ID source',
                 })}
               </TableHead>
-              <TableHead className={styles.colSecondary}>
-                {t('farm.accountHealth.lastRefresh')}
-              </TableHead>
-              <TableHead className={styles.colSecondary}>{t('farm.accountHealth.disabled')}</TableHead>
+              <TableHead>{t('farm.accountHealth.lastRefresh')}</TableHead>
+              <TableHead>{t('farm.accountHealth.disabled')}</TableHead>
               <TableHead>{t('farm.accountHealth.reauthUrl')}</TableHead>
             </TableRow>
           </TableHeader>
@@ -111,25 +109,27 @@ export function FarmAccountsPanel() {
 
               return (
                 <TableRow key={account.name} data-testid={`farm-account-row-${account.name}`}>
-                  <TableCell>{account.name}</TableCell>
-                  <TableCell>
+                  <TableCell data-label={t('farm.accounts.column_name')}>{account.name}</TableCell>
+                  <TableCell data-label={t('farm.accounts.column_status')}>
                     <div className={styles.statusCell}>
-                      <span className={`status-badge ${account.disabled ? 'error' : 'success'}`}>
-                        {account.disabled
-                          ? t('farm.accounts.status_disabled')
-                          : account.status || t('farm.accounts.status_active')}
-                      </span>
-                      {account.farm_bound && account.farm_container_status ? (
-                        <span
-                          className={`status-badge ${
-                            FARM_CONTAINER_STATUS_VARIANT[account.farm_container_status] ?? 'muted'
-                          }`}
-                        >
-                          {t(`farm.status.${account.farm_container_status}`, {
-                            defaultValue: account.farm_container_status,
-                          })}
+                      <div className={styles.badgeGroup}>
+                        <span className={`status-badge ${account.disabled ? 'error' : 'success'}`}>
+                          {account.disabled
+                            ? t('farm.accounts.status_disabled')
+                            : account.status || t('farm.accounts.status_active')}
                         </span>
-                      ) : null}
+                        {account.farm_bound && account.farm_container_status ? (
+                          <span
+                            className={`status-badge ${
+                              FARM_CONTAINER_STATUS_VARIANT[account.farm_container_status] ?? 'muted'
+                            }`}
+                          >
+                            {t(`farm.status.${account.farm_container_status}`, {
+                              defaultValue: account.farm_container_status,
+                            })}
+                          </span>
+                        ) : null}
+                      </div>
                       {showDegradedHint ? (
                         <p
                           className={styles.degradedHint}
@@ -141,8 +141,10 @@ export function FarmAccountsPanel() {
                     </div>
                   </TableCell>
                   <TableCell
-                    className={styles.colSecondary}
                     data-testid={`farm-account-device-id-source-${account.name}`}
+                    data-label={t('farm.accountHealth.deviceIdSourceColumn', {
+                      defaultValue: 'Device ID source',
+                    })}
                   >
                     <span
                       className={`status-badge ${DEVICE_ID_SOURCE_VARIANT[account.device_id_source] ?? 'muted'}`}
@@ -152,17 +154,17 @@ export function FarmAccountsPanel() {
                       })}
                     </span>
                   </TableCell>
-                  <TableCell className={styles.colSecondary}>
+                  <TableCell data-label={t('farm.accountHealth.lastRefresh')}>
                     <span className={styles.mono}>
                       {account.last_refresh
                         ? formatDateTimeUtc8(account.last_refresh, i18n.language)
                         : t('farm.containers.never')}
                     </span>
                   </TableCell>
-                  <TableCell className={styles.colSecondary}>
+                  <TableCell data-label={t('farm.accountHealth.disabled')}>
                     {account.disabled ? t('common.yes') : t('common.no')}
                   </TableCell>
-                  <TableCell>
+                  <TableCell data-label={t('farm.accountHealth.reauthUrl')}>
                     {account.reauth_url ? (
                       <a
                         className={styles.reauthLink}

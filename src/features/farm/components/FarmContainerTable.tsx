@@ -152,9 +152,7 @@ export function FarmContainerTable({
             <TableRow>
               <TableHead>{t('farm.containers.column_device')}</TableHead>
               <TableHead>{t('farm.containers.column_status')}</TableHead>
-              <TableHead className={styles.colSecondary}>
-                {t('farm.containers.column_keepalive')}
-              </TableHead>
+              <TableHead>{t('farm.containers.column_keepalive')}</TableHead>
               <TableHead>{t('farm.containers.column_token_usage')}</TableHead>
               <TableHead>{t('farm.containers.column_binding')}</TableHead>
               <TableHead alignRight>{t('farm.containers.column_actions')}</TableHead>
@@ -173,26 +171,26 @@ export function FarmContainerTable({
 
               return (
                 <TableRow key={container.id} data-testid={`farm-container-row-${container.id}`}>
-                  <TableCell>
+                  <TableCell data-label={t('farm.containers.column_device')}>
                     <div className={styles.deviceCell}>
                       <span className={styles.containerId}>{container.id}</span>
                       <span className={styles.deviceIdMasked}>{container.device_id_masked}</span>
                     </div>
                   </TableCell>
-                  <TableCell>
+                  <TableCell data-label={t('farm.containers.column_status')}>
                     <span className={`status-badge ${statusVariant}`}>{statusLabel}</span>
                   </TableCell>
-                  <TableCell className={styles.colSecondary}>
+                  <TableCell data-label={t('farm.containers.column_keepalive')}>
                     <span className={styles.mono}>
                       {container.last_keepalive_at
                         ? formatDateTimeUtc8(container.last_keepalive_at, i18n.language)
                         : t('farm.containers.never')}
                     </span>
                   </TableCell>
-                  <TableCell>
+                  <TableCell data-label={t('farm.containers.column_token_usage')}>
                     <span className={styles.mono}>{formatTokenUsage(container.token_usage)}</span>
                   </TableCell>
-                  <TableCell>
+                  <TableCell data-label={t('farm.containers.column_binding')}>
                     {container.binding ? (
                       <div className={styles.bindingCell}>
                         <span className={styles.bindingAccount}>{container.binding.account}</span>
@@ -204,7 +202,7 @@ export function FarmContainerTable({
                       <span className={styles.mono}>{t('farm.containers.no_binding')}</span>
                     )}
                   </TableCell>
-                  <TableCell alignRight>
+                  <TableCell alignRight data-label={t('farm.containers.column_actions')}>
                     <div className={styles.actions}>
                       {isArchived ? (
                         // 已归档容器不再提供任何行操作：不能重新绑定（设备已
