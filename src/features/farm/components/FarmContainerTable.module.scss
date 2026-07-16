@@ -1,4 +1,5 @@
 @use '../../../styles/variables' as *;
+@use '../../../styles/mixins' as *;
 
 .filterBar {
   display: flex;
@@ -101,20 +102,73 @@
   gap: $spacing-sm;
 }
 
-// 窄屏（390 一类手机视口）折叠次要列，减少必须横向滚动才能看到关键信息的
-// 深度；Table 组件本身的 .scroll 容器已经保证不会撑破祖先，这里只是体验
-// 优化，不是安全必要项。
-@media (max-width: 480px) {
-  .colSecondary {
-    display: none;
-  }
-
+// 窄屏（≤768 平板/手机）响应式降级：把宽表整表改成堆叠卡片。每行渲染成一张
+// 卡片，字段以「标签（列头）+ 值」纵向排列，标签取自各单元格的 data-label
+// （复用现有列头 i18n key，无新增文案），彻底消除横向溢出与右缘半裁——之前
+// 窄屏靠 Table 内建 .scroll 横滚才够到「重新授权链接 / 操作」列、状态胶囊贴右缘
+// 被切一半的问题不再出现。桌面（≥769）维持原表格布局不变。
+@include mobile {
   .filterSelect {
     width: 100%;
   }
 
+  .tableWrap {
+    table {
+      display: block;
+      width: 100%;
+    }
+
+    thead {
+      display: none;
+    }
+
+    tbody {
+      display: block;
+    }
+
+    // 卡片四周留均匀间距，与 Table 外层 .wrap 边框之间形成一致的内凹留白，
+    // 呈现「框内悬浮卡片」而非贴边双线。
+    tbody tr {
+      display: block;
+      padding: $spacing-sm $spacing-md;
+      margin: $spacing-sm;
+      border: 1px solid var(--border-color);
+      border-radius: $radius-md;
+      background: var(--bg-primary);
+    }
+
+    tbody td {
+      display: block;
+      padding: 6px 0;
+      border-bottom: none;
+      text-align: left;
+      white-space: normal;
+
+      &::before {
+        content: attr(data-label);
+        display: block;
+        margin-bottom: 3px;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+        color: var(--muted-foreground);
+      }
+    }
+  }
+
+  // 卡片里每个字段独占整行，容器 id / 绑定账号允许换行显示完整值，不再省略号截断。
   .containerId,
   .bindingAccount {
-    max-width: 120px;
+    max-width: 100%;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    word-break: break-all;
+  }
+
+  // 关键可点操作在卡片里左对齐、完整可点，不再贴右缘。
+  .actions {
+    justify-content: flex-start;
   }
 }

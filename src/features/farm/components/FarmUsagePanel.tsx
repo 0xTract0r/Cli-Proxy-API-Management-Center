@@ -73,29 +73,15 @@ export function FarmUsagePanel() {
             <TableRow>
               <TableHead>{t('farm.accounts.column_name')}</TableHead>
               <TableHead>{t('farm.bind_modal.env_label')}</TableHead>
-              <TableHead className={styles.colSecondary}>
-                {t('farm.containers.column_device')}
-              </TableHead>
-              <TableHead className={styles.colCompact} alignRight>
-                {t('farm.usage.columnInput')}
-              </TableHead>
-              <TableHead className={styles.colCompact} alignRight>
-                {t('farm.usage.columnOutput')}
-              </TableHead>
-              <TableHead className={styles.colCompact} alignRight>
-                {t('farm.usage.columnCacheRead')}
-              </TableHead>
-              <TableHead className={styles.colCompact} alignRight>
-                {t('farm.usage.columnReasoning')}
-              </TableHead>
+              <TableHead>{t('farm.containers.column_device')}</TableHead>
+              <TableHead alignRight>{t('farm.usage.columnInput')}</TableHead>
+              <TableHead alignRight>{t('farm.usage.columnOutput')}</TableHead>
+              <TableHead alignRight>{t('farm.usage.columnCacheRead')}</TableHead>
+              <TableHead alignRight>{t('farm.usage.columnReasoning')}</TableHead>
               <TableHead alignRight>{t('farm.usage.columnTokens')}</TableHead>
-              <TableHead className={styles.colCompact} alignRight>
-                {t('farm.usage.columnBillable')}
-              </TableHead>
+              <TableHead alignRight>{t('farm.usage.columnBillable')}</TableHead>
               <TableHead alignRight>{t('farm.usage.columnCost')}</TableHead>
-              <TableHead className={styles.colSecondary} alignRight>
-                {t('farm.usage.columnRequests')}
-              </TableHead>
+              <TableHead alignRight>{t('farm.usage.columnRequests')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -104,7 +90,7 @@ export function FarmUsagePanel() {
                 key={`${item.container_id}-${item.account_id}-${item.env}-${item.auth_index}`}
                 data-testid={`farm-usage-row-${item.container_id}-${item.account_id}`}
               >
-                <TableCell>
+                <TableCell data-label={t('farm.accounts.column_name')}>
                   <div className={styles.accountCell}>
                     <span>{item.account_id}</span>
                     {item.account_email ? (
@@ -112,36 +98,36 @@ export function FarmUsagePanel() {
                     ) : null}
                   </div>
                 </TableCell>
-                <TableCell>
+                <TableCell data-label={t('farm.bind_modal.env_label')}>
                   <span className={styles.chip}>
                     {t(`farm.env.${item.env}`, { defaultValue: item.env })}
                   </span>
                 </TableCell>
-                <TableCell className={styles.colSecondary}>
+                <TableCell data-label={t('farm.containers.column_device')}>
                   <span className={styles.mono}>{item.container_id}</span>
                 </TableCell>
-                <TableCell className={styles.colCompact} alignRight>
+                <TableCell alignRight data-label={t('farm.usage.columnInput')}>
                   <span className={styles.mono}>{formatTokenTotal(item.tokens.input)}</span>
                 </TableCell>
-                <TableCell className={styles.colCompact} alignRight>
+                <TableCell alignRight data-label={t('farm.usage.columnOutput')}>
                   <span className={styles.mono}>{formatTokenTotal(item.tokens.output)}</span>
                 </TableCell>
-                <TableCell className={styles.colCompact} alignRight>
+                <TableCell alignRight data-label={t('farm.usage.columnCacheRead')}>
                   <span className={styles.mono}>{formatTokenTotal(item.tokens.cache_read)}</span>
                 </TableCell>
-                <TableCell className={styles.colCompact} alignRight>
+                <TableCell alignRight data-label={t('farm.usage.columnReasoning')}>
                   <span className={styles.mono}>{formatTokenTotal(item.tokens.reasoning)}</span>
                 </TableCell>
-                <TableCell alignRight>
+                <TableCell alignRight data-label={t('farm.usage.columnTokens')}>
                   <span className={styles.mono}>{formatTokenTotal(item.tokens.total)}</span>
                 </TableCell>
-                <TableCell className={styles.colCompact} alignRight>
+                <TableCell alignRight data-label={t('farm.usage.columnBillable')}>
                   <span className={styles.mono}>{formatTokenTotal(item.tokens.billable)}</span>
                 </TableCell>
-                <TableCell alignRight>
+                <TableCell alignRight data-label={t('farm.usage.columnCost')}>
                   <span className={styles.mono}>{formatCostUsd(item.cost_usd)}</span>
                 </TableCell>
-                <TableCell className={styles.colSecondary} alignRight>
+                <TableCell alignRight data-label={t('farm.usage.columnRequests')}>
                   <span className={styles.mono}>{formatTokenTotal(item.requests)}</span>
                 </TableCell>
               </TableRow>
