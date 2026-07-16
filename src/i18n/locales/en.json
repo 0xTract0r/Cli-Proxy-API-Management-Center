@@ -538,6 +538,7 @@
     "account_settings_device_id_section_title_farm": "Device ID source",
     "account_settings_device_id_section_title_unknown": "Device ID (binding unknown)",
     "account_settings_synthetic_device_id_masked": "Masked device ID",
+    "account_settings_synthetic_device_id_copy": "Copy masked device ID (the full value is never sent to the frontend)",
     "account_settings_synthetic_device_id_synthetic_badge": "Synthetic pseudonym",
     "account_settings_synthetic_device_id_pending": "Not derived yet",
     "account_settings_synthetic_device_id_hint": "Read-only. A stable per-account synthetic pseudonym derived by core; only the first 16 hex characters are shown and the real value is never exposed. Empty means core has not derived one yet.",
@@ -1976,6 +1977,7 @@
       "deviceIdSourceColumn": "Device ID source",
       "lastRefresh": "Last refresh",
       "reauthUrl": "Re-authentication URL",
+      "reauthAction": "Re-authenticate",
       "disabled": "Disabled",
       "disabledBadge": "Disabled",
       "degradedHint": "Has LLM traffic but no telemetry — health signal may be asymmetric, not necessarily a real failure"

@@ -29,6 +29,32 @@ import { formatInUtc8 } from '@/utils/datetime';
 import styles from '@/pages/AuthFilesPage.module.scss';
 
 /**
+ * 内联 copy 图标（lucide "copy" glyph，风格对齐 @/components/ui/icons 的
+ * baseSvgProps 约定）。只本文件使用，不加进共享图标集，避免跨切片改动
+ * 共享文件（S2 device_id 面板 copy 打磨范围限定单文件）。
+ */
+function DeviceIdCopyIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+      <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+    </svg>
+  );
+}
+
+/**
  * 审计时间戳 `recorded_at` 是后端原样 UTC 串（带 T/Z）。展示时一律转成
  * UTC+8（Asia/Shanghai）；无法解析时回退原串，空值显示 '-'。
  */
@@ -1710,10 +1736,48 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                             })}
                           </span>
                           {deviceIdDisplayedValue ? (
-                            <strong>
+                            <strong
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 6,
+                                maxWidth: '100%',
+                              }}
+                            >
                               <code className={styles.managedHeaderValue} title={deviceIdDisplayedValue}>
                                 {deviceIdDisplayedValue}
                               </code>
+                              {/* core 只回传前 16 hex + 省略号（见
+                                  core/internal/api/handlers/management/auth_files.go 的
+                                  syntheticDeviceIDMasked 推导），完整 64-hex device_id 从不
+                                  下发到前端，因此这里复制的就是当前展示的脱敏截断值本身，
+                                  不是伪造出的"完整值"。 */}
+                              <button
+                                type="button"
+                                onClick={() => void onCopyText(deviceIdDisplayedValue)}
+                                data-testid="account-settings-synthetic-device-id-copy"
+                                aria-label={t('auth_files.account_settings_synthetic_device_id_copy', {
+                                  defaultValue:
+                                    'Copy masked device ID (the full value is never sent to the frontend)',
+                                })}
+                                title={t('auth_files.account_settings_synthetic_device_id_copy', {
+                                  defaultValue:
+                                    'Copy masked device ID (the full value is never sent to the frontend)',
+                                })}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  flexShrink: 0,
+                                  background: 'none',
+                                  border: 'none',
+                                  color: 'var(--muted-foreground)',
+                                  cursor: 'pointer',
+                                  padding: 2,
+                                }}
+                              >
+                                <DeviceIdCopyIcon size={14} />
+                              </button>
                             </strong>
                           ) : (
                             <strong data-testid="account-settings-synthetic-device-id-placeholder">

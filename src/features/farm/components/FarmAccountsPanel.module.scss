@@ -74,6 +74,13 @@
   color: var(--muted-foreground);
 }
 
+// last refresh 时间戳专用：--muted-foreground 在部分主题下偏浅，单独加深到
+// #6b7280 一档，保证在浅色卡片背景上达到 WCAG AA 4.5:1 正文对比度要求。只作用于
+// last refresh 列，不改 .mono 本身（.mono 仍用于 device_id 列的容器 id 等其它场景）。
+.refreshTimestamp {
+  color: #6b7280;
+}
+
 // device_id source 列：来源徽标之外，farm_bound 账号再补显绑定容器 id + 环境，
 // 帮助 operator 不用跳去容器表就能核对"这条 device_id 到底来自哪个容器"。
 .deviceSourceCell {
