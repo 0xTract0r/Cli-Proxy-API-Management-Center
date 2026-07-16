@@ -12,16 +12,42 @@ import { Select } from '@/components/ui/Select';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { useFarmAccounts } from '../hooks/useFarmAccounts';
-import { FARM_ENVS, type FarmEnv } from '@/types/farm';
+import { FARM_ENVS, type FarmDeviceIDSource, type FarmEnv } from '@/types/farm';
+import { formatDateTimeUtc8 } from '@/utils/datetime';
 import styles from './FarmAccountsPanel.module.scss';
+
+// 农场绑定容器状态徽标着色，口径与 FarmContainerTable 的 STATUS_BADGE_VARIANT
+// 一致（复制一份小映射，不跨组件文件耦合导出）：created/starting=muted，
+// running=success，degraded/orphaned=warning，down=error，retired=muted。
+const FARM_CONTAINER_STATUS_VARIANT: Record<string, 'success' | 'warning' | 'error' | 'muted'> = {
+  created: 'muted',
+  starting: 'muted',
+  running: 'success',
+  degraded: 'warning',
+  down: 'error',
+  retired: 'muted',
+  orphaned: 'warning',
+};
+
+// device_id 展示口径四态着色（spec「device_id 展示口径全站对齐」）：
+// container_synced=真实容器同步(success)，drift=正在漂移待对账(warning)，
+// synthetic=确认非农场绑定按账号派生合成(muted，正常态非异常)，
+// unknown=后端无法确定绑定关系(muted，中性回退非异常)。
+const DEVICE_ID_SOURCE_VARIANT: Record<FarmDeviceIDSource, 'success' | 'warning' | 'error' | 'muted'> = {
+  container_synced: 'success',
+  drift: 'warning',
+  synthetic: 'muted',
+  unknown: 'muted',
+};
 
 /**
  * 账号健康区：复用 GET /api/farm/accounts?env=<env>（编排器透传 CPA 该
  * 环境既有 GET /auth-files 健康列表，见 handlers.go handleListAccounts），
- * operator 借此在挑账号绑定前先看清哪些账号可用。
+ * operator 借此在挑账号绑定前先看清哪些账号可用；同时展示最近刷新时间、
+ * 重新授权入口与禁用状态，帮助定位需要人工介入的账号。
  */
 export function FarmAccountsPanel() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [env, setEnv] = useState<FarmEnv>('test');
   const { accounts, loading, error } = useFarmAccounts(env);
 
@@ -61,21 +87,99 @@ export function FarmAccountsPanel() {
             <TableRow>
               <TableHead>{t('farm.accounts.column_name')}</TableHead>
               <TableHead>{t('farm.accounts.column_status')}</TableHead>
+              <TableHead className={styles.colSecondary}>
+                {t('farm.accountHealth.deviceIdSourceColumn', {
+                  defaultValue: 'Device ID source',
+                })}
+              </TableHead>
+              <TableHead className={styles.colSecondary}>
+                {t('farm.accountHealth.lastRefresh')}
+              </TableHead>
+              <TableHead className={styles.colSecondary}>{t('farm.accountHealth.disabled')}</TableHead>
+              <TableHead>{t('farm.accountHealth.reauthUrl')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {accounts.map((account) => (
-              <TableRow key={account.name}>
-                <TableCell>{account.name}</TableCell>
-                <TableCell>
-                  <span
-                    className={`status-badge ${account.disabled ? 'error' : 'success'}`}
+            {accounts.map((account) => {
+              // "有 LLM 请求但无遥测"不对称归因提示：账号绑定的农场容器已经
+              // 被判 degraded，但账号本身仍有真实 LLM 流量（recent_requests
+              // 或 success > 0），说明当前 degraded 更可能是遥测/保活侧信号
+              // 缺失，未必是账号真的故障——避免误导 operator 直接下线账号。
+              const hasLlmTraffic = (account.recent_requests ?? 0) > 0 || (account.success ?? 0) > 0;
+              const showDegradedHint =
+                account.farm_bound && account.farm_container_status === 'degraded' && hasLlmTraffic;
+
+              return (
+                <TableRow key={account.name} data-testid={`farm-account-row-${account.name}`}>
+                  <TableCell>{account.name}</TableCell>
+                  <TableCell>
+                    <div className={styles.statusCell}>
+                      <span className={`status-badge ${account.disabled ? 'error' : 'success'}`}>
+                        {account.disabled
+                          ? t('farm.accounts.status_disabled')
+                          : account.status || t('farm.accounts.status_active')}
+                      </span>
+                      {account.farm_bound && account.farm_container_status ? (
+                        <span
+                          className={`status-badge ${
+                            FARM_CONTAINER_STATUS_VARIANT[account.farm_container_status] ?? 'muted'
+                          }`}
+                        >
+                          {t(`farm.status.${account.farm_container_status}`, {
+                            defaultValue: account.farm_container_status,
+                          })}
+                        </span>
+                      ) : null}
+                      {showDegradedHint ? (
+                        <p
+                          className={styles.degradedHint}
+                          data-testid={`farm-account-degraded-hint-${account.name}`}
+                        >
+                          {t('farm.accountHealth.degradedHint')}
+                        </p>
+                      ) : null}
+                    </div>
+                  </TableCell>
+                  <TableCell
+                    className={styles.colSecondary}
+                    data-testid={`farm-account-device-id-source-${account.name}`}
                   >
-                    {account.disabled ? t('farm.accounts.status_disabled') : account.status || t('farm.accounts.status_active')}
-                  </span>
-                </TableCell>
-              </TableRow>
-            ))}
+                    <span
+                      className={`status-badge ${DEVICE_ID_SOURCE_VARIANT[account.device_id_source] ?? 'muted'}`}
+                    >
+                      {t(`auth_files.account_settings_device_id_source_${account.device_id_source}`, {
+                        defaultValue: account.device_id_source,
+                      })}
+                    </span>
+                  </TableCell>
+                  <TableCell className={styles.colSecondary}>
+                    <span className={styles.mono}>
+                      {account.last_refresh
+                        ? formatDateTimeUtc8(account.last_refresh, i18n.language)
+                        : t('farm.containers.never')}
+                    </span>
+                  </TableCell>
+                  <TableCell className={styles.colSecondary}>
+                    {account.disabled ? t('common.yes') : t('common.no')}
+                  </TableCell>
+                  <TableCell>
+                    {account.reauth_url ? (
+                      <a
+                        className={styles.reauthLink}
+                        href={account.reauth_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        data-testid={`farm-account-reauth-${account.name}`}
+                      >
+                        {t('farm.accountHealth.reauthUrl')}
+                      </a>
+                    ) : (
+                      <span className={styles.mono}>—</span>
+                    )}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       )}

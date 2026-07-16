@@ -445,6 +445,13 @@
     "account_settings_synthetic_device_id_synthetic_badge": "合成假名",
     "account_settings_synthetic_device_id_pending": "尚未派生",
     "account_settings_synthetic_device_id_hint": "唯讀。core 派生的每帳號穩定合成假名；只展示前 16 位 hex，真實值不暴露。為空表示 core 尚未派生。",
+    "account_settings_device_id_source_container_synced": "容器同步",
+    "account_settings_device_id_source_drift": "漂移中",
+    "account_settings_device_id_source_synthetic": "合成",
+    "account_settings_device_id_source_unknown": "未知",
+    "account_settings_device_id_real_from_container": "真實容器同步 · 綁定 {{container}} · {{farm}}",
+    "account_settings_device_id_drift_warning": "即時值與釘值漂移，對帳將復原",
+    "account_settings_device_id_neutral_label": "綁定關係不可知",
     "account_settings_raw_json_details": "進階原始 JSON 預覽",
     "account_settings_enabled_hint": "開啟表示帳號可被執行階段選擇；關閉會寫入 disabled=true，但不會刪除帳號資料。",
     "account_settings_refresh_enabled": "自動刷新權杖",
@@ -1597,86 +1604,139 @@
     }
   },
   "farm": {
-    "title": "设备农场",
-    "subtitle": "管理独立农场编排器的住宅代理容器池：容器保活状态、账号绑定与解绑。",
+    "title": "設備農場",
+    "subtitle": "管理獨立農場編排器的住宅代理容器池：容器保活狀態、帳號綁定與解綁。",
     "config": {
-      "title": "编排器连接配置",
-      "desc": "农场编排器是独立于本管理中心的后端服务，需单独配置地址与 admin key 才能加载容器池数据。",
-      "status_ready": "已配置",
-      "status_missing": "未配置",
-      "base_url_label": "编排器地址",
+      "title": "編排器連線設定",
+      "desc": "農場編排器是獨立於本管理中心的後端服務，需單獨設定位址與 admin key 才能載入容器池資料。",
+      "status_ready": "已設定",
+      "status_missing": "尚未設定",
+      "base_url_label": "編排器位址",
       "base_url_placeholder": "例如 http://127.0.0.1:18517",
       "admin_key_label": "Admin Key",
-      "admin_key_placeholder": "编排器 FARM_MGMT_KEY",
-      "show_key": "显示",
-      "hide_key": "隐藏",
-      "save_success": "农场编排器配置已保存"
+      "admin_key_placeholder": "編排器 FARM_MGMT_KEY",
+      "show_key": "顯示",
+      "hide_key": "隱藏",
+      "save_success": "農場編排器設定已儲存"
     },
     "accounts": {
-      "title": "账号健康",
-      "desc": "该环境下可用于绑定的账号列表（来自 CPA 既有认证文件健康检查）。",
-      "empty_title": "暂无账号",
-      "empty_desc": "该环境下还没有可用账号，请先在 CPA 侧上传认证文件。",
-      "column_name": "账号",
-      "column_status": "状态",
+      "title": "帳號健康",
+      "desc": "該環境下可用於綁定的帳號清單（來自 CPA 既有驗證檔案健康檢查）。",
+      "empty_title": "尚無帳號",
+      "empty_desc": "該環境下還沒有可用帳號，請先在 CPA 端上傳驗證檔案。",
+      "column_name": "帳號",
+      "column_status": "狀態",
       "status_active": "正常",
-      "status_disabled": "已禁用"
+      "status_disabled": "已停用"
     },
     "containers": {
       "title": "容器池",
-      "desc": "容器状态每隔一段时间自动轮询刷新；绑定/解绑会立即触发容器启停。",
-      "empty_title": "容器池为空",
-      "empty_desc": "还没有已入池的容器，先在上方输入编号新建一个。",
-      "not_configured_title": "尚未配置编排器",
-      "not_configured_desc": "请先在上方填写编排器地址与 admin key 并保存，再查看容器池。",
-      "column_device": "容器 / 设备",
-      "column_status": "状态",
+      "desc": "容器狀態每隔一段時間自動輪詢重新整理；綁定/解綁會立即觸發容器啟停。",
+      "empty_title": "容器池為空",
+      "empty_desc": "還沒有已入池的容器，先在上方輸入編號新建一個。",
+      "not_configured_title": "尚未設定編排器",
+      "not_configured_desc": "請先在上方填寫編排器位址與 admin key 並儲存，再查看容器池。",
+      "column_device": "容器 / 裝置",
+      "column_status": "狀態",
       "column_keepalive": "最近保活",
       "column_token_usage": "Token 用量",
-      "column_binding": "绑定账号",
+      "column_binding": "綁定帳號",
       "column_actions": "操作",
-      "action_bind": "绑定",
-      "action_unbind": "解绑",
-      "no_binding": "未绑定",
-      "never": "从未",
-      "create_placeholder": "容器编号后缀，例如 acct-07",
+      "action_bind": "綁定",
+      "action_unbind": "解綁",
+      "no_binding": "未綁定",
+      "never": "從未",
+      "create_placeholder": "容器編號後綴，例如 acct-07",
       "create_button": "新建容器",
-      "create_success": "容器 {{id}} 已创建"
+      "create_success": "容器 {{id}} 已建立"
     },
     "status": {
       "created": "已入池",
-      "starting": "启动中",
-      "running": "运行中",
-      "degraded": "异常",
-      "down": "已停止"
+      "starting": "啟動中",
+      "running": "運行中",
+      "degraded": "異常",
+      "down": "已停止",
+      "retired": "已退役",
+      "orphaned": "幽靈態"
     },
     "env": {
-      "test": "测试",
-      "prod": "生产"
+      "test": "測試",
+      "prod": "生產"
+    },
+    "actions": {
+      "retire": "退役"
+    },
+    "retire": {
+      "confirmTitle": "退役容器",
+      "confirmBody": "確定要退役容器 {{id}} 嗎？容器將停止並刪除，登記表列歸檔為已退役，此操作無法復原。",
+      "keepVolume": "保留卷（預設，建議）",
+      "deleteVolume": "同時刪除卷（無法復原，會清除 machine ID 與 Claude 狀態）"
+    },
+    "filter": {
+      "statusLabel": "狀態",
+      "all": "全部"
+    },
+    "group": {
+      "active": "運行中",
+      "retired": "已退役",
+      "degraded": "異常",
+      "down": "已停止",
+      "created": "已入池"
+    },
+    "usage": {
+      "columnTokens": "Token 用量",
+      "columnCost": "費用（USD）",
+      "columnInput": "輸入",
+      "columnOutput": "輸出",
+      "columnCacheRead": "快取讀取",
+      "columnReasoning": "思考",
+      "columnBillable": "計費 Token",
+      "columnRequests": "請求數",
+      "detailTitle": "Token 用量明細",
+      "sinceNote": "自 CPA 上次重新啟動起（記憶體態）",
+      "empty": "尚無用量資料"
+    },
+    "resources": {
+      "title": "資源佔用",
+      "mem": "記憶體",
+      "cpu": "CPU",
+      "limit": "上限",
+      "hostTitle": "整機",
+      "hostNote": "整機含非農場行程",
+      "empty": "尚無容器資源資料"
+    },
+    "accountHealth": {
+      "deviceIdSourceColumn": "device_id 來源",
+      "lastRefresh": "最近重新整理",
+      "reauthUrl": "重新授權連結",
+      "disabled": "已停用",
+      "degradedHint": "有 LLM 請求但無遙測回報——健康訊號可能不對稱，未必是真實故障"
     },
     "bind_modal": {
-      "title": "绑定账号",
+      "title": "綁定帳號",
       "container_label": "容器",
-      "container_placeholder": "选择未绑定容器",
-      "env_label": "环境",
-      "account_label": "账号",
-      "account_placeholder": "选择账号",
-      "submit": "确认绑定",
-      "no_unbound_containers": "没有可绑定的容器，请先新建容器。",
-      "no_accounts": "该环境下没有可用账号。"
+      "container_placeholder": "選擇未綁定容器",
+      "env_label": "環境",
+      "account_label": "帳號",
+      "account_placeholder": "選擇帳號",
+      "submit": "確認綁定",
+      "no_unbound_containers": "沒有可綁定的容器，請先新建容器。",
+      "no_accounts": "該環境下沒有可用帳號。"
     },
-    "unbind_confirm_title": "解绑容器",
-    "unbind_confirm_message": "确定要解绑容器 {{id}} 吗？容器将停止运行，绑定账号的代理凭证也会一并清除。",
+    "unbind_confirm_title": "解綁容器",
+    "unbind_confirm_message": "確定要解綁容器 {{id}} 嗎？容器將停止運行，綁定帳號的代理憑證也會一併清除。",
     "notification": {
-      "bind_success": "容器 {{id}} 已绑定并启动",
-      "bind_pending": "容器 {{id}} 已绑定，但 CPA 侧 device_id 同步暂未上线",
-      "unbind_success": "容器 {{id}} 已解绑"
+      "bind_success": "容器 {{id}} 已綁定並啟動",
+      "bind_pending": "容器 {{id}} 已綁定，但 CPA 端 device_id 同步暫未上線",
+      "unbind_success": "容器 {{id}} 已解綁",
+      "retire_success": "容器 {{id}} 已退役"
     },
     "error": {
-      "load_failed": "加载失败",
-      "bind_failed": "绑定失败",
-      "unbind_failed": "解绑失败",
-      "create_failed": "创建容器失败"
+      "load_failed": "載入失敗",
+      "bind_failed": "綁定失敗",
+      "unbind_failed": "解綁失敗",
+      "create_failed": "建立容器失敗",
+      "retire_failed": "退役失敗"
     }
   }
 }

@@ -1,0 +1,84 @@
+@use '../../../styles/variables' as *;
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-sm;
+  padding: $spacing-lg;
+  border: 1px solid var(--border-color);
+  border-radius: $radius-lg;
+  background: var(--card-bg, var(--surface-bg));
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-md;
+  flex-wrap: wrap;
+}
+
+.title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted-foreground);
+  font-style: italic;
+}
+
+.loadingState {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+  padding: $spacing-md 0;
+  color: var(--muted-foreground);
+}
+
+.mono {
+  font-family: $font-mono;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--radius-md, $radius-md);
+  border: 1px solid var(--border-color);
+  background: var(--muted-bg);
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+
+.accountCell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.accountEmail {
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+
+// token 明细字段（input/output/cache_read/reasoning/billable）列多，先在平板
+// 宽度折叠，只保留 total/cost 等关键列；超窄屏（.colSecondary）再进一步折叠
+// container id 与 requests。折叠列仍可通过 Table 内建横向滚动查看完整数据，
+// 这里只是减少默认可视列数，不丢数据。
+@media (max-width: 768px) {
+  .colCompact {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .colSecondary {
+    display: none;
+  }
+}

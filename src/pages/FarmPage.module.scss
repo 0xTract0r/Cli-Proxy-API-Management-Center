@@ -33,4 +33,21 @@
   display: flex;
   align-items: center;
   gap: $spacing-sm;
+  flex-wrap: wrap;
+
+  // Input 内部 .form-group 默认按内容撑开宽度；窄屏（390 一类手机视口）下
+  // 与新建按钮并排容易挤压变形，这里显式收缩+允许折行，避免撑破卡片容器。
+  :global(.form-group) {
+    flex: 1 1 160px;
+    min-width: 0;
+    margin-bottom: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .createContainerBar {
+    :global(.form-group) {
+      flex-basis: 100%;
+    }
+  }
 }

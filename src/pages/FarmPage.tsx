@@ -16,8 +16,11 @@ import { FarmConfigPanel } from '@/features/farm/components/FarmConfigPanel';
 import { FarmAccountsPanel } from '@/features/farm/components/FarmAccountsPanel';
 import { FarmContainerTable } from '@/features/farm/components/FarmContainerTable';
 import { FarmBindModal } from '@/features/farm/components/FarmBindModal';
+import { FarmResourcePanel } from '@/features/farm/components/FarmResourcePanel';
+import { FarmUsagePanel } from '@/features/farm/components/FarmUsagePanel';
 import { useFarmContainers } from '@/features/farm/hooks/useFarmContainers';
 import { useFarmBindings } from '@/features/farm/hooks/useFarmBindings';
+import { useFarmRetire } from '@/features/farm/hooks/useFarmRetire';
 import type { FarmContainerView } from '@/types/farm';
 import styles from './FarmPage.module.scss';
 
@@ -31,6 +34,7 @@ export function FarmPage() {
     setContainers,
     reload,
   });
+  const { retiringContainerId, retire } = useFarmRetire({ setContainers, reload });
 
   const [bindModalOpen, setBindModalOpen] = useState(false);
   const [preselectedContainerId, setPreselectedContainerId] = useState<string | null>(null);
@@ -110,11 +114,16 @@ export function FarmPage() {
               loading={loading}
               error={error}
               unbindingContainerId={unbindingContainerId}
+              retiringContainerId={retiringContainerId}
               onBind={openBindModal}
               onUnbind={unbind}
+              onRetire={retire}
             />
           )}
         </Card>
+
+        {isConfigured ? <FarmResourcePanel /> : null}
+        {isConfigured ? <FarmUsagePanel /> : null}
       </div>
 
       <FarmBindModal

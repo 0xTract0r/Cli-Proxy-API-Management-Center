@@ -539,6 +539,13 @@
     "account_settings_synthetic_device_id_synthetic_badge": "合成假名",
     "account_settings_synthetic_device_id_pending": "尚未派生",
     "account_settings_synthetic_device_id_hint": "只读。core 派生的每账号稳定合成假名；只展示前 16 位 hex，真实值不暴露。为空表示 core 尚未派生。",
+    "account_settings_device_id_source_container_synced": "容器同步",
+    "account_settings_device_id_source_drift": "漂移中",
+    "account_settings_device_id_source_synthetic": "合成",
+    "account_settings_device_id_source_unknown": "未知",
+    "account_settings_device_id_real_from_container": "真实容器同步 · 绑定 {{container}} · {{farm}}",
+    "account_settings_device_id_drift_warning": "实时值与钉值漂移，对账将兜回",
+    "account_settings_device_id_neutral_label": "绑定关系不可知",
     "account_settings_section_editable": "可编辑账号设置",
     "account_settings_section_editable_desc": "只有本区字段会随保存写入（每账号 PATCH）。",
     "account_settings_section_editable_badge": "可编辑",
@@ -1903,11 +1910,62 @@
       "starting": "启动中",
       "running": "运行中",
       "degraded": "异常",
-      "down": "已停止"
+      "down": "已停止",
+      "retired": "已退役",
+      "orphaned": "幽灵态"
     },
     "env": {
       "test": "测试",
       "prod": "生产"
+    },
+    "actions": {
+      "retire": "退役"
+    },
+    "retire": {
+      "confirmTitle": "退役容器",
+      "confirmBody": "确定要退役容器 {{id}} 吗？容器将停止并删除，注册表行归档为已退役，此操作不可撤销。",
+      "keepVolume": "保留卷（默认，推荐）",
+      "deleteVolume": "同时删除卷（不可逆，会清除 machine ID 与 Claude 状态）"
+    },
+    "filter": {
+      "statusLabel": "状态",
+      "all": "全部"
+    },
+    "group": {
+      "active": "活跃",
+      "retired": "已退役",
+      "degraded": "异常",
+      "down": "已停止",
+      "created": "已入池"
+    },
+    "usage": {
+      "columnTokens": "Token 用量",
+      "columnCost": "费用（USD）",
+      "columnInput": "输入",
+      "columnOutput": "输出",
+      "columnCacheRead": "缓存读取",
+      "columnReasoning": "思考",
+      "columnBillable": "计费 Token",
+      "columnRequests": "请求数",
+      "detailTitle": "Token 用量明细",
+      "sinceNote": "自 CPA 上次重启起（内存态）",
+      "empty": "暂无用量数据"
+    },
+    "resources": {
+      "title": "资源占用",
+      "mem": "内存",
+      "cpu": "CPU",
+      "limit": "上限",
+      "hostTitle": "整机",
+      "hostNote": "整机含非农场进程",
+      "empty": "暂无容器资源数据"
+    },
+    "accountHealth": {
+      "deviceIdSourceColumn": "device_id 来源",
+      "lastRefresh": "最近刷新",
+      "reauthUrl": "重新授权链接",
+      "disabled": "已禁用",
+      "degradedHint": "有 LLM 请求但无遥测上报——健康信号可能不对称，未必是真实故障"
     },
     "bind_modal": {
       "title": "绑定账号",
@@ -1925,13 +1983,15 @@
     "notification": {
       "bind_success": "容器 {{id}} 已绑定并启动",
       "bind_pending": "容器 {{id}} 已绑定，但 CPA 侧 device_id 同步暂未上线",
-      "unbind_success": "容器 {{id}} 已解绑"
+      "unbind_success": "容器 {{id}} 已解绑",
+      "retire_success": "容器 {{id}} 已退役"
     },
     "error": {
       "load_failed": "加载失败",
       "bind_failed": "绑定失败",
       "unbind_failed": "解绑失败",
-      "create_failed": "创建容器失败"
+      "create_failed": "创建容器失败",
+      "retire_failed": "退役失败"
     }
   }
 }

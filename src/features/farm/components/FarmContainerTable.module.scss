@@ -1,5 +1,23 @@
 @use '../../../styles/variables' as *;
 
+.filterBar {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+  margin-bottom: $spacing-md;
+  flex-wrap: wrap;
+}
+
+.filterLabel {
+  font-size: 13px;
+  color: var(--muted-foreground);
+  white-space: nowrap;
+}
+
+.filterSelect {
+  width: 160px;
+}
+
 .loadingState {
   display: flex;
   align-items: center;
@@ -67,5 +85,24 @@
 .actions {
   display: flex;
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: $spacing-sm;
+}
+
+// 窄屏（390 一类手机视口）折叠次要列，减少必须横向滚动才能看到关键信息的
+// 深度；Table 组件本身的 .scroll 容器已经保证不会撑破祖先，这里只是体验
+// 优化，不是安全必要项。
+@media (max-width: 480px) {
+  .colSecondary {
+    display: none;
+  }
+
+  .filterSelect {
+    width: 100%;
+  }
+
+  .containerId,
+  .bindingAccount {
+    max-width: 120px;
+  }
 }
