@@ -535,6 +535,7 @@
     "account_settings_identity_audit_source_default": "Default baseline",
     "account_settings_identity_audit_hint": "Append-only, read-only audit of per-account identity changes. It records when Class B high-water version markers moved forward, which fields changed, and where each version came from (real client observed vs online npm vs default baseline); it is not user editable.",
     "account_settings_synthetic_device_id": "Synthetic device ID",
+    "account_settings_device_id_section_title_farm": "Device ID source",
     "account_settings_synthetic_device_id_masked": "Masked device ID",
     "account_settings_synthetic_device_id_synthetic_badge": "Synthetic pseudonym",
     "account_settings_synthetic_device_id_pending": "Not derived yet",
@@ -1933,7 +1934,7 @@
     },
     "group": {
       "active": "Active",
-      "retired": "Retired",
+      "retired": "Inactive",
       "degraded": "Degraded",
       "down": "Down",
       "created": "Created"

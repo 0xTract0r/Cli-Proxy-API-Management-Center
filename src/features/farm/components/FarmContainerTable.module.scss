@@ -80,6 +80,18 @@
   background: var(--muted-bg);
   color: var(--muted-foreground);
   font-size: 12px;
+  white-space: nowrap;
+}
+
+// 表头与状态徽标一律单行，消除窄视口下逐字竖排（如「运/行/中」「已/禁/用」）。
+// 列多导致的超宽由 Table 内建的 .scroll 横向滚动兜底，不强制 min-width，
+// 以免 1440 桌面主视图触发不必要的横滚。
+.tableWrap th {
+  white-space: nowrap;
+}
+
+.tableWrap :global(.status-badge) {
+  white-space: nowrap;
 }
 
 .actions {

@@ -441,6 +441,7 @@
     "account_settings_managed_header_history_next": "變更後",
     "account_settings_managed_header_history_no_diff": "未記錄欄位層級差異",
     "account_settings_synthetic_device_id": "合成 device ID",
+    "account_settings_device_id_section_title_farm": "device ID 來源",
     "account_settings_synthetic_device_id_masked": "脫敏 device ID",
     "account_settings_synthetic_device_id_synthetic_badge": "合成假名",
     "account_settings_synthetic_device_id_pending": "尚未派生",
@@ -1678,7 +1679,7 @@
     },
     "group": {
       "active": "運行中",
-      "retired": "已退役",
+      "retired": "非活躍",
       "degraded": "異常",
       "down": "已停止",
       "created": "已入池"

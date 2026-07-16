@@ -54,6 +54,14 @@
   background: var(--muted-bg);
   color: var(--muted-foreground);
   font-size: 12px;
+  white-space: nowrap;
+}
+
+// 桌面下多字表头（Token 用量 / 计费 Token / 请求数 / 思考）此前会被逐字折行成
+// 竖排，观感很差；表头一律 nowrap 保持单行。列多导致的超宽交给 Table 内建的
+// .scroll 横向滚动兜底，不强制 min-width，以免 1440 桌面主视图触发不必要的横滚。
+.panel th {
+  white-space: nowrap;
 }
 
 .accountCell {

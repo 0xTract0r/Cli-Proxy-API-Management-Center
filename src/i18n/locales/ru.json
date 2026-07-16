@@ -500,6 +500,7 @@
     "account_settings_managed_header_history_next": "Стало",
     "account_settings_managed_header_history_no_diff": "Изменения на уровне полей не записаны",
     "account_settings_synthetic_device_id": "Синтетический device ID",
+    "account_settings_device_id_section_title_farm": "Источник Device ID",
     "account_settings_synthetic_device_id_masked": "Маскированный device ID",
     "account_settings_synthetic_device_id_synthetic_badge": "Синтетический псевдоним",
     "account_settings_synthetic_device_id_pending": "Ещё не получен",
@@ -1926,7 +1927,7 @@
     },
     "group": {
       "active": "Активные",
-      "retired": "Списанные",
+      "retired": "Неактивные",
       "degraded": "Деградировавшие",
       "down": "Остановленные",
       "created": "Созданные"
