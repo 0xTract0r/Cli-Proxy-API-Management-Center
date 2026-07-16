@@ -70,6 +70,18 @@
   white-space: nowrap;
 }
 
+// 表头一律单行，避免窄视口下逐字竖排（如「已/禁/用」）。
+.panel th {
+  white-space: nowrap;
+}
+
+// 状态徽标（运行中 / 已禁用 / 幽灵态等）在 ≤768 窄视口下此前会逐字折行成竖排，
+// active 胶囊还会贴右缘被裁切；nowrap 保证胶囊整体单行，列多超宽时由 Table 内建
+// 的 .scroll 横向滚动完整展示，不再出现单字竖排或被裁切。
+.panel :global(.status-badge) {
+  white-space: nowrap;
+}
+
 @media (max-width: 480px) {
   .envSelect {
     width: 100%;

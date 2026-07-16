@@ -44,9 +44,12 @@ const STATUS_BADGE_VARIANT: Record<string, 'success' | 'warning' | 'error' | 'mu
   orphaned: 'warning',
 };
 
-// 过滤/分组桶：按需求给定的 5 个具名分组（active/created/degraded/down/
-// retired）+ 一个"全部"哨兵值。starting 归入 active（同属"容器进程已起"），
-// orphaned 归入 retired（两者都属 store.IsArchivedStatus，见 types/farm.ts）。
+// 过滤/分组桶：5 个具名分组（active/created/degraded/down/retired）+ 一个
+// "全部"哨兵值。starting 归入 active（同属"容器进程已起"）。retired 桶实际是
+// "归档态"集合：retired（软删归档）与 orphaned（幽灵态）都属 store.IsArchivedStatus
+// （见 types/farm.ts），两者都会落进该桶——所以它的展示标签用「非活跃 / Inactive」
+// 而非「已退役」，保证过滤标签与行内容（可能是已退役或幽灵态）语义自洽；行内
+// 状态徽标仍按各自精确状态（已退役 / 幽灵态）着色区分。
 type FarmContainerGroup = 'active' | 'created' | 'degraded' | 'down' | 'retired';
 type FarmContainerFilter = 'all' | FarmContainerGroup;
 
@@ -113,7 +116,7 @@ export function FarmContainerTable({
   ];
 
   return (
-    <div data-testid="farm-container-table-wrap">
+    <div className={styles.tableWrap} data-testid="farm-container-table-wrap">
       <div className={styles.filterBar} data-testid="farm-container-filter">
         <span className={styles.filterLabel}>{t('farm.filter.statusLabel')}</span>
         <Select

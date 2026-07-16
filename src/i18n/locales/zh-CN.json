@@ -535,6 +535,7 @@
     "account_settings_identity_audit_source_default": "默认基线",
     "account_settings_identity_audit_hint": "只读、仅追加的每账号身份变更审计。记录 B 类高水位版本标记何时前进、哪些字段变化，以及每个版本号的来源（真实客户端观测 / 在线 npm / 默认基线）；用户不可编辑。",
     "account_settings_synthetic_device_id": "合成 device ID",
+    "account_settings_device_id_section_title_farm": "device ID 来源",
     "account_settings_synthetic_device_id_masked": "脱敏 device ID",
     "account_settings_synthetic_device_id_synthetic_badge": "合成假名",
     "account_settings_synthetic_device_id_pending": "尚未派生",
@@ -1933,7 +1934,7 @@
     },
     "group": {
       "active": "活跃",
-      "retired": "已退役",
+      "retired": "非活跃",
       "degraded": "异常",
       "down": "已停止",
       "created": "已入池"

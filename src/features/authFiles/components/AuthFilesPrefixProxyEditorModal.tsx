@@ -1605,9 +1605,13 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                 {isClaudeManagedPolicy && (
                   <div className="form-group">
                     <label>
-                      {t('auth_files.account_settings_synthetic_device_id', {
-                        defaultValue: 'Synthetic device ID',
-                      })}
+                      {isFarmContainerSynced || isFarmDrift
+                        ? t('auth_files.account_settings_device_id_section_title_farm', {
+                            defaultValue: 'Device ID source',
+                          })
+                        : t('auth_files.account_settings_synthetic_device_id', {
+                            defaultValue: 'Synthetic device ID',
+                          })}
                     </label>
                     <div
                       className={styles.managedHeaderPanel}
