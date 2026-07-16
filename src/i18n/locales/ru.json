@@ -503,6 +503,7 @@
     "account_settings_device_id_section_title_farm": "Источник Device ID",
     "account_settings_device_id_section_title_unknown": "Device ID (статус привязки неизвестен)",
     "account_settings_synthetic_device_id_masked": "Маскированный device ID",
+    "account_settings_synthetic_device_id_copy": "Скопировать маскированный device ID (полное значение никогда не отправляется на фронтенд)",
     "account_settings_synthetic_device_id_synthetic_badge": "Синтетический псевдоним",
     "account_settings_synthetic_device_id_pending": "Ещё не получен",
     "account_settings_synthetic_device_id_hint": "Только чтение. Стабильный синтетический псевдоним аккаунта, полученный ядром; показаны только первые 16 hex-символов, реальное значение не раскрывается. Пусто — ядро ещё не получило значение.",
@@ -1969,6 +1970,7 @@
       "deviceIdSourceColumn": "Источник device_id",
       "lastRefresh": "Последнее обновление",
       "reauthUrl": "Ссылка на повторную авторизацию",
+      "reauthAction": "Повторная авторизация",
       "disabled": "Отключён",
       "disabledBadge": "Отключён",
       "degradedHint": "Есть трафик LLM, но нет телеметрии — сигналы здоровья могут быть асимметричны, это не обязательно реальный сбой"

@@ -169,11 +169,13 @@ textarea {
   }
 
   &.warning {
-    // 琥珀在浅底文字易发虚，文字取更深一档琥珀把对比度顶到 WCAG AA 附近；
-    // 边框/底色仍用基准琥珀，保持清晰的琥珀语义色带。
-    color: color.adjust($warning-color, $lightness: -12%);
-    border-color: rgba($warning-color, 0.35);
-    background: rgba($warning-color, 0.1);
+    // 琥珀语义徽标：文字改用主题感知的深/浅琥珀令牌（浅底 amber-800 深琥珀、
+    // 深底浅琥珀），在浅底与 --bg-primary/--bg-tertiary 卡片上均 ≥ WCAG AA 4.5:1，
+    // 深色主题下同样达标（此前用编译期 $warning-color 深琥珀在深底会掉到 ~2.7:1）。
+    // 底色/边框用同族琥珀令牌，保持清晰的琥珀语义带并与 error 红明确分档。
+    color: var(--amber-text);
+    border-color: var(--amber-30);
+    background: var(--amber-10);
   }
 
   &.error {
@@ -183,7 +185,10 @@ textarea {
   }
 
   &.muted {
-    color: var(--text-secondary);
+    // 中性徽标（Disabled/Synthetic 等）：var(--text-secondary) 在浅色卡片底
+    // (--bg-tertiary/--bg-primary) 上仅约 4.5:1 且会掉到 AA 以下；向 text-primary
+    // 混一档，浅底≥5:1、深底自动提亮，两端都清晰可读又保持“弱化”观感。
+    color: color-mix(in srgb, var(--text-secondary) 68%, var(--text-primary));
   }
 }
 
@@ -193,9 +198,12 @@ textarea {
   right: $spacing-lg;
   display: flex;
   flex-direction: column;
+  // 顶部右侧对齐：让每条 toast 按内容宽度收缩靠右，短消息不再被撑到固定盒宽里
+  // 留大片空白；宽度上限收紧到 380px 并避让窄视口。
+  align-items: flex-end;
   gap: $spacing-sm;
   z-index: $z-notification;
-  max-width: 360px;
+  max-width: min(380px, calc(100vw - #{$spacing-lg} * 2));
 }
 
 @keyframes notification-enter {
@@ -234,6 +242,9 @@ textarea {
   justify-content: space-between;
   align-items: center;
   gap: $spacing-sm;
+  // 按内容自适应宽度：短消息收紧、长消息到上限再换行；设一个温和下限避免单词 toast 过窄。
+  min-width: min(200px, 100%);
+  max-width: 100%;
 
   // Animation states
   &.entering {

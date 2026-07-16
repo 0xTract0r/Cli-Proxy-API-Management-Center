@@ -444,6 +444,7 @@
     "account_settings_device_id_section_title_farm": "device ID 來源",
     "account_settings_device_id_section_title_unknown": "Device ID（綁定關係未知）",
     "account_settings_synthetic_device_id_masked": "脫敏 device ID",
+    "account_settings_synthetic_device_id_copy": "複製脫敏 device ID（完整值不會傳送到前端）",
     "account_settings_synthetic_device_id_synthetic_badge": "合成假名",
     "account_settings_synthetic_device_id_pending": "尚未派生",
     "account_settings_synthetic_device_id_hint": "唯讀。core 派生的每帳號穩定合成假名；只展示前 16 位 hex，真實值不暴露。為空表示 core 尚未派生。",
@@ -1721,6 +1722,7 @@
       "deviceIdSourceColumn": "device_id 來源",
       "lastRefresh": "最近重新整理",
       "reauthUrl": "重新授權連結",
+      "reauthAction": "重新授權",
       "disabled": "已停用",
       "disabledBadge": "已停用",
       "degradedHint": "有 LLM 請求但無遙測回報——健康訊號可能不對稱，未必是真實故障"

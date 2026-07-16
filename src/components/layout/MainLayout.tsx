@@ -743,12 +743,17 @@ export function MainLayout() {
                       to={item.path}
                       className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
                       onClick={() => setSidebarOpen(false)}
-                      title={showSidebarLabels ? undefined : itemLabel}
+                      // 始终挂全名 tooltip：展开态下若长标签（如 "Management Center Info"）
+                      // 仍被约束截断，悬停也能看到完整名称。
+                      title={itemLabel}
                     >
                       <span className="nav-icon">{item.icon}</span>
                       {showSidebarLabels && (
                         <span className="nav-text">
-                          <span className="nav-label">{itemLabel}</span>
+                          {/* 允许长标签折行成两行，避免出现 "Management Cente…" 这类词中省略号 */}
+                          <span className="nav-label" style={{ whiteSpace: 'normal' }}>
+                            {itemLabel}
+                          </span>
                           <span className="nav-meta">{t(item.metaKey)}</span>
                         </span>
                       )}

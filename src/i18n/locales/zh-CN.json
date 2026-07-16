@@ -538,6 +538,7 @@
     "account_settings_device_id_section_title_farm": "device ID 来源",
     "account_settings_device_id_section_title_unknown": "Device ID（绑定关系未知）",
     "account_settings_synthetic_device_id_masked": "脱敏 device ID",
+    "account_settings_synthetic_device_id_copy": "复制脱敏 device ID（完整值不会发送到前端）",
     "account_settings_synthetic_device_id_synthetic_badge": "合成假名",
     "account_settings_synthetic_device_id_pending": "尚未派生",
     "account_settings_synthetic_device_id_hint": "只读。core 派生的每账号稳定合成假名；只展示前 16 位 hex，真实值不暴露。为空表示 core 尚未派生。",
@@ -1976,6 +1977,7 @@
       "deviceIdSourceColumn": "device_id 来源",
       "lastRefresh": "最近刷新",
       "reauthUrl": "重新授权链接",
+      "reauthAction": "重新授权",
       "disabled": "已禁用",
       "disabledBadge": "已禁用",
       "degradedHint": "有 LLM 请求但无遥测上报——健康信号可能不对称，未必是真实故障"

@@ -140,7 +140,7 @@ export function FarmAccountsPanel() {
                     <div className={styles.statusCell}>
                       <div className={styles.badgeGroup}>
                         <span className={`status-badge ${statusVariant}`}>{statusLabel}</span>
-                        {account.disabled ? (
+                        {account.disabled && normalizedStatus !== 'disabled' ? (
                           <span className="status-badge muted">
                             {t('farm.accountHealth.disabledBadge', { defaultValue: 'Disabled' })}
                           </span>
@@ -197,7 +197,7 @@ export function FarmAccountsPanel() {
                     </div>
                   </TableCell>
                   <TableCell data-label={t('farm.accountHealth.lastRefresh')}>
-                    <span className={styles.mono}>
+                    <span className={`${styles.mono} ${styles.refreshTimestamp}`}>
                       {account.last_refresh
                         ? formatDateTimeUtc8(account.last_refresh, i18n.language)
                         : t('farm.containers.never')}
@@ -212,7 +212,7 @@ export function FarmAccountsPanel() {
                         rel="noreferrer"
                         data-testid={`farm-account-reauth-${account.name}`}
                       >
-                        {t('farm.accountHealth.reauthUrl')}
+                        {t('farm.accountHealth.reauthAction', { defaultValue: 'Re-authenticate' })}
                       </a>
                     ) : (
                       <span className={styles.mono}>—</span>
