@@ -16,6 +16,7 @@ import type {
   PrefixProxyEditorFieldValue,
   PrefixProxyEditorState,
 } from '@/features/authFiles/hooks/useAuthFilesPrefixProxyEditor';
+import { useAuthFileFarmDeviceProvenance } from '@/features/authFiles/hooks/useAuthFileFarmDeviceProvenance';
 import type {
   AuthFileClientVersionObservation,
   AuthFileHeaderMap,
@@ -1033,6 +1034,58 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
   // 是否对该账号展示 Claude 身份模型（A/B + high-water + 观测）。
   const isClaudeManagedPolicy =
     isClaudeProvider || (editor?.clientVersionObservations || []).length > 0;
+
+  // 农场 device_id 溯源 join（跨 env、独立 farmClient）：只对可能展示
+  // device_id 区块的 Claude 托管账号发起查询，非 Claude provider 不必要
+  // 打这两个额外请求。任何失败都在 hook 内部收敛为中性回退。
+  const farmDeviceProvenance = useAuthFileFarmDeviceProvenance(
+    isClaudeManagedPolicy ? (editor?.fileName ?? null) : null
+  );
+  const isFarmContainerSynced = farmDeviceProvenance.source === 'container_synced';
+  const isFarmDrift = farmDeviceProvenance.source === 'drift';
+  const isConfirmedNonFarmSynthetic = farmDeviceProvenance.source === 'synthetic';
+  const boundFarmContainerId = farmDeviceProvenance.entry?.farm_container_id || '';
+  const boundFarmEnvRaw = farmDeviceProvenance.entry?.farm_env || '';
+  const boundFarmEnvLabel = boundFarmEnvRaw
+    ? t(`farm.env.${boundFarmEnvRaw}`, { defaultValue: boundFarmEnvRaw })
+    : '';
+  const pinnedDeviceIdMasked = farmDeviceProvenance.entry?.pinned_device_id_masked || '';
+  // device_id 展示 chip 文案：container_synced/drift/unknown 都不再写"合成
+  // 假名"（该措辞只对确认非农场绑定的 synthetic 态准确），四态口径见 spec
+  // 「device_id 展示口径全站对齐」。
+  const deviceIdBadgeText = isFarmContainerSynced
+    ? t('auth_files.account_settings_device_id_real_from_container', {
+        container: boundFarmContainerId,
+        farm: boundFarmEnvLabel,
+        defaultValue: 'Real, synced from container · bound to {{container}} · {{farm}}',
+      })
+    : isFarmDrift
+      ? t('auth_files.account_settings_device_id_drift_warning', {
+          defaultValue:
+            'The live value has drifted from the pinned value; the next reconciliation pass will restore it',
+        })
+      : isConfirmedNonFarmSynthetic
+        ? t('auth_files.account_settings_synthetic_device_id_synthetic_badge', {
+            defaultValue: 'Synthetic pseudonym',
+          })
+        : t('auth_files.account_settings_device_id_neutral_label', {
+            defaultValue: 'Binding status unknown',
+          });
+  // drift 态展示钉值（农场真源），不是当前已经漂移的实时值；container_synced
+  // 态两者理论一致，editor.syntheticDeviceId 缺省时兜底用钉值。
+  const deviceIdDisplayedValue = isFarmDrift
+    ? pinnedDeviceIdMasked || editor?.syntheticDeviceId || ''
+    : editor?.syntheticDeviceId || (isFarmContainerSynced ? pinnedDeviceIdMasked : '');
+  // hint 描述：只有"确认非农场绑定的 synthetic"态才保留原"core 派生假名"
+  // 描述；农场绑定（container_synced/drift）与 unknown 都不写"派生假名"，
+  // 直接复用状态自身文案作说明。
+  const deviceIdHintText = isConfirmedNonFarmSynthetic
+    ? t('auth_files.account_settings_synthetic_device_id_hint', {
+        defaultValue:
+          'Read-only. A stable per-account synthetic pseudonym derived by core; only the first 16 hex characters are shown and the real value is never exposed. Empty means core has not derived one yet.',
+      })
+    : deviceIdBadgeText;
+
   const identityModelStrategy = isClaudeManagedPolicy
     ? t('auth_files.account_settings_identity_strategy_claude', {
         defaultValue: 'Claude per-account identity binding',
@@ -1570,15 +1623,17 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                               defaultValue: 'Masked device ID',
                             })}
                           </span>
-                          {editor.syntheticDeviceId ? (
+                          {deviceIdDisplayedValue ? (
                             <strong>
-                              <code className={styles.managedHeaderValue} title={editor.syntheticDeviceId}>
-                                {editor.syntheticDeviceId}
+                              <code className={styles.managedHeaderValue} title={deviceIdDisplayedValue}>
+                                {deviceIdDisplayedValue}
                               </code>{' '}
-                              <span className={styles.managedHeaderChip}>
-                                {t('auth_files.account_settings_synthetic_device_id_synthetic_badge', {
-                                  defaultValue: 'Synthetic pseudonym',
-                                })}
+                              <span
+                                className={styles.managedHeaderChip}
+                                title={deviceIdBadgeText}
+                                data-testid="account-settings-device-id-source-badge"
+                              >
+                                {deviceIdBadgeText}
                               </span>
                             </strong>
                           ) : (
@@ -1591,12 +1646,7 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                         </div>
                       </div>
                     </div>
-                    <div className="hint">
-                      {t('auth_files.account_settings_synthetic_device_id_hint', {
-                        defaultValue:
-                          'Read-only. A stable per-account synthetic pseudonym derived by core; only the first 16 hex characters are shown and the real value is never exposed. Empty means core has not derived one yet.',
-                      })}
-                    </div>
+                    <div className="hint">{deviceIdHintText}</div>
                   </div>
                 )}
 

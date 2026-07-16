@@ -504,6 +504,13 @@
     "account_settings_synthetic_device_id_synthetic_badge": "Синтетический псевдоним",
     "account_settings_synthetic_device_id_pending": "Ещё не получен",
     "account_settings_synthetic_device_id_hint": "Только чтение. Стабильный синтетический псевдоним аккаунта, полученный ядром; показаны только первые 16 hex-символов, реальное значение не раскрывается. Пусто — ядро ещё не получило значение.",
+    "account_settings_device_id_source_container_synced": "Синхронизирован с контейнером",
+    "account_settings_device_id_source_drift": "Дрейф",
+    "account_settings_device_id_source_synthetic": "Синтетический",
+    "account_settings_device_id_source_unknown": "Неизвестно",
+    "account_settings_device_id_real_from_container": "Реальный, синхронизирован с контейнером · привязан к {{container}} · {{farm}}",
+    "account_settings_device_id_drift_warning": "Текущее значение разошлось с закреплённым; при следующей сверке будет восстановлено",
+    "account_settings_device_id_neutral_label": "Статус привязки неизвестен",
     "account_settings_raw_json_details": "Расширенный предпросмотр исходного JSON",
     "account_settings_enabled_hint": "Включено — аккаунт может выбираться средой выполнения. Выключение пишет disabled=true без удаления данных.",
     "account_settings_refresh_enabled": "Автоматическое обновление токена",
@@ -1845,86 +1852,139 @@
     }
   },
   "farm": {
-    "title": "设备农场",
-    "subtitle": "管理独立农场编排器的住宅代理容器池：容器保活状态、账号绑定与解绑。",
+    "title": "Ферма устройств",
+    "subtitle": "Управление пулом контейнеров резидентного прокси автономного оркестратора фермы: статус поддержания активности контейнеров, привязка и отвязка аккаунтов.",
     "config": {
-      "title": "编排器连接配置",
-      "desc": "农场编排器是独立于本管理中心的后端服务，需单独配置地址与 admin key 才能加载容器池数据。",
-      "status_ready": "已配置",
-      "status_missing": "未配置",
-      "base_url_label": "编排器地址",
-      "base_url_placeholder": "例如 http://127.0.0.1:18517",
+      "title": "Подключение к оркестратору",
+      "desc": "Оркестратор фермы — это бэкенд, независимый от данного центра управления; чтобы загрузить данные пула контейнеров, настройте его базовый URL и admin key отдельно.",
+      "status_ready": "Настроено",
+      "status_missing": "Не настроено",
+      "base_url_label": "Базовый URL оркестратора",
+      "base_url_placeholder": "например, http://127.0.0.1:18517",
       "admin_key_label": "Admin Key",
-      "admin_key_placeholder": "编排器 FARM_MGMT_KEY",
-      "show_key": "显示",
-      "hide_key": "隐藏",
-      "save_success": "农场编排器配置已保存"
+      "admin_key_placeholder": "FARM_MGMT_KEY оркестратора",
+      "show_key": "Показать",
+      "hide_key": "Скрыть",
+      "save_success": "Конфигурация оркестратора фермы сохранена"
     },
     "accounts": {
-      "title": "账号健康",
-      "desc": "该环境下可用于绑定的账号列表（来自 CPA 既有认证文件健康检查）。",
-      "empty_title": "暂无账号",
-      "empty_desc": "该环境下还没有可用账号，请先在 CPA 侧上传认证文件。",
-      "column_name": "账号",
-      "column_status": "状态",
-      "status_active": "正常",
-      "status_disabled": "已禁用"
+      "title": "Здоровье аккаунтов",
+      "desc": "Список аккаунтов, доступных для привязки в этом окружении (по данным проверки состояния существующих файлов авторизации CPA).",
+      "empty_title": "Нет аккаунтов",
+      "empty_desc": "В этом окружении пока нет доступных аккаунтов; сначала загрузите файлы авторизации на стороне CPA.",
+      "column_name": "Аккаунт",
+      "column_status": "Статус",
+      "status_active": "Активен",
+      "status_disabled": "Отключён"
     },
     "containers": {
-      "title": "容器池",
-      "desc": "容器状态每隔一段时间自动轮询刷新；绑定/解绑会立即触发容器启停。",
-      "empty_title": "容器池为空",
-      "empty_desc": "还没有已入池的容器，先在上方输入编号新建一个。",
-      "not_configured_title": "尚未配置编排器",
-      "not_configured_desc": "请先在上方填写编排器地址与 admin key 并保存，再查看容器池。",
-      "column_device": "容器 / 设备",
-      "column_status": "状态",
-      "column_keepalive": "最近保活",
-      "column_token_usage": "Token 用量",
-      "column_binding": "绑定账号",
-      "column_actions": "操作",
-      "action_bind": "绑定",
-      "action_unbind": "解绑",
-      "no_binding": "未绑定",
-      "never": "从未",
-      "create_placeholder": "容器编号后缀，例如 acct-07",
-      "create_button": "新建容器",
-      "create_success": "容器 {{id}} 已创建"
+      "title": "Пул контейнеров",
+      "desc": "Статус контейнеров обновляется автоматически по таймеру; привязка/отвязка немедленно запускает или останавливает контейнер.",
+      "empty_title": "Пул контейнеров пуст",
+      "empty_desc": "В пуле пока нет контейнеров. Введите идентификатор выше, чтобы создать первый.",
+      "not_configured_title": "Оркестратор не настроен",
+      "not_configured_desc": "Сначала заполните базовый URL оркестратора и admin key выше и сохраните, прежде чем просматривать пул контейнеров.",
+      "column_device": "Контейнер / устройство",
+      "column_status": "Статус",
+      "column_keepalive": "Последний keepalive",
+      "column_token_usage": "Использование токенов",
+      "column_binding": "Привязанный аккаунт",
+      "column_actions": "Действия",
+      "action_bind": "Привязать",
+      "action_unbind": "Отвязать",
+      "no_binding": "Не привязан",
+      "never": "Никогда",
+      "create_placeholder": "Суффикс идентификатора контейнера, например acct-07",
+      "create_button": "Новый контейнер",
+      "create_success": "Контейнер {{id}} создан"
     },
     "status": {
-      "created": "已入池",
-      "starting": "启动中",
-      "running": "运行中",
-      "degraded": "异常",
-      "down": "已停止"
+      "created": "Создан",
+      "starting": "Запускается",
+      "running": "Работает",
+      "degraded": "Деградировал",
+      "down": "Остановлен",
+      "retired": "Списан",
+      "orphaned": "Осиротевший"
     },
     "env": {
-      "test": "测试",
-      "prod": "生产"
+      "test": "Тест",
+      "prod": "Продакшн"
+    },
+    "actions": {
+      "retire": "Списать"
+    },
+    "retire": {
+      "confirmTitle": "Списать контейнер?",
+      "confirmBody": "Вы уверены, что хотите списать контейнер {{id}}? Контейнер будет остановлен и удалён, а запись в реестре архивирована как списанная. Это действие необратимо.",
+      "keepVolume": "Сохранить том (по умолчанию, рекомендуется)",
+      "deleteVolume": "Также удалить том (необратимо — удаляет machine ID и состояние Claude)"
+    },
+    "filter": {
+      "statusLabel": "Статус",
+      "all": "Все"
+    },
+    "group": {
+      "active": "Активные",
+      "retired": "Списанные",
+      "degraded": "Деградировавшие",
+      "down": "Остановленные",
+      "created": "Созданные"
+    },
+    "usage": {
+      "columnTokens": "Токены",
+      "columnCost": "Стоимость (USD)",
+      "columnInput": "Вход",
+      "columnOutput": "Выход",
+      "columnCacheRead": "Чтение кэша",
+      "columnReasoning": "Рассуждения",
+      "columnBillable": "Оплачиваемые",
+      "columnRequests": "Запросы",
+      "detailTitle": "Детализация использования токенов",
+      "sinceNote": "С момента последнего перезапуска CPA (только в памяти)",
+      "empty": "Данных об использовании пока нет"
+    },
+    "resources": {
+      "title": "Использование ресурсов",
+      "mem": "Память",
+      "cpu": "CPU",
+      "limit": "Лимит",
+      "hostTitle": "Хост",
+      "hostNote": "Включает процессы вне фермы на всей машине",
+      "empty": "Данных о ресурсах контейнеров пока нет"
+    },
+    "accountHealth": {
+      "deviceIdSourceColumn": "Источник device_id",
+      "lastRefresh": "Последнее обновление",
+      "reauthUrl": "Ссылка на повторную авторизацию",
+      "disabled": "Отключён",
+      "degradedHint": "Есть трафик LLM, но нет телеметрии — сигналы здоровья могут быть асимметричны, это не обязательно реальный сбой"
     },
     "bind_modal": {
-      "title": "绑定账号",
-      "container_label": "容器",
-      "container_placeholder": "选择未绑定容器",
-      "env_label": "环境",
-      "account_label": "账号",
-      "account_placeholder": "选择账号",
-      "submit": "确认绑定",
-      "no_unbound_containers": "没有可绑定的容器，请先新建容器。",
-      "no_accounts": "该环境下没有可用账号。"
+      "title": "Привязать аккаунт",
+      "container_label": "Контейнер",
+      "container_placeholder": "Выберите непривязанный контейнер",
+      "env_label": "Окружение",
+      "account_label": "Аккаунт",
+      "account_placeholder": "Выберите аккаунт",
+      "submit": "Подтвердить привязку",
+      "no_unbound_containers": "Нет доступных для привязки контейнеров. Сначала создайте новый.",
+      "no_accounts": "В этом окружении нет доступных аккаунтов."
     },
-    "unbind_confirm_title": "解绑容器",
-    "unbind_confirm_message": "确定要解绑容器 {{id}} 吗？容器将停止运行，绑定账号的代理凭证也会一并清除。",
+    "unbind_confirm_title": "Отвязать контейнер",
+    "unbind_confirm_message": "Отвязать контейнер {{id}}? Контейнер прекратит работу, а прокси-учётные данные привязанного аккаунта будут очищены.",
     "notification": {
-      "bind_success": "容器 {{id}} 已绑定并启动",
-      "bind_pending": "容器 {{id}} 已绑定，但 CPA 侧 device_id 同步暂未上线",
-      "unbind_success": "容器 {{id}} 已解绑"
+      "bind_success": "Контейнер {{id}} привязан и запущен",
+      "bind_pending": "Контейнер {{id}} привязан, но синхронизация device_id на стороне CPA пока не включена",
+      "unbind_success": "Контейнер {{id}} отвязан",
+      "retire_success": "Контейнер {{id}} списан"
     },
     "error": {
-      "load_failed": "加载失败",
-      "bind_failed": "绑定失败",
-      "unbind_failed": "解绑失败",
-      "create_failed": "创建容器失败"
+      "load_failed": "Не удалось загрузить",
+      "bind_failed": "Ошибка привязки",
+      "unbind_failed": "Ошибка отвязки",
+      "create_failed": "Не удалось создать контейнер",
+      "retire_failed": "Ошибка списания контейнера"
     }
   }
 }

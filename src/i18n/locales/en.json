@@ -539,6 +539,13 @@
     "account_settings_synthetic_device_id_synthetic_badge": "Synthetic pseudonym",
     "account_settings_synthetic_device_id_pending": "Not derived yet",
     "account_settings_synthetic_device_id_hint": "Read-only. A stable per-account synthetic pseudonym derived by core; only the first 16 hex characters are shown and the real value is never exposed. Empty means core has not derived one yet.",
+    "account_settings_device_id_source_container_synced": "Container-synced",
+    "account_settings_device_id_source_drift": "Drifting",
+    "account_settings_device_id_source_synthetic": "Synthetic",
+    "account_settings_device_id_source_unknown": "Unknown",
+    "account_settings_device_id_real_from_container": "Real, synced from container · bound to {{container}} · {{farm}}",
+    "account_settings_device_id_drift_warning": "The live value has drifted from the pinned value; the next reconciliation pass will restore it",
+    "account_settings_device_id_neutral_label": "Binding status unknown",
     "account_settings_section_editable": "Editable account settings",
     "account_settings_section_editable_desc": "Only the fields in this section are written by Save (per-account PATCH).",
     "account_settings_section_editable_badge": "Editable",
@@ -1903,11 +1910,62 @@
       "starting": "Starting",
       "running": "Running",
       "degraded": "Degraded",
-      "down": "Down"
+      "down": "Down",
+      "retired": "Retired",
+      "orphaned": "Orphaned"
     },
     "env": {
       "test": "Test",
       "prod": "Production"
+    },
+    "actions": {
+      "retire": "Retire"
+    },
+    "retire": {
+      "confirmTitle": "Retire container?",
+      "confirmBody": "Retire container {{id}}? The container will be stopped and removed, and the registry row archived as retired. This cannot be undone.",
+      "keepVolume": "Keep volume (default, recommended)",
+      "deleteVolume": "Also delete the volume (irreversible — removes machine ID and Claude state)"
+    },
+    "filter": {
+      "statusLabel": "Status",
+      "all": "All"
+    },
+    "group": {
+      "active": "Active",
+      "retired": "Retired",
+      "degraded": "Degraded",
+      "down": "Down",
+      "created": "Created"
+    },
+    "usage": {
+      "columnTokens": "Tokens",
+      "columnCost": "Cost (USD)",
+      "columnInput": "Input",
+      "columnOutput": "Output",
+      "columnCacheRead": "Cache Read",
+      "columnReasoning": "Reasoning",
+      "columnBillable": "Billable",
+      "columnRequests": "Requests",
+      "detailTitle": "Token usage detail",
+      "sinceNote": "Since the last CPA restart (in-memory only)",
+      "empty": "No usage data yet"
+    },
+    "resources": {
+      "title": "Resource Usage",
+      "mem": "Memory",
+      "cpu": "CPU",
+      "limit": "Limit",
+      "hostTitle": "Host",
+      "hostNote": "Includes non-farm processes on the whole machine",
+      "empty": "No container resource data yet"
+    },
+    "accountHealth": {
+      "deviceIdSourceColumn": "Device ID source",
+      "lastRefresh": "Last refresh",
+      "reauthUrl": "Re-authentication URL",
+      "disabled": "Disabled",
+      "degradedHint": "Has LLM traffic but no telemetry — health signal may be asymmetric, not necessarily a real failure"
     },
     "bind_modal": {
       "title": "Bind Account",
@@ -1925,13 +1983,15 @@
     "notification": {
       "bind_success": "Container {{id}} bound and started",
       "bind_pending": "Container {{id}} bound, but CPA-side device_id sync is not yet live",
-      "unbind_success": "Container {{id}} unbound"
+      "unbind_success": "Container {{id}} unbound",
+      "retire_success": "Container {{id}} retired"
     },
     "error": {
       "load_failed": "Failed to load",
       "bind_failed": "Bind failed",
       "unbind_failed": "Unbind failed",
-      "create_failed": "Failed to create container"
+      "create_failed": "Failed to create container",
+      "retire_failed": "Failed to retire container"
     }
   }
 }
