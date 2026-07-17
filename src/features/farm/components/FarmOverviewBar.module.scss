@@ -1,0 +1,99 @@
+@use '../../../styles/variables' as *;
+@use '../../../styles/mixins' as *;
+
+.bar {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-sm;
+  padding: $spacing-lg;
+  border: 1px solid var(--border-color);
+  border-radius: $radius-lg;
+  background: var(--card-bg, var(--surface-bg));
+}
+
+.kpiRow {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: $spacing-md;
+}
+
+// tablet(1024) 中间档：6 列在平板宽度会挤得每格文字换行，降到 3 列 x 2 行；
+// 桌面(>1024)维持 6 列一行，手机(<=768)降到 2 列。
+@include tablet {
+  .kpiRow {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@include mobile {
+  .kpiRow {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.kpiTile {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+  padding: $spacing-sm $spacing-md;
+  border: 1px solid var(--border-color);
+  border-radius: $radius-md;
+  background: var(--bg-primary);
+  min-width: 0;
+}
+
+// 语义色三重编码（色 + 图标 + 文案）：图标本身已随 tone 变化含义，边框色再
+// 强化一层，不单靠颜色传达（design.md 决策6 a11y 要求）。
+.ok {
+  color: var(--health-ok);
+  border-color: color-mix(in srgb, var(--health-ok) 35%, var(--border-color));
+}
+
+.warn {
+  color: var(--health-warn);
+  border-color: color-mix(in srgb, var(--health-warn) 35%, var(--border-color));
+}
+
+.err {
+  color: var(--health-err);
+  border-color: color-mix(in srgb, var(--health-err) 35%, var(--border-color));
+}
+
+.idle {
+  color: var(--health-idle);
+}
+
+.kpiText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.kpiValue {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.kpiLabel {
+  font-size: 12px;
+  color: var(--muted-foreground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.generatedAt {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+
+.generatedAtNote {
+  color: var(--muted-foreground);
+  opacity: 0.75;
+}

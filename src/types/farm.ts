@@ -15,18 +15,64 @@ export interface FarmBindingView {
   bound_at: string;
 }
 
+// GET /api/farm/containers/{id}/... 时序响应共用的分桶资源快照（dto.go
+// resourceSnapshotView）。P0-4 只读监测 API，供列表 latest_resource 与容器
+// 详情复用；数值字段全部 omitempty——从未采集过时字段缺失，前端渲染 '—'，
+// 不伪造 0。
+export interface FarmResourceSnapshotView {
+  ts: string;
+  mem_used_bytes?: number;
+  mem_pct?: number;
+  cpu_pct?: number;
+}
+
+// 下一次探针估算（dto.go nextEstimateView，design.md 决策4「配置区间 + 实测
+// 均值，不造假」）。min/base/max 是容器侧保活脚本默认配置区间的字面复制，
+// 不是该容器 docker run 时实际生效的 env（P1 才接入 per-容器快照）；
+// avg_observed_seconds_24h 是近 24h 首末非空分桶跨度推出的实测均值，样本数
+// <=1 时缺失。note 固定携带随机抖动 + 非精确说明，前端应原样展示，不用自己
+// 的措辞替换。
+export interface FarmNextEstimateView {
+  min_seconds: number;
+  max_seconds: number;
+  base_seconds: number;
+  avg_observed_seconds_24h?: number;
+  note: string;
+}
+
 // GET /api/farm/containers 单条记录（dto.go containerView）
 // device_id 只暴露脱敏前 16 位，真实值不经这个只读接口回吐。
+//
+// **P0-4 变更**：移除恒 NULL 的死列 `token_usage`（design.md 决策2「废弃
+// containers.token_usage 死列」，后端 DTO 已删除该字段，前端不再消费）；
+// 新增 health_reason/latest_resource/success_rate_24h/device_id_alignment/
+// next_keepalive_estimate 五个增强字段（design.md 决策4「容器列表增强」，
+// tasks.md P0-4/P0-9）。
 export interface FarmContainerView {
   id: string;
   device_id_masked: string;
   status: string;
   residential_ip?: string;
-  token_usage?: number;
   last_keepalive_at?: string;
+  archived_at?: string;
   created_at: string;
   updated_at: string;
   binding?: FarmBindingView;
+  // 当前状态的可读判定原因（httpapi/observability.go computeHealthReason
+  // 重建）；created/starting/retired/orphaned 等非 running/degraded/down
+  // 状态用固定占位字符串。空串（omitempty）按未知处理，不假造 'ok'。
+  health_reason?: string;
+  // 最近一条缓存资源样本，覆盖 created/down 等非 running 状态的最后已知值；
+  // 从未采集过时缺失。
+  latest_resource?: FarmResourceSnapshotView;
+  // 最近 24h keepalive 探针成功率 [0,1]，该窗口内无样本时缺失（不伪造 0%）。
+  success_rate_24h?: number;
+  // device_id 对齐（容器→账号方向）：container_synced/drift/unknown 三态
+  // （不会取 synthetic——那是账号→容器方向 FarmAccountEntry.device_id_source
+  // 专用值）；未绑定容器缺失（无账号可对齐）。
+  device_id_alignment?: Extract<FarmDeviceIDSource, 'container_synced' | 'drift' | 'unknown'>;
+  // 下一次探针估算，仅 running/degraded 容器给出。
+  next_keepalive_estimate?: FarmNextEstimateView;
 }
 
 // 容器状态取值（store.Status* 常量，供前端徽标着色用；未知值按 fallback 灰色处理）
@@ -192,4 +238,109 @@ export interface FarmResourceResponse {
 // httpapi errorResponse
 export interface FarmErrorResponse {
   error: string;
+}
+
+// ---------------------------------------------------------------------------
+// P0-9 前端·概览 + 下钻 + 告警（design.md 决策6，字段名照抄
+// services/farm-orchestrator/internal/httpapi/dto.go 的 P0-4 只读监测 API 段）
+// ---------------------------------------------------------------------------
+
+// GET /api/farm/overview 响应体（dto.go overviewResponse）。
+export interface FarmOverviewResponse {
+  // 按 status 分组计数，含归档状态（retired/orphaned）。
+  containers_by_status: Record<string, number>;
+  total_containers: number;
+  active_alerts: number;
+  // **本轮固定占位 0**：真正的漂移历史需要 P1 container_deviceid_checks 迁移，
+  // 当前编排器只有 best-effort 即时重写，没有可查询历史。前端不得把 0 渲染成
+  // "无漂移"的确定性结论，应标注"—/待P1"。
+  device_id_drift_unresolved: number;
+  // **本轮恒为 undefined（后端 omitempty + 值本身 nil）**：WindowedKeepaliveStats
+  // 目前不聚合 tokens_total，没有可用的聚合读取路径能诚实拼出这个数字。前端
+  // 必须显示"—/待P1"而非 0，见 dto.go overviewResponse.ProbeTokenCostTotal24h
+  // 注释。
+  probe_token_cost_total_24h?: number;
+  stale_keepalive_count: number;
+  // 这是「本次 API 响应生成时间」（handleGetOverview 内 time.Now()），不是
+  // Poller 真实最近一轮巡检时间戳（编排器没有对外暴露后者）。前端展示时应
+  // 诚实标注为"数据截至"而非"最近轮询于"，避免暗示比实际更精确的巡检时效。
+  generated_at: string;
+}
+
+// container_status_events 一行的对外形状（dto.go eventView），供容器详情
+// OpenEvents 与跨容器告警 feed（.../alerts，P0-5）共用同一形状。
+export interface FarmEventView {
+  id: number;
+  container_id: string;
+  ts: string;
+  from_status?: string;
+  to_status: string;
+  reason: string;
+  severity: 'info' | 'warning' | 'critical';
+  detail?: Record<string, unknown>;
+  last_seen: string;
+  // 未 resolved（仍 firing）时缺失；(*Server).listOpenEvents 目前只能探测
+  // 「当前仍 firing」的事件（按已知 reason 枚举逐个探测），不是完整历史时间
+  // 线——resolved 事件对这条只读路径不可见，见 observability.go 顶部注释。
+  resolved_at?: string;
+}
+
+// GET /api/farm/containers/{id} 响应体（dto.go containerDetailView）：
+// containerView 全部字段 + 当前 firing 中的事件列表。
+export interface FarmContainerDetailView extends FarmContainerView {
+  open_events: FarmEventView[];
+}
+
+// GET .../keepalive 与 .../resources 共用的 step 分桶时序响应形状
+// （dto.go keepaliveBucketView / resourceBucketView）。
+export interface FarmKeepaliveBucketView {
+  bucket_start: string;
+  sample_count: number;
+  success_count: number;
+  success_rate: number;
+  avg_latency_ms?: number;
+  p95_latency_ms?: number;
+}
+
+export interface FarmKeepaliveSeriesResponse {
+  container_id: string;
+  since: string;
+  until: string;
+  step_seconds: number;
+  buckets: FarmKeepaliveBucketView[];
+}
+
+export interface FarmResourceBucketView {
+  bucket_start: string;
+  sample_count: number;
+  avg_mem_bytes?: number;
+  max_mem_bytes?: number;
+  avg_cpu_pct?: number;
+  max_cpu_pct?: number;
+}
+
+export interface FarmResourceSeriesResponse {
+  container_id: string;
+  since: string;
+  until: string;
+  step_seconds: number;
+  buckets: FarmResourceBucketView[];
+}
+
+// GET /api/farm/containers/{id}/events 响应体：与 containerDetailView.open_events
+// 同形状的独立端点（httpapi handleGetContainerEvents），供详情抽屉单独刷新
+// 事件时间线而不重拉整条 detail。
+export type FarmContainerEventsResponse = FarmEventView[];
+
+// GET /api/farm/alerts（design.md 决策4「跨容器告警 feed（window/status，
+// firing/resolved）」，tasks.md P0-5）。
+//
+// P0-5 后端已交付：services/farm-orchestrator/internal/httpapi/server.go 注册
+// `GET /api/farm/alerts`（handleGetAlerts），dto.go alertsResponse 定义响应体
+// `{ window, status, alerts: []eventView }`，与下面的类型形状一致（包裹在
+// `alerts` 字段，条目形状与 FarmEventView 对齐；不分页）。
+export type FarmAlertEntry = FarmEventView;
+
+export interface FarmAlertsResponse {
+  alerts: FarmAlertEntry[];
 }

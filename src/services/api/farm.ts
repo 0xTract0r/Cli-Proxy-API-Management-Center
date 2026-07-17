@@ -1,7 +1,8 @@
 /**
  * 农场编排器（Device Farm）API
  *
- * 端点契约照抄 services/farm-orchestrator/internal/httpapi/{dto.go,handlers.go}：
+ * 端点契约照抄 services/farm-orchestrator/internal/httpapi/{dto.go,handlers.go,
+ * observability.go}：
  * - GET    /api/farm/containers?status=<all|具体状态>（不传=默认活跃视图，排除 retired/orphaned）
  * - POST   /api/farm/containers          body: { id }
  * - DELETE /api/farm/containers/{id}?delete_volume=<true|false>
@@ -10,21 +11,49 @@
  * - DELETE /api/farm/bindings/{container_id}
  * - GET    /api/farm/usage?env=<env>
  * - GET    /api/farm/resources
+ * - GET    /api/farm/overview（P0-4，design.md 决策4 KPI 聚合）
+ * - GET    /api/farm/containers/{id}                    聚合详情
+ * - GET    /api/farm/containers/{id}/keepalive?window=&step=   心跳时序 step 分桶
+ * - GET    /api/farm/containers/{id}/resources?window=&step=   资源时序 step 分桶
+ * - GET    /api/farm/containers/{id}/events              当前 firing 事件（非完整历史）
+ * - GET    /api/farm/alerts?window=&status=              跨容器告警 feed（P0-5，
+ *          已注册并测试通过，见下方 getAlerts 注释）
  */
 
 import { farmClient } from './farmClient';
 import type {
   FarmAccountEntry,
+  FarmAlertsResponse,
   FarmBindingResponse,
+  FarmContainerDetailView,
+  FarmContainerEventsResponse,
   FarmContainerView,
   FarmCreateBindingRequest,
   FarmCreateContainerRequest,
   FarmEnv,
+  FarmKeepaliveSeriesResponse,
+  FarmOverviewResponse,
   FarmResourceResponse,
+  FarmResourceSeriesResponse,
   FarmRetireContainerResponse,
   FarmUnbindResponse,
   FarmUsageResponse,
 } from '@/types/farm';
+
+// GET .../keepalive、.../resources 共用的 window/step 查询参数（httpapi
+// parseWindowAndStep：Go duration 字符串 "24h"/"30m"/"90s" + 扩展 "d" 后缀，
+// 不传时后端默认 window=24h/step=1h）。
+export interface FarmSeriesQuery {
+  window?: string;
+  step?: string;
+}
+
+// GET /api/farm/alerts 查询参数（design.md 决策4「window/status，
+// firing/resolved」）；P0-5 后端契约细节待核实，见 farmApi.getAlerts 注释。
+export interface FarmAlertsQuery {
+  window?: string;
+  status?: 'firing' | 'resolved' | 'all';
+}
 
 // handleListContainers 的 status 语义：不传=默认活跃视图（后端排除 retired/
 // orphaned）；'all'=含归档全量；具体状态值=只筛该状态（含 retired/orphaned）。
@@ -66,4 +95,49 @@ export const farmApi = {
 
   // 容器 + 整机资源快照（mem/cpu），host.note 固定携带"整机含非农场进程"口径。
   getResources: () => farmClient.get<FarmResourceResponse>('/api/farm/resources'),
+
+  // ---------------------------------------------------------------------
+  // P0-9：概览 + 下钻 + 告警消费的只读监测 API（P0-4 已交付，P0-5 见下方注释）
+  // ---------------------------------------------------------------------
+
+  // KPI 聚合：各状态容器数 / 活跃告警数 / 心跳陈旧数 / device_id 漂移数（占位0）
+  // / 探针 cost（占位 undefined）/ 响应生成时间。
+  getOverview: () => farmClient.get<FarmOverviewResponse>('/api/farm/overview'),
+
+  // 单容器聚合详情（containerView 全部字段 + 当前 firing 事件）。
+  getContainerDetail: (containerId: string) =>
+    farmClient.get<FarmContainerDetailView>(
+      `/api/farm/containers/${encodeURIComponent(containerId)}`
+    ),
+
+  // 心跳时序 step 分桶（成功率、avg/p95 latency）。空窗口返回空 buckets 而非
+  // error（spec「容器详情时序」Scenario）。
+  getContainerKeepalive: (containerId: string, query?: FarmSeriesQuery) =>
+    farmClient.get<FarmKeepaliveSeriesResponse>(
+      `/api/farm/containers/${encodeURIComponent(containerId)}/keepalive`,
+      { params: query }
+    ),
+
+  // 资源时序 step 分桶（avg/max mem、avg/max cpu）。
+  getContainerResources: (containerId: string, query?: FarmSeriesQuery) =>
+    farmClient.get<FarmResourceSeriesResponse>(
+      `/api/farm/containers/${encodeURIComponent(containerId)}/resources`,
+      { params: query }
+    ),
+
+  // 当前 firing 中的事件（非完整历史时间线，见 FarmEventView.resolved_at 注释）。
+  getContainerEvents: (containerId: string) =>
+    farmClient.get<FarmContainerEventsResponse>(
+      `/api/farm/containers/${encodeURIComponent(containerId)}/events`
+    ),
+
+  // 跨容器告警 feed（design.md 决策4）。P0-5 已交付：
+  // services/farm-orchestrator/internal/httpapi/server.go 注册
+  // `GET /api/farm/alerts`（handleGetAlerts），dto.go 定义响应体
+  // `alertsResponse{ window, status, alerts: []eventView }`，与
+  // types/farm.ts FarmAlertsResponse（`{ alerts: FarmAlertEntry[] }`）对齐。
+  // 请求失败时走 farmClient 既有错误处理，<FarmAlertsPanel> 的 AsyncPanel
+  // error 态如实呈现，不会伪造成功响应。
+  getAlerts: (query?: FarmAlertsQuery) =>
+    farmClient.get<FarmAlertsResponse>('/api/farm/alerts', { params: query }),
 };
