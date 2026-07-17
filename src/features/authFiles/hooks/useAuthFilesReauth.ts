@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { isOAuthCancelSuccessful, oauthApi, type OAuthProvider } from '@/services/api/oauth';
 import { useNotificationStore } from '@/stores';
 import type { AuthFileItem } from '@/types';
+import { copyToClipboard } from '@/utils/clipboard';
 
 export type AuthFileReauthState = {
   provider: OAuthProvider;
@@ -101,20 +102,15 @@ export function useAuthFilesReauth(options: UseAuthFilesReauthOptions) {
     const url = states[fileName]?.url;
     if (!url) return;
 
-    try {
-      if (!navigator.clipboard?.writeText) {
-        throw new Error('Clipboard API unavailable');
-      }
-      await navigator.clipboard.writeText(url);
+    const copied = await copyToClipboard(url);
+    if (copied) {
       showNotification(
         t('auth_files.reauth_copy_success', { defaultValue: 'Authentication link copied' }),
         'success'
       );
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : '';
+    } else {
       showNotification(
-        t('auth_files.reauth_copy_failed', { defaultValue: 'Failed to copy authentication link' }) +
-          (errorMessage ? `: ${errorMessage}` : ''),
+        t('auth_files.reauth_copy_failed', { defaultValue: 'Failed to copy authentication link' }),
         'error'
       );
     }
