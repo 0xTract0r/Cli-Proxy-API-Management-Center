@@ -1719,14 +1719,15 @@
       "empty": "尚無容器資源資料"
     },
     "accountHealth": {
+      "accountHealthColumn": "帳號健康",
+      "containerHealthColumn": "容器健康",
+      "unbound": "未綁定",
       "deviceIdSourceColumn": "device_id 來源",
       "lastRefresh": "最近重新整理",
       "reauthUrl": "重新授權連結",
       "reauthAction": "重新授權",
       "disabled": "已停用",
       "disabledBadge": "已停用",
-      "dimAccount": "帳號",
-      "dimContainer": "容器",
       "degradedHint": "有 LLM 請求但無遙測回報——健康訊號可能不對稱，未必是真實故障"
     },
     "bind_modal": {

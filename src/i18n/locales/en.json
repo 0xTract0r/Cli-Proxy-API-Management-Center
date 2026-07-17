@@ -1974,14 +1974,15 @@
       "empty": "No container resource data yet"
     },
     "accountHealth": {
+      "accountHealthColumn": "Account Health",
+      "containerHealthColumn": "Container Health",
+      "unbound": "Unbound",
       "deviceIdSourceColumn": "Device ID source",
       "lastRefresh": "Last refresh",
       "reauthUrl": "Re-authentication URL",
       "reauthAction": "Re-authenticate",
       "disabled": "Disabled",
       "disabledBadge": "Disabled",
-      "dimAccount": "Account",
-      "dimContainer": "Container",
       "degradedHint": "Has LLM traffic but no telemetry — health signal may be asymmetric, not necessarily a real failure"
     },
     "bind_modal": {

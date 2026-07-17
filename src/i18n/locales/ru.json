@@ -1967,14 +1967,15 @@
       "empty": "Данных о ресурсах контейнеров пока нет"
     },
     "accountHealth": {
+      "accountHealthColumn": "Состояние аккаунта",
+      "containerHealthColumn": "Состояние контейнера",
+      "unbound": "Не привязан",
       "deviceIdSourceColumn": "Источник device_id",
       "lastRefresh": "Последнее обновление",
       "reauthUrl": "Ссылка на повторную авторизацию",
       "reauthAction": "Повторная авторизация",
       "disabled": "Отключён",
       "disabledBadge": "Отключён",
-      "dimAccount": "Аккаунт",
-      "dimContainer": "Контейнер",
       "degradedHint": "Есть трафик LLM, но нет телеметрии — сигналы здоровья могут быть асимметричны, это не обязательно реальный сбой"
     },
     "bind_modal": {

@@ -1974,14 +1974,15 @@
       "empty": "暂无容器资源数据"
     },
     "accountHealth": {
+      "accountHealthColumn": "账号健康",
+      "containerHealthColumn": "容器健康",
+      "unbound": "未绑定",
       "deviceIdSourceColumn": "device_id 来源",
       "lastRefresh": "最近刷新",
       "reauthUrl": "重新授权链接",
       "reauthAction": "重新授权",
       "disabled": "已禁用",
       "disabledBadge": "已禁用",
-      "dimAccount": "账号",
-      "dimContainer": "容器",
       "degradedHint": "有 LLM 请求但无遥测上报——健康信号可能不对称，未必是真实故障"
     },
     "bind_modal": {

@@ -10,23 +10,11 @@ import {
 } from '@/components/ui/Table';
 import { Select } from '@/components/ui/Select';
 import { AsyncPanel } from '@/components/ui/AsyncPanel';
+import { HealthPill, type HealthPillStatus } from '@/components/ui/HealthPill';
 import { useFarmAccounts } from '../hooks/useFarmAccounts';
 import { FARM_ENVS, type FarmDeviceIDSource, type FarmEnv } from '@/types/farm';
 import { formatDateTimeUtc8 } from '@/utils/datetime';
 import styles from './FarmAccountsPanel.module.scss';
-
-// 农场绑定容器状态徽标着色，口径与 FarmContainerTable 的 STATUS_BADGE_VARIANT
-// 一致（复制一份小映射，不跨组件文件耦合导出）：created/starting=muted，
-// running=success，degraded/orphaned=warning，down=error，retired=muted。
-const FARM_CONTAINER_STATUS_VARIANT: Record<string, 'success' | 'warning' | 'error' | 'muted'> = {
-  created: 'muted',
-  starting: 'muted',
-  running: 'success',
-  degraded: 'warning',
-  down: 'error',
-  retired: 'muted',
-  orphaned: 'warning',
-};
 
 // device_id 展示口径四态着色（spec「device_id 展示口径全站对齐」）：
 // container_synced=真实容器同步(success)，drift=正在漂移待对账(warning)，
@@ -39,22 +27,36 @@ const DEVICE_ID_SOURCE_VARIANT: Record<FarmDeviceIDSource, 'success' | 'warning'
   unknown: 'muted',
 };
 
-// 账号真实状态徽标着色，参照 FarmContainerTable.tsx 的 STATUS_BADGE_VARIANT 范式，
-// 但按语义分组而非逐值枚举（account.status 是 CPA 透传的自由字符串，未必收敛到
-// coreauth.Status 的 active/pending/error/disabled 四值）：error/fatal→error（真实
-// 故障）；warn/degraded→warning（需要关注）；active/running/healthy/ok/valid→success
-// （健康态）；其它未知值一律 muted 中性回退。修复前的 bug：徽标只按 account.disabled
-// 布尔选色（非 disabled 恒绿、disabled 恒红），完全忽略真实 status 严重度。
-const ACCOUNT_STATUS_VARIANT: Record<string, 'success' | 'warning' | 'error' | 'muted'> = {
-  error: 'error',
-  fatal: 'error',
-  warn: 'warning',
-  degraded: 'warning',
-  active: 'success',
-  running: 'success',
-  healthy: 'success',
-  ok: 'success',
-  valid: 'success',
+// 账号健康四态映射（design.md 决策6「状态栏双列 A1」）：account.status 是 CPA
+// 透传的自由字符串，未必收敛到 coreauth.Status 的 active/pending/error/disabled
+// 四值，按语义分组而非逐值枚举。error/fatal→err（真实故障）；warn/degraded→warn
+// （需要关注）；active/running/healthy/ok/valid→ok（健康态）；其它未知值（含
+// status 字面量 "disabled"，disabled 已降级为账号名旁中性 tag，不在本列重复
+// 表达）一律 idle 中性回退，不再借用 muted 徽标语义。
+const ACCOUNT_HEALTH_STATUS: Record<string, HealthPillStatus> = {
+  error: 'err',
+  fatal: 'err',
+  warn: 'warn',
+  degraded: 'warn',
+  active: 'ok',
+  running: 'ok',
+  healthy: 'ok',
+  ok: 'ok',
+  valid: 'ok',
+};
+
+// 容器健康四态映射：running=ok，degraded/orphaned=warn（幽灵态待人工核实，非
+// 已确认故障），down=err，created/starting/retired=idle（未激活/已退役，非
+// 故障态）。口径与 FarmContainerTable 的 STATUS_BADGE_VARIANT 分组一致，只是
+// 四值枚举（ok/warn/err/idle）替代旧 success/warning/error/muted 徽标枚举。
+const CONTAINER_HEALTH_STATUS: Record<string, HealthPillStatus> = {
+  running: 'ok',
+  degraded: 'warn',
+  orphaned: 'warn',
+  down: 'err',
+  created: 'idle',
+  starting: 'idle',
+  retired: 'idle',
 };
 
 /**
@@ -69,6 +71,16 @@ export function FarmAccountsPanel() {
   const { accounts, loading, error } = useFarmAccounts(env);
 
   const envOptions = FARM_ENVS.map((value) => ({ value, label: t(`farm.env.${value}`) }));
+
+  // 双列列头文案同时复用为 <HealthPill dimension> 值（拼进 aria-label，如
+  // 「账号健康: 运行中」），保证可见列头与朗读维度语义一致，只算一次而非
+  // 每行重复 t() 调用。
+  const accountHealthColumnLabel = t('farm.accountHealth.accountHealthColumn', {
+    defaultValue: '账号健康',
+  });
+  const containerHealthColumnLabel = t('farm.accountHealth.containerHealthColumn', {
+    defaultValue: '容器健康',
+  });
 
   return (
     <div className={styles.panel} data-testid="farm-accounts-panel">
@@ -100,7 +112,8 @@ export function FarmAccountsPanel() {
           <TableHeader>
             <TableRow>
               <TableHead>{t('farm.accounts.column_name')}</TableHead>
-              <TableHead>{t('farm.accounts.column_status')}</TableHead>
+              <TableHead>{accountHealthColumnLabel}</TableHead>
+              <TableHead>{containerHealthColumnLabel}</TableHead>
               <TableHead>
                 {t('farm.accountHealth.deviceIdSourceColumn', {
                   defaultValue: 'Device ID source',
@@ -120,71 +133,76 @@ export function FarmAccountsPanel() {
               const showDegradedHint =
                 account.farm_bound && account.farm_container_status === 'degraded' && hasLlmTraffic;
 
-              // 真实状态严重度徽标：按 account.status 查表，不再按 account.disabled
-              // 布尔选色。disabled 是良性暂停态（operator 主动关闭，非故障），单独
-              // 用一个中性 muted 徽标承载，与状态徽标并列展示，不覆盖/掩盖真实 status。
+              // 账号健康四态：按 account.status 查表，不再按 account.disabled 布尔
+              // 选色。disabled 是良性暂停态（operator 主动关闭，非故障），已降级
+              // 为账号名旁的中性 tag，不再挤占本列视觉权重（design.md 决策6）。
               const normalizedStatus = (account.status || 'active').trim().toLowerCase();
-              const statusVariant = ACCOUNT_STATUS_VARIANT[normalizedStatus] ?? 'muted';
+              const accountHealthStatus: HealthPillStatus = ACCOUNT_HEALTH_STATUS[normalizedStatus] ?? 'idle';
               const statusLabel = t(`farm.accounts.status_${normalizedStatus}`, {
                 defaultValue: account.status || t('farm.accounts.status_active'),
               });
+              const showDisabledTag = account.disabled && normalizedStatus !== 'disabled';
 
-              // 账号级 status（account.status）与容器级 farm_container_status 是两个
-              // 不同维度：账号有 LLM 流量可判「正常」，同时其绑定容器遥测降级为
-              // 「异常」，两枚徽标并排却无标签会被读成自相矛盾。仅当两枚徽标同时出现
-              // 时给账号徽标补维度标签「账号」；容器徽标只在 farm_bound 时渲染，始终补
-              //「容器」标签（本就讲容器，永不冗余）。containerStatus 先收窄到 string，
-              // 供下方索引 FARM_CONTAINER_STATUS_VARIANT 与 i18n key 使用。
+              // 容器健康四态：只在 farm_bound 时有意义；未绑定不是「故障」而是
+              // 「无容器可报告」，仍用 idle HealthPill 呈现（而非留空/破版），
+              // 保持两列视觉对称。containerStatus 收窄到 string 供下方索引
+              // CONTAINER_HEALTH_STATUS 与 i18n key 使用。
               const containerStatus = account.farm_bound ? account.farm_container_status : undefined;
-              const hasContainerBadge = Boolean(containerStatus);
+              const containerHealthStatus: HealthPillStatus = containerStatus
+                ? CONTAINER_HEALTH_STATUS[containerStatus] ?? 'idle'
+                : 'idle';
+              const containerHealthLabel = containerStatus
+                ? t(`farm.status.${containerStatus}`, { defaultValue: containerStatus })
+                : t('farm.accountHealth.unbound', { defaultValue: 'Unbound' });
+              // "有 LLM 请求但无遥测"不对称归因提示不再单独占一行可见文字，收进
+              // HealthPill 的 title tooltip（HealthPill.reason），避免误导
+              // operator 直接下线仍有真实流量的账号，同时不挤占列宽。
+              const containerHealthReason = showDegradedHint
+                ? t('farm.accountHealth.degradedHint')
+                : undefined;
+              // testid 固定为 farm-container-health-<name>，不随 showDegradedHint
+              // 分支切换，保证真机断言可稳定定位该 pill；degraded 提示改由
+              // TableCell 的 data-degraded-hint 属性单独标记，不覆盖主 testid。
+              const containerHealthTestId = `farm-container-health-${account.name}`;
 
               return (
                 <TableRow key={account.name} data-testid={`farm-account-row-${account.name}`}>
-                  <TableCell data-label={t('farm.accounts.column_name')}>{account.name}</TableCell>
-                  <TableCell data-label={t('farm.accounts.column_status')}>
-                    <div className={styles.statusCell}>
-                      <div className={styles.badgeGroup}>
-                        {hasContainerBadge ? (
-                          <span className={styles.statusDim}>
-                            <span className={styles.dimLabel}>
-                              {t('farm.accountHealth.dimAccount', { defaultValue: '账号' })}
-                            </span>
-                            <span className={`status-badge ${statusVariant}`}>{statusLabel}</span>
-                          </span>
-                        ) : (
-                          <span className={`status-badge ${statusVariant}`}>{statusLabel}</span>
-                        )}
-                        {account.disabled && normalizedStatus !== 'disabled' ? (
-                          <span className="status-badge muted">
-                            {t('farm.accountHealth.disabledBadge', { defaultValue: 'Disabled' })}
-                          </span>
-                        ) : null}
-                        {containerStatus ? (
-                          <span className={styles.statusDim}>
-                            <span className={styles.dimLabel}>
-                              {t('farm.accountHealth.dimContainer', { defaultValue: '容器' })}
-                            </span>
-                            <span
-                              className={`status-badge ${
-                                FARM_CONTAINER_STATUS_VARIANT[containerStatus] ?? 'muted'
-                              }`}
-                            >
-                              {t(`farm.status.${containerStatus}`, {
-                                defaultValue: containerStatus,
-                              })}
-                            </span>
-                          </span>
-                        ) : null}
-                      </div>
-                      {showDegradedHint ? (
-                        <p
-                          className={styles.degradedHint}
-                          data-testid={`farm-account-degraded-hint-${account.name}`}
+                  <TableCell data-label={t('farm.accounts.column_name')}>
+                    <div className={styles.nameCell}>
+                      <span>{account.name}</span>
+                      {showDisabledTag ? (
+                        <span
+                          className={`status-badge muted ${styles.disabledTag}`}
+                          data-testid={`farm-account-disabled-tag-${account.name}`}
                         >
-                          {t('farm.accountHealth.degradedHint')}
-                        </p>
+                          {t('farm.accountHealth.disabledBadge', { defaultValue: 'Disabled' })}
+                        </span>
                       ) : null}
                     </div>
+                  </TableCell>
+                  <TableCell
+                    data-testid={`farm-account-health-cell-${account.name}`}
+                    data-label={accountHealthColumnLabel}
+                  >
+                    <HealthPill
+                      status={accountHealthStatus}
+                      label={statusLabel}
+                      dimension={accountHealthColumnLabel}
+                      data-testid={`farm-account-health-pill-${account.name}`}
+                    />
+                  </TableCell>
+                  <TableCell
+                    data-testid={`farm-container-health-cell-${account.name}`}
+                    data-label={containerHealthColumnLabel}
+                    data-degraded-hint={showDegradedHint ? 'true' : undefined}
+                  >
+                    <HealthPill
+                      status={containerHealthStatus}
+                      label={containerHealthLabel}
+                      dimension={containerHealthColumnLabel}
+                      reason={containerHealthReason}
+                      data-testid={containerHealthTestId}
+                    />
                   </TableCell>
                   <TableCell
                     data-testid={`farm-account-device-id-source-${account.name}`}
