@@ -60,6 +60,25 @@
   gap: 6px;
 }
 
+// 双维度徽标各包一层：小号维度标签 + 原状态徽标横向并排，作为 badgeGroup 的一个
+// flex item 整体 wrap，让「账号 正常」「容器 异常」一眼分清是两个维度，而非并排
+// 无标签被读成自相矛盾。仅在同时出现两枚徽标时给账号徽标补标签；容器徽标始终补。
+.statusDim {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+// 维度小标签（「账号」/「容器」）：小号 muted，uppercase + 微字距，与 mobile 卡片
+// data-label 同一视觉语言（中性说明性小字），不与状态胶囊抢视觉重量。
+.dimLabel {
+  font-size: 0.7rem;
+  color: var(--muted-foreground);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
 .degradedHint {
   margin: 0;
   font-size: 12px;

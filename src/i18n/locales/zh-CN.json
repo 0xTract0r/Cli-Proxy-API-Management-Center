@@ -1980,6 +1980,8 @@
       "reauthAction": "重新授权",
       "disabled": "已禁用",
       "disabledBadge": "已禁用",
+      "dimAccount": "账号",
+      "dimContainer": "容器",
       "degradedHint": "有 LLM 请求但无遥测上报——健康信号可能不对称，未必是真实故障"
     },
     "bind_modal": {

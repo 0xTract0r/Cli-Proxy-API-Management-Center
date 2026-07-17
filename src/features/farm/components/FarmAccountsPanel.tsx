@@ -133,27 +133,50 @@ export function FarmAccountsPanel() {
                 defaultValue: account.status || t('farm.accounts.status_active'),
               });
 
+              // 账号级 status（account.status）与容器级 farm_container_status 是两个
+              // 不同维度：账号有 LLM 流量可判「正常」，同时其绑定容器遥测降级为
+              // 「异常」，两枚徽标并排却无标签会被读成自相矛盾。仅当两枚徽标同时出现
+              // 时给账号徽标补维度标签「账号」；容器徽标只在 farm_bound 时渲染，始终补
+              //「容器」标签（本就讲容器，永不冗余）。containerStatus 先收窄到 string，
+              // 供下方索引 FARM_CONTAINER_STATUS_VARIANT 与 i18n key 使用。
+              const containerStatus = account.farm_bound ? account.farm_container_status : undefined;
+              const hasContainerBadge = Boolean(containerStatus);
+
               return (
                 <TableRow key={account.name} data-testid={`farm-account-row-${account.name}`}>
                   <TableCell data-label={t('farm.accounts.column_name')}>{account.name}</TableCell>
                   <TableCell data-label={t('farm.accounts.column_status')}>
                     <div className={styles.statusCell}>
                       <div className={styles.badgeGroup}>
-                        <span className={`status-badge ${statusVariant}`}>{statusLabel}</span>
+                        {hasContainerBadge ? (
+                          <span className={styles.statusDim}>
+                            <span className={styles.dimLabel}>
+                              {t('farm.accountHealth.dimAccount', { defaultValue: '账号' })}
+                            </span>
+                            <span className={`status-badge ${statusVariant}`}>{statusLabel}</span>
+                          </span>
+                        ) : (
+                          <span className={`status-badge ${statusVariant}`}>{statusLabel}</span>
+                        )}
                         {account.disabled && normalizedStatus !== 'disabled' ? (
                           <span className="status-badge muted">
                             {t('farm.accountHealth.disabledBadge', { defaultValue: 'Disabled' })}
                           </span>
                         ) : null}
-                        {account.farm_bound && account.farm_container_status ? (
-                          <span
-                            className={`status-badge ${
-                              FARM_CONTAINER_STATUS_VARIANT[account.farm_container_status] ?? 'muted'
-                            }`}
-                          >
-                            {t(`farm.status.${account.farm_container_status}`, {
-                              defaultValue: account.farm_container_status,
-                            })}
+                        {containerStatus ? (
+                          <span className={styles.statusDim}>
+                            <span className={styles.dimLabel}>
+                              {t('farm.accountHealth.dimContainer', { defaultValue: '容器' })}
+                            </span>
+                            <span
+                              className={`status-badge ${
+                                FARM_CONTAINER_STATUS_VARIANT[containerStatus] ?? 'muted'
+                              }`}
+                            >
+                              {t(`farm.status.${containerStatus}`, {
+                                defaultValue: containerStatus,
+                              })}
+                            </span>
                           </span>
                         ) : null}
                       </div>
