@@ -12,6 +12,7 @@ import { Select } from '@/components/ui/Select';
 import { Button } from '@/components/ui/Button';
 import { AsyncPanel } from '@/components/ui/AsyncPanel';
 import { HealthPill, type HealthPillStatus } from '@/components/ui/HealthPill';
+import { IconInfo } from '@/components/ui/icons';
 import { useFarmAccounts } from '../hooks/useFarmAccounts';
 import { useFarmOnboard } from '../hooks/useFarmOnboard';
 import { FARM_ENVS, type FarmDeviceIDSource, type FarmEnv } from '@/types/farm';
@@ -87,6 +88,22 @@ export function FarmAccountsPanel() {
 
   return (
     <div className={styles.panel} data-testid="farm-accounts-panel">
+      {/* 容量分配模型正名（spec REQ-5「文档与农场页 SHALL 明确」的农场页半边）：
+          住宅 IP 是容量真源、device_id 廉价无上限、激活需三件齐备。放在账号面板
+          顶部、紧邻「接入农场」操作语境，帮 operator 一眼理解容器池为何受限、
+          何时能接新账号。 */}
+      <div className={styles.capacityNotice} data-testid="farm-capacity-model-callout">
+        <div className={styles.capacityNoticeHeader}>
+          <IconInfo size={14} />
+          <span>{t('farm.capacityModel.title')}</span>
+        </div>
+        <ul className={styles.capacityNoticeList}>
+          <li>{t('farm.capacityModel.ipSource')}</li>
+          <li>{t('farm.capacityModel.deviceIdCheap')}</li>
+          <li>{t('farm.capacityModel.activationRule')}</li>
+        </ul>
+      </div>
+
       <div className={styles.header}>
         <div className={styles.title}>{t('farm.accounts.title')}</div>
         <Select

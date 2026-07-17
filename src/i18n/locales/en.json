@@ -1884,6 +1884,12 @@
       "hide_key": "Hide",
       "save_success": "Farm orchestrator configuration saved"
     },
+    "capacityModel": {
+      "title": "Capacity Allocation Model",
+      "ipSource": "Residential proxy IPs are the true capacity source: each account must egress through its own residential IP, and IP scarcity — not device IDs — is the real bottleneck for new containers.",
+      "deviceIdCheap": "Device IDs are cheap and unlimited: the orchestrator generates one at random per container. Running low on device IDs never blocks onboarding a new account.",
+      "activationRule": "Activation requires all three: an authenticated account ∧ an idle container ∧ an available proxy_url. Without a proxy the system fails closed and refuses to run rather than exposing a real IP."
+    },
     "accounts": {
       "title": "Account Health",
       "desc": "Accounts available for binding in this environment (from CPA's existing auth file health checks).",

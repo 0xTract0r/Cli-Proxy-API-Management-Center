@@ -11,6 +11,40 @@
   background: var(--card-bg, var(--surface-bg));
 }
 
+// 容量分配模型正名说明卡（spec REQ-5）：视觉复用站内既有 info 提示配方
+// （UsagePage .previewNotice 同一 primary 低透明度 tint），不新造颜色 token；
+// 三条经计算在浅色/纯白/深色三套主题下前景对背景对比度均 ≥4.5:1（浅色 ~4.9:1，
+// 深色 ~9.5:1），满足 WCAG AA 正文文本要求。
+.capacityNotice {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background-color: rgba($primary-color, 0.08);
+  border: 1px solid rgba($primary-color, 0.35);
+  border-radius: $radius-sm;
+}
+
+.capacityNoticeHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.capacityNoticeList {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
 .header {
   display: flex;
   align-items: center;

@@ -1629,6 +1629,12 @@
       "hide_key": "隱藏",
       "save_success": "農場編排器設定已儲存"
     },
+    "capacityModel": {
+      "title": "容量分配模型",
+      "ipSource": "住宅代理 IP 是容量真源：每個帳號需綁定各自獨立的住宅出口 IP，IP 稀缺才是新增容器的真正瓶頸。",
+      "deviceIdCheap": "Device ID 廉價且無上限：由編排器隨機產生、一容器一個，不是接入新帳號的限制項。",
+      "activationRule": "啟用需三件齊備：已驗證帳號 ∧ 閒置容器 ∧ 可用 proxy_url，缺一不可；沒有可用代理時系統拒絕直連（fail-closed），不會暴露真實 IP。"
+    },
     "accounts": {
       "title": "帳號健康",
       "desc": "該環境下可用於綁定的帳號清單（來自 CPA 既有驗證檔案健康檢查）。",
