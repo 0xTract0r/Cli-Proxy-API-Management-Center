@@ -94,6 +94,10 @@
 }
 
 .generatedAtNote {
+  // AA 对比度修复（farm-observability 真机 axe 扫描抓出的 serious 违规）：
+  // 0.75 opacity 把 --muted-foreground（浅色 #6d6760 / 深色 #c9c3bb）进一步
+  // 冲淡，实测对比度仅 3.28（低于 WCAG AA 小字要求的 4.5）。去掉 opacity，
+  // 直接复用 --muted-foreground token 本身（与同文件 .generatedAt 一致，不
+  // 新造颜色）：浅色 ≈5.30:1、深色 ≈10.53:1，两套主题都清晰高于门槛。
   color: var(--muted-foreground);
-  opacity: 0.75;
 }
