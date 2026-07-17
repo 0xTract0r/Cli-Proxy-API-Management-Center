@@ -1980,6 +1980,8 @@
       "reauthAction": "Re-authenticate",
       "disabled": "Disabled",
       "disabledBadge": "Disabled",
+      "dimAccount": "Account",
+      "dimContainer": "Container",
       "degradedHint": "Has LLM traffic but no telemetry — health signal may be asymmetric, not necessarily a real failure"
     },
     "bind_modal": {

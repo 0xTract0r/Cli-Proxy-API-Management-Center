@@ -1725,6 +1725,8 @@
       "reauthAction": "重新授權",
       "disabled": "已停用",
       "disabledBadge": "已停用",
+      "dimAccount": "帳號",
+      "dimContainer": "容器",
       "degradedHint": "有 LLM 請求但無遙測回報——健康訊號可能不對稱，未必是真實故障"
     },
     "bind_modal": {
