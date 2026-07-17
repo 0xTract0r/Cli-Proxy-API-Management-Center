@@ -74,6 +74,17 @@
   --muted-foreground: var(--text-secondary);
   --accent-bg: var(--bg-tertiary);
 
+  // 农场健康语义色（telemetry-farm-observability P0-7）：<HealthPill> 与后续
+  // 状态栏双列（P0-8）共用的四态色，取代各面板本地重复定义的阈值配色
+  // （原 FarmResourcePanel.pctVariant 90/70 阈值口径同步收敛见
+  // features/farm/utils/health.ts）。warn 沿用 --amber-text（AA 对比度安全的
+  // 深/浅琥珀），idle 沿用 status-badge.muted 同一混色公式，保持全站中性灰
+  // 语义一致。
+  --health-ok: var(--success-color);
+  --health-warn: var(--amber-text);
+  --health-err: var(--error-color);
+  --health-idle: color-mix(in srgb, var(--text-secondary) 68%, var(--text-primary));
+
   // Glass effect (blurred surfaces)
   --glass-blur: 12px;
   --glass-backdrop-filter: blur(var(--glass-blur));
@@ -153,6 +164,12 @@
   --muted-bg: var(--bg-tertiary);
   --muted-foreground: var(--text-secondary);
   --accent-bg: var(--bg-tertiary);
+
+  // 农场健康语义色，公式同浅色主题（见上方注释）。
+  --health-ok: var(--success-color);
+  --health-warn: var(--amber-text);
+  --health-err: var(--error-color);
+  --health-idle: color-mix(in srgb, var(--text-secondary) 68%, var(--text-primary));
 }
 
 // 深色主题（#191919）
@@ -226,6 +243,12 @@
   --muted-bg: var(--bg-tertiary);
   --muted-foreground: var(--text-secondary);
   --accent-bg: var(--bg-tertiary);
+
+  // 农场健康语义色，公式同浅色主题（见上方注释）。
+  --health-ok: var(--success-color);
+  --health-warn: var(--amber-text);
+  --health-err: var(--error-color);
+  --health-idle: color-mix(in srgb, var(--text-secondary) 68%, var(--text-primary));
 
   --glass-border: color-mix(in srgb, var(--border-color) 55%, transparent);
 }

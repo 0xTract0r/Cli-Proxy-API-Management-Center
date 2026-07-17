@@ -10,8 +10,7 @@ import {
 } from '@/components/ui/Table';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Select';
-import { EmptyState } from '@/components/ui/EmptyState';
-import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import { AsyncPanel } from '@/components/ui/AsyncPanel';
 import type { FarmContainerView } from '@/types/farm';
 import { formatDateTimeUtc8 } from '@/utils/datetime';
 import { useFarmRetiredContainers } from '../hooks/useFarmRetiredContainers';
@@ -130,23 +129,21 @@ export function FarmContainerTable({
         />
       </div>
 
-      {isLoading ? (
-        <div className={styles.loadingState} data-testid="farm-containers-loading">
-          <LoadingSpinner />
-          <span>{t('common.loading')}</span>
-        </div>
-      ) : combinedError ? (
-        <div className="error-box" data-testid="farm-containers-error">
-          {combinedError}
-        </div>
-      ) : rows.length === 0 ? (
-        <div data-testid="farm-containers-empty">
-          <EmptyState
-            title={t('farm.containers.empty_title')}
-            description={t('farm.containers.empty_desc')}
-          />
-        </div>
-      ) : (
+      <AsyncPanel
+        loading={isLoading}
+        error={combinedError}
+        isEmpty={rows.length === 0}
+        loadingLabel={t('common.loading')}
+        loadingSpinnerSize={20}
+        loadingCentered
+        loadingTestId="farm-containers-loading"
+        errorTestId="farm-containers-error"
+        empty={{
+          title: t('farm.containers.empty_title'),
+          description: t('farm.containers.empty_desc'),
+          testId: 'farm-containers-empty',
+        }}
+      >
         <Table data-testid="farm-container-table">
           <TableHeader>
             <TableRow>
@@ -246,7 +243,7 @@ export function FarmContainerTable({
             })}
           </TableBody>
         </Table>
-      )}
+      </AsyncPanel>
     </div>
   );
 }

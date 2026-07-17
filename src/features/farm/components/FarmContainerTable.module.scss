@@ -19,15 +19,6 @@
   width: 160px;
 }
 
-.loadingState {
-  display: flex;
-  align-items: center;
-  gap: $spacing-sm;
-  padding: $spacing-xl 0;
-  color: var(--muted-foreground);
-  justify-content: center;
-}
-
 .deviceCell {
   display: flex;
   flex-direction: column;

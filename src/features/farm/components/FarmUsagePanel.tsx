@@ -8,8 +8,7 @@ import {
   TableRow,
 } from '@/components/ui/Table';
 import { Button } from '@/components/ui/Button';
-import { EmptyState } from '@/components/ui/EmptyState';
-import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import { AsyncPanel } from '@/components/ui/AsyncPanel';
 import { formatUsd } from '@/utils/usage';
 import { useFarmUsage } from '../hooks/useFarmUsage';
 import styles from './FarmUsagePanel.module.scss';
@@ -58,18 +57,13 @@ export function FarmUsagePanel() {
         <p className={styles.note}>{t('farm.usage.sinceNote', { defaultValue: note })}</p>
       ) : null}
 
-      {loading ? (
-        <div className={styles.loadingState}>
-          <LoadingSpinner size={16} />
-          <span>{t('common.loading')}</span>
-        </div>
-      ) : error ? (
-        <div className="error-box">{error}</div>
-      ) : items.length === 0 ? (
-        <div data-testid="farm-usage-empty">
-          <EmptyState title={t('farm.usage.empty')} />
-        </div>
-      ) : (
+      <AsyncPanel
+        loading={loading}
+        error={error}
+        isEmpty={items.length === 0}
+        loadingLabel={t('common.loading')}
+        empty={{ title: t('farm.usage.empty'), testId: 'farm-usage-empty' }}
+      >
         <Table data-testid="farm-usage-table">
           <TableHeader>
             <TableRow>
@@ -136,7 +130,7 @@ export function FarmUsagePanel() {
             ))}
           </TableBody>
         </Table>
-      )}
+      </AsyncPanel>
     </div>
   );
 }

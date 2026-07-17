@@ -9,8 +9,7 @@ import {
   TableRow,
 } from '@/components/ui/Table';
 import { Select } from '@/components/ui/Select';
-import { EmptyState } from '@/components/ui/EmptyState';
-import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import { AsyncPanel } from '@/components/ui/AsyncPanel';
 import { useFarmAccounts } from '../hooks/useFarmAccounts';
 import { FARM_ENVS, type FarmDeviceIDSource, type FarmEnv } from '@/types/farm';
 import { formatDateTimeUtc8 } from '@/utils/datetime';
@@ -87,19 +86,16 @@ export function FarmAccountsPanel() {
       </div>
       <p className={styles.desc}>{t('farm.accounts.desc')}</p>
 
-      {loading ? (
-        <div className={styles.loadingState}>
-          <LoadingSpinner size={16} />
-          <span>{t('common.loading')}</span>
-        </div>
-      ) : error ? (
-        <div className="error-box">{error}</div>
-      ) : accounts.length === 0 ? (
-        <EmptyState
-          title={t('farm.accounts.empty_title')}
-          description={t('farm.accounts.empty_desc')}
-        />
-      ) : (
+      <AsyncPanel
+        loading={loading}
+        error={error}
+        isEmpty={accounts.length === 0}
+        loadingLabel={t('common.loading')}
+        empty={{
+          title: t('farm.accounts.empty_title'),
+          description: t('farm.accounts.empty_desc'),
+        }}
+      >
         <Table>
           <TableHeader>
             <TableRow>
@@ -246,7 +242,7 @@ export function FarmAccountsPanel() {
             })}
           </TableBody>
         </Table>
-      )}
+      </AsyncPanel>
     </div>
   );
 }

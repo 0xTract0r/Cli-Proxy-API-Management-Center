@@ -35,14 +35,6 @@
   color: var(--muted-foreground);
 }
 
-.loadingState {
-  display: flex;
-  align-items: center;
-  gap: $spacing-sm;
-  padding: $spacing-md 0;
-  color: var(--muted-foreground);
-}
-
 .statusCell {
   display: flex;
   flex-direction: column;

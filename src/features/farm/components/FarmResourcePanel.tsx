@@ -9,19 +9,14 @@ import {
 } from '@/components/ui/Table';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import { AsyncPanel } from '@/components/ui/AsyncPanel';
 import { formatFileSize } from '@/utils/format';
 import { useFarmResources } from '../hooks/useFarmResources';
+import { pctToFarmHealthBadgeVariant } from '../utils/health';
 import styles from './FarmResourcePanel.module.scss';
 
-// 水位着色阈值：后端没有给出分级口径，这里按常见运维经验值选取
-// （>=90% 视为紧急、>=70% 视为需要关注），仅用于视觉提示，不影响数据本身。
-function pctVariant(pct: number | undefined): 'success' | 'warning' | 'error' | 'muted' {
-  if (typeof pct !== 'number' || !Number.isFinite(pct)) return 'muted';
-  if (pct >= 90) return 'error';
-  if (pct >= 70) return 'warning';
-  return 'success';
-}
+// 水位着色阈值：90/70 判定口径已收敛进 features/farm/utils/health.ts
+// （pctToFarmHealthBadgeVariant），此处不再本地重复定义。
 
 function formatPct(pct: number | undefined): string {
   if (typeof pct !== 'number' || !Number.isFinite(pct)) return '—';
@@ -41,7 +36,7 @@ function hasRealLimit(memLimitBytes: number, hostMemTotalBytes: number | undefin
   return true;
 }
 
-// 细进度条：复用 pctVariant 的颜色语义（success/warning/error/muted），无有效
+// 细进度条：复用 pctToFarmHealthBadgeVariant 的颜色语义（success/warning/error/muted），无有效
 // 百分比（如没有真实 limit）时不渲染。
 function ResourceBar({
   pct,
@@ -83,26 +78,19 @@ export function FarmResourcePanel() {
         </Button>
       </div>
 
-      {loading ? (
-        <div className={styles.loadingState}>
-          <LoadingSpinner size={16} />
-          <span>{t('common.loading')}</span>
-        </div>
-      ) : error ? (
-        <div className="error-box">{error}</div>
-      ) : (
+      <AsyncPanel loading={loading} error={error} loadingLabel={t('common.loading')}>
         <>
           {host ? (
             <div className={styles.hostRow} data-testid="farm-resource-host">
               <span className={styles.hostLabel}>{t('farm.resources.hostTitle')}</span>
-              <span className={`status-badge ${pctVariant(host.mem_pct)}`}>
+              <span className={`status-badge ${pctToFarmHealthBadgeVariant(host.mem_pct)}`}>
                 {t('farm.resources.mem')} {formatFileSize(host.mem_used_bytes)} /{' '}
                 {formatFileSize(host.mem_total_bytes)} ({formatPct(host.mem_pct)})
               </span>
               <span className={styles.hostMeta}>
                 load1 {host.load1.toFixed(2)} · {host.cpu_count} CPU
               </span>
-              <ResourceBar pct={host.mem_pct} variant={pctVariant(host.mem_pct)} />
+              <ResourceBar pct={host.mem_pct} variant={pctToFarmHealthBadgeVariant(host.mem_pct)} />
               <p className={styles.note}>
                 {t('farm.resources.hostNote', { defaultValue: host.note })}
               </p>
@@ -130,8 +118,8 @@ export function FarmResourcePanel() {
               <TableBody>
                 {containers.map((item) => {
                   const memLimited = hasRealLimit(item.mem_limit_bytes, host?.mem_total_bytes);
-                  const memVariant = memLimited ? pctVariant(item.mem_pct) : 'muted';
-                  const cpuVariant = pctVariant(item.cpu_pct);
+                  const memVariant = memLimited ? pctToFarmHealthBadgeVariant(item.mem_pct) : 'muted';
+                  const cpuVariant = pctToFarmHealthBadgeVariant(item.cpu_pct);
                   return (
                     <TableRow
                       key={item.container_id}
@@ -173,7 +161,7 @@ export function FarmResourcePanel() {
             </Table>
           )}
         </>
-      )}
+      </AsyncPanel>
     </div>
   );
 }

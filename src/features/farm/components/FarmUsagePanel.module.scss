@@ -32,14 +32,6 @@
   font-style: italic;
 }
 
-.loadingState {
-  display: flex;
-  align-items: center;
-  gap: $spacing-sm;
-  padding: $spacing-md 0;
-  color: var(--muted-foreground);
-}
-
 .mono {
   font-family: $font-mono;
   font-size: 13px;

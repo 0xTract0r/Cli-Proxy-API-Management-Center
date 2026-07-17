@@ -25,14 +25,6 @@
   color: var(--text-primary);
 }
 
-.loadingState {
-  display: flex;
-  align-items: center;
-  gap: $spacing-sm;
-  padding: $spacing-md 0;
-  color: var(--muted-foreground);
-}
-
 .hostRow {
   display: flex;
   align-items: center;
@@ -76,7 +68,7 @@
   width: 100%;
 }
 
-// 细进度条：高度收窄、圆角，按 pctVariant 语义上色（success/warning/error/muted）。
+// 细进度条：高度收窄、圆角，按 pctToFarmHealthBadgeVariant 语义上色（success/warning/error/muted）。
 // width:100% 让它在 hostRow 这类 flex-wrap 容器里独占一行，与 .note 的做法一致。
 .bar {
   width: 100%;

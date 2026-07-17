@@ -1,0 +1,50 @@
+@use '../../styles/variables' as *;
+
+// <HealthPill>：16px 图标 + 短文案 + 语义色（design.md 决策6 状态栏双列
+// 「账号健康」/「容器健康」共用）。颜色只吃 themes.scss 的
+// --health-ok/warn/err/idle 四个 token，不在组件里写死色值，保证浅色/纯白/
+// 深色三套主题自动跟随。
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 3px 8px;
+  border-radius: $radius-full;
+  font-size: 13px;
+  line-height: 1.2;
+  border: 1px solid;
+  white-space: nowrap;
+}
+
+.icon {
+  flex: 0 0 auto;
+  display: block;
+}
+
+.label {
+  font-weight: 600;
+}
+
+.ok {
+  color: var(--health-ok);
+  border-color: color-mix(in srgb, var(--health-ok) 35%, transparent);
+  background: color-mix(in srgb, var(--health-ok) 10%, transparent);
+}
+
+.warn {
+  color: var(--health-warn);
+  border-color: color-mix(in srgb, var(--health-warn) 35%, transparent);
+  background: color-mix(in srgb, var(--health-warn) 10%, transparent);
+}
+
+.err {
+  color: var(--health-err);
+  border-color: color-mix(in srgb, var(--health-err) 35%, transparent);
+  background: color-mix(in srgb, var(--health-err) 10%, transparent);
+}
+
+.idle {
+  color: var(--health-idle);
+  border-color: color-mix(in srgb, var(--health-idle) 30%, transparent);
+  background: color-mix(in srgb, var(--health-idle) 8%, transparent);
+}
