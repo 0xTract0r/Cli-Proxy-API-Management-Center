@@ -98,6 +98,16 @@
   white-space: nowrap;
 }
 
+// 容器健康列：HealthPill 之外，未接入农场（farm_bound=false 且未禁用）的
+// 账号在同一格追加「接入农场」按钮（P0-10，design.md 决策5）。纵向排列，
+// 避免与 pill 同排挤压导致窄屏换行错位；窄屏堆叠卡片态下该格仍保持左对齐。
+.containerHealthCell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
 // 表头一律单行，避免窄视口下逐字竖排（如「已/禁/用」）。
 .panel th {
   white-space: nowrap;

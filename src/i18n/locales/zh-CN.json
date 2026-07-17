@@ -1987,7 +1987,9 @@
       "reauthAction": "重新授权",
       "disabled": "已禁用",
       "disabledBadge": "已禁用",
-      "degradedHint": "有 LLM 请求但无遥测上报——健康信号可能不对称，未必是真实故障"
+      "degradedHint": "有 LLM 请求但无遥测上报——健康信号可能不对称，未必是真实故障",
+      "onboardAction": "接入农场",
+      "onboarding": "接入中…"
     },
     "overview": {
       "running": "运行中容器",
@@ -2065,14 +2067,18 @@
       "bind_success": "容器 {{id}} 已绑定并启动",
       "bind_pending": "容器 {{id}} 已绑定，但 CPA 侧 device_id 同步暂未上线",
       "unbind_success": "容器 {{id}} 已解绑",
-      "retire_success": "容器 {{id}} 已退役"
+      "retire_success": "容器 {{id}} 已退役",
+      "onboardSuccess": "账号 {{id}} 已接入农场"
     },
     "error": {
       "load_failed": "加载失败",
       "bind_failed": "绑定失败",
       "unbind_failed": "解绑失败",
       "create_failed": "创建容器失败",
-      "retire_failed": "退役失败"
+      "retire_failed": "退役失败",
+      "onboardFailed": "接入农场失败",
+      "onboardNoProxy": "该环境暂无可用住宅代理，请先配置代理",
+      "onboardCapacityFull": "容器池已满"
     }
   }
 }

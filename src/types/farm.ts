@@ -124,6 +124,43 @@ export interface FarmUnbindResponse {
   detail: string;
 }
 
+// POST /api/farm/onboard 请求体（design.md 决策5「半自动 onboard」，P0-6 后端
+// 已落地并注册路由，字段名照抄 dto.go onboardRequest）。account_id/env 必填，
+// proxy_url/container_id 可选（不传 proxy_url 由编排器按 env 现取可用住宅
+// 代理；不传 container_id 由编排器内部按「无空闲容器则建容器→绑定→起容器」
+// 原子链路处理）。
+export interface FarmOnboardRequest {
+  account_id: string;
+  env: FarmEnv;
+  proxy_url?: string;
+  container_id?: string;
+}
+
+// POST /api/farm/onboard 成功响应体（dto.go onboardResponse）：内嵌
+// bindingResponse 全部字段，额外附加 container_created 标注本次是否内部新建
+// 了容器（未提供 container_id 且没有空闲容器可复用时为 true）。
+export interface FarmOnboardResponse {
+  container_id: string;
+  account_id: string;
+  env: string;
+  auth_index?: number;
+  bound_at: string;
+  device_write: 'ok' | 'pending' | 'failed';
+  detail?: string;
+  container_created: boolean;
+}
+
+// POST /api/farm/onboard 失败态机器码（design.md 决策5，dto.go
+// onboardCodeNoAvailableProxy / onboardCodeCapacityExhausted）：
+// no_available_proxy=该 env 无可用住宅代理；farm_capacity_exhausted=触达
+// MaxActiveContainers 软上限。失败响应体是独立形状
+// onboardErrorResponse{ error(自由文本，给人看), code(机器码，独立字段) }，
+// 机器码不在 error 文本里——前端必须从响应体的 code 字段读取（farmClient 解析
+// 进 FarmApiError.businessCode），按精确匹配分支，不能对 error 文本做子串
+// 匹配（那是给人看的说明文字，不保证包含机器码原文）。
+export const FARM_ONBOARD_ERROR_CODES = ['no_available_proxy', 'farm_capacity_exhausted'] as const;
+export type FarmOnboardErrorCode = (typeof FARM_ONBOARD_ERROR_CODES)[number];
+
 // DELETE /api/farm/containers/{id}?delete_volume= 响应体（dto.go retireContainerResponse）
 export interface FarmRetireContainerResponse {
   id: string;

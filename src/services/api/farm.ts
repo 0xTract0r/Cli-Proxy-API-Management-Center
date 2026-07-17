@@ -18,6 +18,10 @@
  * - GET    /api/farm/containers/{id}/events              当前 firing 事件（非完整历史）
  * - GET    /api/farm/alerts?window=&status=              跨容器告警 feed（P0-5，
  *          已注册并测试通过，见下方 getAlerts 注释）
+ * - POST   /api/farm/onboard body: { account_id, env, proxy_url?, container_id? }
+ *          半自动 onboard（design.md 决策5，P0-10）。后端 P0-6 已落地并注册
+ *          路由，成功体 = bindingResponse + container_created；失败体是独立
+ *          形状 onboardErrorResponse{ error, code }，机器码在 code 字段。
  */
 
 import { farmClient } from './farmClient';
@@ -32,6 +36,8 @@ import type {
   FarmCreateContainerRequest,
   FarmEnv,
   FarmKeepaliveSeriesResponse,
+  FarmOnboardRequest,
+  FarmOnboardResponse,
   FarmOverviewResponse,
   FarmResourceResponse,
   FarmResourceSeriesResponse,
@@ -85,6 +91,21 @@ export const farmApi = {
 
   deleteBinding: (containerId: string) =>
     farmClient.delete<FarmUnbindResponse>(`/api/farm/bindings/${encodeURIComponent(containerId)}`),
+
+  // 半自动 onboard（P0-10，design.md 决策5）：对「已认证但未接入农场」账号
+  // 一键接入，编排器内部按「无空闲容器则建容器→绑定→起容器」原子链路处理，
+  // 前端不重复 createContainer + createBinding 两步（那两步仍保留在
+  // FarmContainerTable 作为高级/兜底路径）。proxy_url/container_id 可选，
+  // 不传交由后端按 env 自行判定。失败态机器码在响应体独立 code 字段（不在
+  // error 文本里），farmClient 解析进 FarmApiError.businessCode，调用方
+  // （useFarmOnboard）按 businessCode 精确匹配，不做文本子串匹配。
+  onboardAccount: (accountId: string, env: FarmEnv, options?: { proxy_url?: string; container_id?: string }) =>
+    farmClient.post<FarmOnboardResponse>('/api/farm/onboard', {
+      account_id: accountId,
+      env,
+      ...(options?.proxy_url ? { proxy_url: options.proxy_url } : {}),
+      ...(options?.container_id ? { container_id: options.container_id } : {}),
+    } satisfies FarmOnboardRequest),
 
   // Token 用量按容器/账号聚合，口径见 FarmUsageResponse.note（CPA 自上次重启起
   // 的内存态计数，不持久）。env 可选：不传时后端聚合全部已绑定 env。

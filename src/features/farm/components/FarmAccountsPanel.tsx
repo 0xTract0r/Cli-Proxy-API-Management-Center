@@ -9,9 +9,11 @@ import {
   TableRow,
 } from '@/components/ui/Table';
 import { Select } from '@/components/ui/Select';
+import { Button } from '@/components/ui/Button';
 import { AsyncPanel } from '@/components/ui/AsyncPanel';
 import { HealthPill, type HealthPillStatus } from '@/components/ui/HealthPill';
 import { useFarmAccounts } from '../hooks/useFarmAccounts';
+import { useFarmOnboard } from '../hooks/useFarmOnboard';
 import { FARM_ENVS, type FarmDeviceIDSource, type FarmEnv } from '@/types/farm';
 import { formatDateTimeUtc8 } from '@/utils/datetime';
 import styles from './FarmAccountsPanel.module.scss';
@@ -68,7 +70,8 @@ const CONTAINER_HEALTH_STATUS: Record<string, HealthPillStatus> = {
 export function FarmAccountsPanel() {
   const { t, i18n } = useTranslation();
   const [env, setEnv] = useState<FarmEnv>('test');
-  const { accounts, loading, error } = useFarmAccounts(env);
+  const { accounts, loading, error, reload } = useFarmAccounts(env);
+  const { onboardingAccountId, onboard } = useFarmOnboard({ reload });
 
   const envOptions = FARM_ENVS.map((value) => ({ value, label: t(`farm.env.${value}`) }));
 
@@ -165,6 +168,14 @@ export function FarmAccountsPanel() {
               // TableCell 的 data-degraded-hint 属性单独标记，不覆盖主 testid。
               const containerHealthTestId = `farm-container-health-${account.name}`;
 
+              // 「已认证但未接入农场」按钮门控（design.md 决策5 / P0-10）：
+              // farm_bound=false 即未接入；disabled 账号是 operator 主动
+              // 关闭，不提供一键接入入口（避免把停用账号又拉回农场）。不额外
+              // 按 accountHealthStatus 收窄——账号能出现在这份 CPA 透传列表
+              // 里即代表已认证，故障态账号 operator 仍可能想先接入再排查。
+              const canOnboard = !account.farm_bound && !account.disabled;
+              const isOnboarding = onboardingAccountId === account.name;
+
               return (
                 <TableRow key={account.name} data-testid={`farm-account-row-${account.name}`}>
                   <TableCell data-label={t('farm.accounts.column_name')}>
@@ -196,13 +207,28 @@ export function FarmAccountsPanel() {
                     data-label={containerHealthColumnLabel}
                     data-degraded-hint={showDegradedHint ? 'true' : undefined}
                   >
-                    <HealthPill
-                      status={containerHealthStatus}
-                      label={containerHealthLabel}
-                      dimension={containerHealthColumnLabel}
-                      reason={containerHealthReason}
-                      data-testid={containerHealthTestId}
-                    />
+                    <div className={styles.containerHealthCell}>
+                      <HealthPill
+                        status={containerHealthStatus}
+                        label={containerHealthLabel}
+                        dimension={containerHealthColumnLabel}
+                        reason={containerHealthReason}
+                        data-testid={containerHealthTestId}
+                      />
+                      {canOnboard ? (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          loading={isOnboarding}
+                          onClick={() => onboard(account.name, env)}
+                          data-testid={`farm-account-onboard-${account.name}`}
+                        >
+                          {isOnboarding
+                            ? t('farm.accountHealth.onboarding', { defaultValue: 'Onboarding…' })
+                            : t('farm.accountHealth.onboardAction', { defaultValue: 'Onboard to farm' })}
+                        </Button>
+                      ) : null}
+                    </div>
                   </TableCell>
                   <TableCell
                     data-testid={`farm-account-device-id-source-${account.name}`}

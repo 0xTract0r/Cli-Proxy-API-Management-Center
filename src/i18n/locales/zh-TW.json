@@ -1732,7 +1732,9 @@
       "reauthAction": "重新授權",
       "disabled": "已停用",
       "disabledBadge": "已停用",
-      "degradedHint": "有 LLM 請求但無遙測回報——健康訊號可能不對稱，未必是真實故障"
+      "degradedHint": "有 LLM 請求但無遙測回報——健康訊號可能不對稱，未必是真實故障",
+      "onboardAction": "接入農場",
+      "onboarding": "接入中…"
     },
     "overview": {
       "running": "運行中容器",
@@ -1810,14 +1812,18 @@
       "bind_success": "容器 {{id}} 已綁定並啟動",
       "bind_pending": "容器 {{id}} 已綁定，但 CPA 端 device_id 同步暫未上線",
       "unbind_success": "容器 {{id}} 已解綁",
-      "retire_success": "容器 {{id}} 已退役"
+      "retire_success": "容器 {{id}} 已退役",
+      "onboardSuccess": "帳號 {{id}} 已接入農場"
     },
     "error": {
       "load_failed": "載入失敗",
       "bind_failed": "綁定失敗",
       "unbind_failed": "解綁失敗",
       "create_failed": "建立容器失敗",
-      "retire_failed": "退役失敗"
+      "retire_failed": "退役失敗",
+      "onboardFailed": "接入農場失敗",
+      "onboardNoProxy": "該環境暫無可用住宅代理，請先設定代理",
+      "onboardCapacityFull": "容器池已滿"
     }
   }
 }

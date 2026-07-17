@@ -21,7 +21,15 @@ export interface FarmClientConfig {
   adminKey: string;
 }
 
-const handleFarmError = (error: unknown): ApiError => {
+// 农场编排器错误对象：`code` 字段沿用 ApiError 既有约定（axios 网络层错误码，
+// 如 'ECONNABORTED'，见 client.ts / LoginPage.tsx 用法），不能被后端业务机器码
+// 覆盖。onboard 端点（P0-6）失败响应体是独立形状
+// `onboardErrorResponse{ error(自由文本), code(机器码) }`（dto.go），因此这里
+// 用单独的 `businessCode` 字段把响应体里的 `code` 原样带出，调用方（如
+// useFarmOnboard）按 businessCode 做精确分支，不必再去 message 文本里子串匹配。
+export type FarmApiError = ApiError & { businessCode?: string };
+
+const handleFarmError = (error: unknown): FarmApiError => {
   const isRecord = (value: unknown): value is Record<string, unknown> =>
     value !== null && typeof value === 'object';
 
@@ -32,18 +40,21 @@ const handleFarmError = (error: unknown): ApiError => {
       typeof responseRecord?.error === 'string'
         ? responseRecord.error
         : error.message || 'Farm orchestrator request failed';
-    const apiError = new Error(message) as ApiError;
+    const apiError = new Error(message) as FarmApiError;
     apiError.name = 'FarmApiError';
     apiError.status = error.response?.status;
     apiError.code = error.code;
     apiError.details = responseData;
     apiError.data = responseData;
+    if (typeof responseRecord?.code === 'string') {
+      apiError.businessCode = responseRecord.code;
+    }
     return apiError;
   }
 
   const fallbackMessage =
     error instanceof Error ? error.message : typeof error === 'string' ? error : 'Unknown farm orchestrator error';
-  const fallback = new Error(fallbackMessage) as ApiError;
+  const fallback = new Error(fallbackMessage) as FarmApiError;
   fallback.name = 'FarmApiError';
   return fallback;
 };

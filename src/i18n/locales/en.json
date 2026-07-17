@@ -1987,7 +1987,9 @@
       "reauthAction": "Re-authenticate",
       "disabled": "Disabled",
       "disabledBadge": "Disabled",
-      "degradedHint": "Has LLM traffic but no telemetry — health signal may be asymmetric, not necessarily a real failure"
+      "degradedHint": "Has LLM traffic but no telemetry — health signal may be asymmetric, not necessarily a real failure",
+      "onboardAction": "Onboard to farm",
+      "onboarding": "Onboarding…"
     },
     "overview": {
       "running": "Running Containers",
@@ -2065,14 +2067,18 @@
       "bind_success": "Container {{id}} bound and started",
       "bind_pending": "Container {{id}} bound, but CPA-side device_id sync is not yet live",
       "unbind_success": "Container {{id}} unbound",
-      "retire_success": "Container {{id}} retired"
+      "retire_success": "Container {{id}} retired",
+      "onboardSuccess": "Account {{id}} onboarded to farm"
     },
     "error": {
       "load_failed": "Failed to load",
       "bind_failed": "Bind failed",
       "unbind_failed": "Unbind failed",
       "create_failed": "Failed to create container",
-      "retire_failed": "Failed to retire container"
+      "retire_failed": "Failed to retire container",
+      "onboardFailed": "Failed to onboard account",
+      "onboardNoProxy": "No residential proxy available for this environment yet. Configure a proxy first.",
+      "onboardCapacityFull": "Container pool is full."
     }
   }
 }
