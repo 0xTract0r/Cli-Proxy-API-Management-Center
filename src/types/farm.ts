@@ -186,6 +186,10 @@ export type FarmDeviceIDSource = (typeof FARM_DEVICE_ID_SOURCES)[number];
 // （Go 侧 omitempty），非农场账号不出现这几个字段。
 export interface FarmAccountEntry {
   name: string;
+  // "quarantined" 是新增可能值（T3 telemetry-farm-ux-hardening，core 自动隔离），
+  // 与既有 active/error/disabled 等值并列；core 侧复核指出该字符串可能与
+  // auto_quarantined 短暂不一致（清隔离锁与 status 落库非原子），前端判定
+  // 隔离态一律优先信 auto_quarantined 布尔，不单独按此字符串分支。
   status: string;
   disabled: boolean;
   last_refresh?: string;
@@ -196,6 +200,15 @@ export interface FarmAccountEntry {
   failed?: number;
   recent_requests?: number;
   auth_index?: number;
+  // 账号是否被 core 自动隔离（终态认证失败等不可重试错误触发，见
+  // sdk/cliproxy/auth/conductor.go markAutoQuarantine）。恒有值（core 侧
+  // entry["auto_quarantined"] 无条件写入），前端判定隔离态的唯一权威字段。
+  auto_quarantined: boolean;
+  // 隔离原因（仅 auto_quarantined=true 时存在），当前固定值
+  // "terminal_auth_failure"，未来可能扩充其它原因。
+  quarantine_reason?: string;
+  // 隔离发生时间，RFC3339（仅 auto_quarantined=true 时存在）。
+  quarantined_at?: string;
   // 该账号在本 env 下是否有农场容器绑定。
   farm_bound: boolean;
   // 绑定的容器 ID（仅 farm_bound=true 时存在）。

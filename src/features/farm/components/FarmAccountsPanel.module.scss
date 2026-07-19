@@ -194,6 +194,25 @@
   color: var(--failure-badge-text, #8a3a30);
 }
 
+// 自动隔离态引导重新认证提示（T3 telemetry-farm-ux-hardening）：复用
+// .reauthErrorText 同一套已验证 AA 对比度结论（--failure-badge-text 在浅色/
+// 纯白/深色三套主题下均 ≥4.5:1），与账号健康列 err 档 HealthPill 视觉呼应，
+// 突出"需要立即处理"而非普通提示。
+.quarantineNotice {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--failure-badge-text, #8a3a30);
+}
+
+// 隔离但当前账号未提供 reauth_url（非 anthropic provider）时的兜底文案：不是
+// 错误本身，只是暂无一键入口，用中性 muted 文案而非错误色，与
+// .reauthWaitingLabel 同一对比度结论（--muted-foreground 三套主题均
+// ≥4.5:1）。
+.quarantineNoticeMuted {
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+
 // 手动回调 URL 入口（对齐 authFiles 侧 AuthFilesPage.module.scss 同名区块）：
 // 远程管理端下自动轮询回调不通时的兜底手动提交入口，与上方 .reauthActionRow
 // 同格纵向堆叠。

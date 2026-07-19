@@ -37,10 +37,14 @@ const DEVICE_ID_SOURCE_VARIANT: Record<FarmDeviceIDSource, 'success' | 'warning'
 // 四值，按语义分组而非逐值枚举。error/fatal→err（真实故障）；warn/degraded→warn
 // （需要关注）；active/running/healthy/ok/valid→ok（健康态）；其它未知值（含
 // status 字面量 "disabled"，disabled 已降级为账号名旁中性 tag，不在本列重复
-// 表达）一律 idle 中性回退，不再借用 muted 徽标语义。
+// 表达）一律 idle 中性回退，不再借用 muted 徽标语义。quarantined→err 只是防御性
+// 兜底（万一 auto_quarantined 意外为 false 但 status 字面量已是
+// "quarantined"）；渲染时真正权威判定走下方 isAutoQuarantined 布尔分支，不依赖
+// 这张表能否命中该 key（T3 telemetry-farm-ux-hardening）。
 const ACCOUNT_HEALTH_STATUS: Record<string, HealthPillStatus> = {
   error: 'err',
   fatal: 'err',
+  quarantined: 'err',
   warn: 'warn',
   degraded: 'warn',
   active: 'ok',
@@ -168,10 +172,39 @@ export function FarmAccountsPanel() {
               // 选色。disabled 是良性暂停态（operator 主动关闭，非故障），已降级
               // 为账号名旁的中性 tag，不再挤占本列视觉权重（design.md 决策6）。
               const normalizedStatus = (account.status || 'active').trim().toLowerCase();
-              const accountHealthStatus: HealthPillStatus = ACCOUNT_HEALTH_STATUS[normalizedStatus] ?? 'idle';
-              const statusLabel = t(`farm.accounts.status_${normalizedStatus}`, {
-                defaultValue: account.status || t('farm.accounts.status_active'),
-              });
+
+              // 自动隔离态（T3 telemetry-farm-ux-hardening）：优先按
+              // account.auto_quarantined 布尔判定，不单独按 status 字符串分支——
+              // core 侧复核指出两者可能短暂不一致（清隔离锁与 status 落库非原子），
+              // 布尔更稳。true 时无条件盖成 err 档 + 专用文案，即便 normalizedStatus
+              // 恰好仍是 "active" 之类的健康值。
+              const isAutoQuarantined = Boolean(account.auto_quarantined);
+              const accountHealthStatus: HealthPillStatus = isAutoQuarantined
+                ? 'err'
+                : ACCOUNT_HEALTH_STATUS[normalizedStatus] ?? 'idle';
+              const statusLabel = isAutoQuarantined
+                ? t('farm.accountHealth.quarantinedBadge', { defaultValue: 'Auto-quarantined' })
+                : t(`farm.accounts.status_${normalizedStatus}`, {
+                    defaultValue: account.status || t('farm.accounts.status_active'),
+                  });
+              // 隔离详情进 HealthPill 的 title tooltip（同 containerHealthReason 的
+              // 呈现方式）：原因 + 发生时间，缺失时用中性占位文案兜底，不留空。
+              const quarantineReasonLabel = account.quarantine_reason
+                ? t(`farm.accountHealth.quarantineReason_${account.quarantine_reason}`, {
+                    defaultValue: account.quarantine_reason,
+                  })
+                : t('farm.accountHealth.quarantineReasonUnknown', { defaultValue: 'unknown reason' });
+              const quarantineAtLabel = account.quarantined_at
+                ? formatDateTimeUtc8(account.quarantined_at, i18n.language)
+                : t('farm.accountHealth.quarantineTimeUnknown', { defaultValue: 'unknown time' });
+              const accountHealthReason = isAutoQuarantined
+                ? t('farm.accountHealth.quarantineTooltip', {
+                    reason: quarantineReasonLabel,
+                    at: quarantineAtLabel,
+                    defaultValue:
+                      'Auto-quarantined: {{reason}} · {{at}}. Please re-authenticate to restore this account.',
+                  })
+                : undefined;
               const showDisabledTag = account.disabled && normalizedStatus !== 'disabled';
 
               // 容器健康四态：只在 farm_bound 时有意义；未绑定不是「故障」而是
@@ -235,6 +268,7 @@ export function FarmAccountsPanel() {
                       status={accountHealthStatus}
                       label={statusLabel}
                       dimension={accountHealthColumnLabel}
+                      reason={accountHealthReason}
                       data-testid={`farm-account-health-pill-${account.name}`}
                     />
                   </TableCell>
@@ -312,6 +346,19 @@ export function FarmAccountsPanel() {
                   <TableCell data-label={t('farm.accountHealth.reauthUrl')}>
                     {account.reauth_url ? (
                       <div className={styles.reauthCell}>
+                        {/* 隔离态引导重新认证（T3）：紧邻按钮上方提示"已被自动隔离，
+                            请重新认证"，不管当前是否已在轮询中都保持可见，帮助 operator
+                            一眼理解为何这个账号出现在需要处理的列表里。 */}
+                        {isAutoQuarantined ? (
+                          <span
+                            className={styles.quarantineNotice}
+                            data-testid={`farm-account-quarantine-notice-${account.name}`}
+                          >
+                            {t('farm.accountHealth.quarantineReauthNotice', {
+                              defaultValue: 'This account was auto-quarantined. Please re-authenticate.',
+                            })}
+                          </span>
+                        ) : null}
                         {isReauthPolling ? (
                           <>
                             <span className={styles.reauthWaitingLabel}>
@@ -415,6 +462,20 @@ export function FarmAccountsPanel() {
                           </span>
                         ) : null}
                       </div>
+                    ) : isAutoQuarantined ? (
+                      // 隔离但当前 provider 未提供 reauth_url 的兜底文案（经验上只有
+                      // anthropic/claude 账号会拿到该字段，见 useFarmReauth 顶部注释）：
+                      // 非错误态本身的再次报错，只是提示 operator 这里暂无一键入口，
+                      // 需要另寻恢复路径，故用中性 muted 文案而非错误色。
+                      <span
+                        className={styles.quarantineNoticeMuted}
+                        data-testid={`farm-account-quarantine-no-url-${account.name}`}
+                      >
+                        {t('farm.accountHealth.quarantineNoReauthUrl', {
+                          defaultValue:
+                            'This account was auto-quarantined, but no re-authentication entry is available.',
+                        })}
+                      </span>
                     ) : (
                       <span className={styles.mono}>—</span>
                     )}

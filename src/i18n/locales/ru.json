@@ -1893,7 +1893,8 @@
       "status_active": "Активен",
       "status_disabled": "Отключён",
       "status_pending": "Ожидание",
-      "status_error": "Ошибка"
+      "status_error": "Ошибка",
+      "status_quarantined": "В карантине"
     },
     "containers": {
       "title": "Пул контейнеров",
@@ -2015,7 +2016,14 @@
       "reauthCallbackSuccess": "Callback URL отправлен. Продолжайте ожидать аутентификацию.",
       "reauthCallbackError": "Не удалось отправить Callback URL",
       "reauthCallbackUpgradeHint": "Обновите CLI Proxy API или проверьте подключение.",
-      "reauthCallbackStatusSuccess": "Callback URL отправлен, ожидаем аутентификацию..."
+      "reauthCallbackStatusSuccess": "Callback URL отправлен, ожидаем аутентификацию...",
+      "quarantinedBadge": "Автокарантин",
+      "quarantineTooltip": "Причина автокарантина: {{reason}} · {{at}}. Пройдите повторную аутентификацию, чтобы восстановить аккаунт.",
+      "quarantineReasonUnknown": "причина неизвестна",
+      "quarantineTimeUnknown": "время неизвестно",
+      "quarantineReason_terminal_auth_failure": "Необратимая ошибка аутентификации (без возможности повтора)",
+      "quarantineReauthNotice": "Этот аккаунт помещён в автокарантин. Пожалуйста, пройдите повторную аутентификацию.",
+      "quarantineNoReauthUrl": "Этот аккаунт помещён в автокарантин, но точка повторной аутентификации недоступна."
     },
     "overview": {
       "running": "Работающие контейнеры",

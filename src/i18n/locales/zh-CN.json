@@ -1900,7 +1900,8 @@
       "status_active": "正常",
       "status_disabled": "已禁用",
       "status_pending": "待处理",
-      "status_error": "错误"
+      "status_error": "错误",
+      "status_quarantined": "已隔离"
     },
     "containers": {
       "title": "容器池",
@@ -2022,7 +2023,14 @@
       "reauthCallbackSuccess": "回调 URL 已提交，请继续等待认证。",
       "reauthCallbackError": "提交回调 URL 失败",
       "reauthCallbackUpgradeHint": "请更新 CLI Proxy API 或检查连接。",
-      "reauthCallbackStatusSuccess": "回调 URL 已提交，等待认证中..."
+      "reauthCallbackStatusSuccess": "回调 URL 已提交，等待认证中...",
+      "quarantinedBadge": "已自动隔离",
+      "quarantineTooltip": "自动隔离原因：{{reason}} · {{at}}。请重新认证以恢复该账号。",
+      "quarantineReasonUnknown": "原因未知",
+      "quarantineTimeUnknown": "时间未知",
+      "quarantineReason_terminal_auth_failure": "终端认证失败（不可重试的终态错误）",
+      "quarantineReauthNotice": "该账号已被自动隔离，请重新认证。",
+      "quarantineNoReauthUrl": "该账号已被自动隔离，但当前没有可用的重新授权入口。"
     },
     "overview": {
       "running": "运行中容器",

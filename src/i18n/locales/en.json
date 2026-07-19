@@ -1900,7 +1900,8 @@
       "status_active": "Active",
       "status_disabled": "Disabled",
       "status_pending": "Pending",
-      "status_error": "Error"
+      "status_error": "Error",
+      "status_quarantined": "Quarantined"
     },
     "containers": {
       "title": "Container Pool",
@@ -2022,7 +2023,14 @@
       "reauthCallbackSuccess": "Callback URL submitted. Continue waiting for authentication.",
       "reauthCallbackError": "Failed to submit callback URL",
       "reauthCallbackUpgradeHint": "Please update CLI Proxy API or check the connection.",
-      "reauthCallbackStatusSuccess": "Callback URL submitted, waiting for authentication..."
+      "reauthCallbackStatusSuccess": "Callback URL submitted, waiting for authentication...",
+      "quarantinedBadge": "Auto-quarantined",
+      "quarantineTooltip": "Auto-quarantined: {{reason}} · {{at}}. Please re-authenticate to restore this account.",
+      "quarantineReasonUnknown": "unknown reason",
+      "quarantineTimeUnknown": "unknown time",
+      "quarantineReason_terminal_auth_failure": "Terminal authentication failure (non-retryable)",
+      "quarantineReauthNotice": "This account was auto-quarantined. Please re-authenticate.",
+      "quarantineNoReauthUrl": "This account was auto-quarantined, but no re-authentication entry is available."
     },
     "overview": {
       "running": "Running Containers",
