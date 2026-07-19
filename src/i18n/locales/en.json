@@ -1949,6 +1949,10 @@
       "keepVolume": "Keep volume (default, recommended)",
       "deleteVolume": "Also delete the volume (irreversible — removes machine ID and Claude state)"
     },
+    "onboardConfirm": {
+      "title": "Onboard this account to the farm?",
+      "body": "This will immediately create a real container in this environment for account {{id}}, bind it to the real account, and route traffic through a residential proxy — it is not a read-only action. Make sure the account is ready and residential proxy capacity is available before continuing; cancelling has no side effects."
+    },
     "filter": {
       "statusLabel": "Status",
       "all": "All"
@@ -1969,8 +1973,11 @@
       "columnReasoning": "Reasoning",
       "columnBillable": "Billable",
       "columnRequests": "Requests",
+      "columnRequestsHint": "Account-level cumulative request count on CPA, including real requests from before the account joined the farm — not the farm probe's keepalive heartbeat count.",
       "detailTitle": "Token usage detail",
       "sinceNote": "Since the last CPA restart (in-memory only)",
+      "attributionTitle": "Usage attribution",
+      "attributionBody": "The token/request numbers below are this account's cumulative usage on CPA, including real historical serving from before it joined the farm — not \"new calls since binding to this container\". This is a different metric from the farm probe's keepalive heartbeat count (see container detail); the two are not directly comparable.",
       "empty": "No usage data yet"
     },
     "resources": {
@@ -1995,7 +2002,27 @@
       "disabledBadge": "Disabled",
       "degradedHint": "Has LLM traffic but no telemetry — health signal may be asymmetric, not necessarily a real failure",
       "onboardAction": "Onboard to farm",
-      "onboarding": "Onboarding…"
+      "onboardActionShort": "Onboard",
+      "onboarding": "Onboarding…",
+      "reauthConfirmTitle": "Re-authenticate this account?",
+      "reauthConfirmMessage": "The current account stays unchanged until the new authorization completes. You can cancel at any time.",
+      "reauthConfirmAction": "Continue",
+      "reauthWaiting": "Waiting for authorization…",
+      "reauthCopyLink": "Copy link",
+      "reauthCopySuccess": "Authorization link copied",
+      "reauthCopyFailed": "Failed to copy authorization link",
+      "reauthOpenLink": "Open link",
+      "reauthCancelled": "Re-authentication cancelled",
+      "reauthCancelFailed": "Failed to cancel re-authentication",
+      "reauthCallbackLabel": "Callback URL",
+      "reauthCallbackHint": "Remote management: after the provider redirects to http://localhost:..., copy the full URL and submit it here.",
+      "reauthCallbackPlaceholder": "http://localhost:1455/auth/callback?code=...&state=...",
+      "reauthCallbackButton": "Submit Callback URL",
+      "reauthCallbackRequired": "Please paste the full redirect URL first.",
+      "reauthCallbackSuccess": "Callback URL submitted. Continue waiting for authentication.",
+      "reauthCallbackError": "Failed to submit callback URL",
+      "reauthCallbackUpgradeHint": "Please update CLI Proxy API or check the connection.",
+      "reauthCallbackStatusSuccess": "Callback URL submitted, waiting for authentication..."
     },
     "overview": {
       "running": "Running Containers",
@@ -2074,7 +2101,8 @@
       "bind_pending": "Container {{id}} bound, but CPA-side device_id sync is not yet live",
       "unbind_success": "Container {{id}} unbound",
       "retire_success": "Container {{id}} retired",
-      "onboardSuccess": "Account {{id}} onboarded to farm"
+      "onboardSuccess": "Account {{id}} onboarded to farm",
+      "reauthSuccess": "Account {{id}} re-authenticated"
     },
     "error": {
       "load_failed": "Failed to load",
@@ -2084,7 +2112,8 @@
       "retire_failed": "Failed to retire container",
       "onboardFailed": "Failed to onboard account",
       "onboardNoProxy": "No residential proxy available for this environment yet. Configure a proxy first.",
-      "onboardCapacityFull": "Container pool is full."
+      "onboardCapacityFull": "Container pool is full.",
+      "reauthFailed": "Failed to re-authenticate"
     }
   }
 }

@@ -10,11 +10,13 @@ import {
 } from '@/components/ui/Table';
 import { Select } from '@/components/ui/Select';
 import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
 import { AsyncPanel } from '@/components/ui/AsyncPanel';
 import { HealthPill, type HealthPillStatus } from '@/components/ui/HealthPill';
 import { IconInfo } from '@/components/ui/icons';
 import { useFarmAccounts } from '../hooks/useFarmAccounts';
 import { useFarmOnboard } from '../hooks/useFarmOnboard';
+import { useFarmReauth } from '../hooks/useFarmReauth';
 import { FARM_ENVS, type FarmDeviceIDSource, type FarmEnv } from '@/types/farm';
 import { formatDateTimeUtc8 } from '@/utils/datetime';
 import styles from './FarmAccountsPanel.module.scss';
@@ -73,6 +75,15 @@ export function FarmAccountsPanel() {
   const [env, setEnv] = useState<FarmEnv>('test');
   const { accounts, loading, error, reload } = useFarmAccounts(env);
   const { onboardingAccountId, onboard } = useFarmOnboard({ reload });
+  const {
+    reauthStates,
+    startReauth,
+    copyReauthLink,
+    openReauthLink,
+    cancelReauth,
+    updateReauthCallbackUrl,
+    submitReauthCallback,
+  } = useFarmReauth({ reload });
 
   const envOptions = FARM_ENVS.map((value) => ({ value, label: t(`farm.env.${value}`) }));
 
@@ -193,6 +204,14 @@ export function FarmAccountsPanel() {
               const canOnboard = !account.farm_bound && !account.disabled;
               const isOnboarding = onboardingAccountId === account.name;
 
+              // 重新授权（Q5 缺陷修复）：account.reauth_url 非空即代表 CPA 认为
+              // 该账号可重新授权（经验上仅 anthropic provider 会返回该字段），
+              // 非 claude provider 该字段为空，继续走「—」占位分支，不误覆盖。
+              const reauthState = reauthStates[account.name];
+              const isReauthStarting = reauthState?.status === 'starting';
+              const isReauthPolling = reauthState?.status === 'polling';
+              const reauthErrorMessage = reauthState?.status === 'error' ? reauthState.error : undefined;
+
               return (
                 <TableRow key={account.name} data-testid={`farm-account-row-${account.name}`}>
                   <TableCell data-label={t('farm.accounts.column_name')}>
@@ -238,11 +257,18 @@ export function FarmAccountsPanel() {
                           size="sm"
                           loading={isOnboarding}
                           onClick={() => onboard(account.name, env)}
+                          className={styles.onboardButton}
+                          // 可见文案改用紧凑版（见下方 onboardActionShort），但无障碍名称与
+                          // 悬浮提示仍用完整语义文案，避免视觉紧凑化丢失屏幕阅读器/鼠标
+                          // 悬浮场景下的上下文（真实 6 列表 + 长邮箱账号名下本列可用宽度
+                          // 有限，见 .containerHealthCell 注释的几何推导）。
+                          aria-label={t('farm.accountHealth.onboardAction', { defaultValue: 'Onboard to farm' })}
+                          title={t('farm.accountHealth.onboardAction', { defaultValue: 'Onboard to farm' })}
                           data-testid={`farm-account-onboard-${account.name}`}
                         >
                           {isOnboarding
                             ? t('farm.accountHealth.onboarding', { defaultValue: 'Onboarding…' })
-                            : t('farm.accountHealth.onboardAction', { defaultValue: 'Onboard to farm' })}
+                            : t('farm.accountHealth.onboardActionShort', { defaultValue: 'Onboard' })}
                         </Button>
                       ) : null}
                     </div>
@@ -285,15 +311,110 @@ export function FarmAccountsPanel() {
                   </TableCell>
                   <TableCell data-label={t('farm.accountHealth.reauthUrl')}>
                     {account.reauth_url ? (
-                      <a
-                        className={styles.reauthLink}
-                        href={account.reauth_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        data-testid={`farm-account-reauth-${account.name}`}
-                      >
-                        {t('farm.accountHealth.reauthAction', { defaultValue: 'Re-authenticate' })}
-                      </a>
+                      <div className={styles.reauthCell}>
+                        {isReauthPolling ? (
+                          <>
+                            <span className={styles.reauthWaitingLabel}>
+                              {t('farm.accountHealth.reauthWaiting', {
+                                defaultValue: 'Waiting for authorization…',
+                              })}
+                            </span>
+                            <div className={styles.reauthActionRow}>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => copyReauthLink(account.name)}
+                                data-testid={`farm-account-reauth-copy-${account.name}`}
+                              >
+                                {t('farm.accountHealth.reauthCopyLink', { defaultValue: 'Copy link' })}
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => openReauthLink(account.name)}
+                                data-testid={`farm-account-reauth-open-${account.name}`}
+                              >
+                                {t('farm.accountHealth.reauthOpenLink', { defaultValue: 'Open link' })}
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => cancelReauth(account.name)}
+                                data-testid={`farm-account-reauth-cancel-${account.name}`}
+                              >
+                                {t('common.cancel')}
+                              </Button>
+                            </div>
+                            {/* 手动回调 URL 入口（对齐 authFiles 侧 AuthFileCard）：远程
+                                管理端（cpamp 部署在 201）下 OAuth 回调回不到发起授权请求的
+                                管理端 origin，自动轮询永远等不到成功；用户从浏览器地址栏
+                                复制完整回调 URL 粘贴到这里，与自动轮询两条路径并存。 */}
+                            <div className={styles.reauthCallbackSection}>
+                              <Input
+                                label={t('farm.accountHealth.reauthCallbackLabel', {
+                                  defaultValue: 'Callback URL',
+                                })}
+                                hint={t('farm.accountHealth.reauthCallbackHint', {
+                                  defaultValue:
+                                    'Remote management: after the provider redirects to http://localhost:..., copy the full URL and submit it here.',
+                                })}
+                                value={reauthState?.callbackUrl || ''}
+                                onChange={(e) => updateReauthCallbackUrl(account.name, e.target.value)}
+                                placeholder={t('farm.accountHealth.reauthCallbackPlaceholder', {
+                                  defaultValue:
+                                    'http://localhost:1455/auth/callback?code=...&state=...',
+                                })}
+                                disabled={Boolean(reauthState?.callbackSubmitting)}
+                                error={
+                                  reauthState?.callbackStatus === 'error'
+                                    ? reauthState.callbackError
+                                    : undefined
+                                }
+                                data-testid={`farm-account-reauth-callback-input-${account.name}`}
+                              />
+                              <div className={styles.reauthCallbackActions}>
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  onClick={() => submitReauthCallback(account.name)}
+                                  loading={Boolean(reauthState?.callbackSubmitting)}
+                                  data-testid={`farm-account-reauth-callback-submit-${account.name}`}
+                                >
+                                  {t('farm.accountHealth.reauthCallbackButton', {
+                                    defaultValue: 'Submit Callback URL',
+                                  })}
+                                </Button>
+                                {reauthState?.callbackStatus === 'success' && (
+                                  <span className={styles.reauthCallbackSuccess}>
+                                    {t('farm.accountHealth.reauthCallbackStatusSuccess', {
+                                      defaultValue: 'Callback URL submitted, waiting for authentication...',
+                                    })}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </>
+                        ) : (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            loading={isReauthStarting}
+                            onClick={() => startReauth(account.name)}
+                            data-testid={`farm-account-reauth-${account.name}`}
+                          >
+                            {t('farm.accountHealth.reauthAction', { defaultValue: 'Re-authenticate' })}
+                          </Button>
+                        )}
+                        {reauthErrorMessage ? (
+                          <span
+                            className={styles.reauthErrorText}
+                            role="alert"
+                            data-testid={`farm-account-reauth-error-${account.name}`}
+                          >
+                            {reauthErrorMessage}
+                          </span>
+                        ) : null}
+                      </div>
                     ) : (
                       <span className={styles.mono}>—</span>
                     )}

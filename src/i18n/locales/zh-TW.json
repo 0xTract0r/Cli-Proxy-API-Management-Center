@@ -1694,6 +1694,10 @@
       "keepVolume": "保留卷（預設，建議）",
       "deleteVolume": "同時刪除卷（無法復原，會清除 machine ID 與 Claude 狀態）"
     },
+    "onboardConfirm": {
+      "title": "確認接入農場？",
+      "body": "接入後會立即為帳號 {{id}} 在此環境建立真實容器、綁定真實帳號，並透過住宅代理對外發出請求，不是唯讀操作。請確認該帳號可用且住宅代理配額充足後再繼續，取消不會產生任何副作用。"
+    },
     "filter": {
       "statusLabel": "狀態",
       "all": "全部"
@@ -1714,8 +1718,11 @@
       "columnReasoning": "思考",
       "columnBillable": "計費 Token",
       "columnRequests": "請求數",
+      "columnRequestsHint": "該帳號在 CPA 的帳號級累計請求數，含入農場前的真實歷史請求，非農場探針心跳次數",
       "detailTitle": "Token 用量明細",
       "sinceNote": "自 CPA 上次重新啟動起（記憶體態）",
+      "attributionTitle": "用量口徑說明",
+      "attributionBody": "以下 Token / 請求數是該帳號在 CPA 的帳號級累計用量，包含帳號加入農場之前的真實歷史 serving，並非「綁定容器後新增的呼叫量」。它與農場探針保活心跳次數（容器詳情可查看）是兩個獨立口徑，不能直接比較。",
       "empty": "尚無用量資料"
     },
     "resources": {
@@ -1740,7 +1747,27 @@
       "disabledBadge": "已停用",
       "degradedHint": "有 LLM 請求但無遙測回報——健康訊號可能不對稱，未必是真實故障",
       "onboardAction": "接入農場",
-      "onboarding": "接入中…"
+      "onboardActionShort": "接入",
+      "onboarding": "接入中…",
+      "reauthConfirmTitle": "確認重新授權該帳號？",
+      "reauthConfirmMessage": "目前帳號資訊在新授權成功前保持不變，可隨時取消。",
+      "reauthConfirmAction": "繼續",
+      "reauthWaiting": "等待授權完成…",
+      "reauthCopyLink": "複製連結",
+      "reauthCopySuccess": "已複製授權連結",
+      "reauthCopyFailed": "複製授權連結失敗",
+      "reauthOpenLink": "開啟連結",
+      "reauthCancelled": "已取消重新授權",
+      "reauthCancelFailed": "取消重新授權失敗",
+      "reauthCallbackLabel": "回調 URL",
+      "reauthCallbackHint": "遠端管理端模式：當授權跳轉到 http://localhost:... 後，複製完整 URL 並提交到這裡。",
+      "reauthCallbackPlaceholder": "http://localhost:1455/auth/callback?code=...&state=...",
+      "reauthCallbackButton": "提交回調 URL",
+      "reauthCallbackRequired": "請先貼上完整的回調 URL。",
+      "reauthCallbackSuccess": "回調 URL 已提交，請繼續等待驗證。",
+      "reauthCallbackError": "提交回調 URL 失敗",
+      "reauthCallbackUpgradeHint": "請更新 CLI Proxy API 或檢查連線。",
+      "reauthCallbackStatusSuccess": "回調 URL 已提交，等待驗證中..."
     },
     "overview": {
       "running": "運行中容器",
@@ -1819,7 +1846,8 @@
       "bind_pending": "容器 {{id}} 已綁定，但 CPA 端 device_id 同步暫未上線",
       "unbind_success": "容器 {{id}} 已解綁",
       "retire_success": "容器 {{id}} 已退役",
-      "onboardSuccess": "帳號 {{id}} 已接入農場"
+      "onboardSuccess": "帳號 {{id}} 已接入農場",
+      "reauthSuccess": "帳號 {{id}} 已重新授權"
     },
     "error": {
       "load_failed": "載入失敗",
@@ -1829,7 +1857,8 @@
       "retire_failed": "退役失敗",
       "onboardFailed": "接入農場失敗",
       "onboardNoProxy": "該環境暫無可用住宅代理，請先設定代理",
-      "onboardCapacityFull": "容器池已滿"
+      "onboardCapacityFull": "容器池已滿",
+      "reauthFailed": "重新授權失敗"
     }
   }
 }

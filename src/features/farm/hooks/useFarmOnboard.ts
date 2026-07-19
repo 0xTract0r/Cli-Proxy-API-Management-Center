@@ -39,10 +39,10 @@ const ONBOARD_ERROR_MESSAGE_KEY: Record<FarmOnboardErrorCode, string> = {
 export function useFarmOnboard(options: UseFarmOnboardOptions): UseFarmOnboardResult {
   const { reload } = options;
   const { t } = useTranslation();
-  const { showNotification } = useNotificationStore();
+  const { showNotification, showConfirmation } = useNotificationStore();
   const [onboardingAccountId, setOnboardingAccountId] = useState<string | null>(null);
 
-  const onboard = useCallback(
+  const actuallyOnboard = useCallback(
     async (accountId: string, env: FarmEnv) => {
       setOnboardingAccountId(accountId);
       try {
@@ -68,6 +68,26 @@ export function useFarmOnboard(options: UseFarmOnboardOptions): UseFarmOnboardRe
       }
     },
     [reload, showNotification, t]
+  );
+
+  // 二次确认（对齐 useFarmRetire/useFarmBindings.unbind 已有的
+  // showConfirmation 用法，「接入农场」此前是三个农场副作用 hook 里唯一没有
+  // 确认弹窗的一个）：onboard 会真实创建容器、绑定真实账号并经住宅代理对外
+  // 发起请求，不是幂等的只读操作，取消则不产生任何副作用。
+  const onboard = useCallback(
+    async (accountId: string, env: FarmEnv) => {
+      showConfirmation({
+        title: t('farm.onboardConfirm.title'),
+        message: t('farm.onboardConfirm.body', { id: accountId }),
+        variant: 'primary',
+        confirmText: t('farm.accountHealth.onboardAction', { defaultValue: 'Onboard to farm' }),
+        cancelText: t('common.cancel'),
+        onConfirm: async () => {
+          await actuallyOnboard(accountId, env);
+        },
+      });
+    },
+    [actuallyOnboard, showConfirmation, t]
   );
 
   return { onboardingAccountId, onboard };

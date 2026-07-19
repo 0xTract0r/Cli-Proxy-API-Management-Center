@@ -125,21 +125,111 @@
   white-space: nowrap;
 }
 
-.reauthLink {
-  color: var(--primary-color);
-  font-size: 13px;
-  text-decoration: underline;
+// 容器健康列：HealthPill 之外，未接入农场（farm_bound=false 且未禁用）的
+// 账号在同一格追加「接入农场」按钮（P0-10，design.md 决策5）。桌面默认同排
+// 对齐（Q4 缺陷修复第二版：此前只加了 row+wrap，未解决真实 6 列表 + 长邮箱
+// 账号名场景下本列实测只分到 ~135.64px，小于 pill(99.7px)+gap(6px)+按钮
+// (132.9px，含「接入农场」全文)=238.6px 所需宽度，必然触发 wrap、导致 pill
+// 与按钮跨两行且垂直中心错位。真正修法是显式给本列一个 min-width 兜底，让
+// 表格 auto layout 不再把本列压到自身内容宽度以下——min-width 只加在这个
+// flex 容器上，不设在 <col>/<td>，且表格外层 Table 组件本身自带 .scroll 横向
+// 滚动容器（见 Table.module.scss），本列变宽不会导致页面级横向溢出，最多让
+// 表格内部可横向滚动，这是站内既有兜底机制，不是新引入的溢出问题。
+// min-width 300px 的推导（含按钮改用短文案 .onboardButton，见下方 i18n
+// onboardActionShort）：zh-CN 空闲态 pill(99.7)+gap(6)+短按钮(按 4→2 字换算并
+// 加余量约 90px)≈195.7px，接入中态（含 spinner+gap）≈270.7px，均留有余量；
+// ru 等未实测语言按字符数估算留了更小但仍为正的余量，一旦估算不足，
+// flex-wrap 兜底会让按钮整体换到下一行（配合下方 .onboardButton 的
+// white-space:nowrap，只会整体换行不会逐字拆行），不会退化成挤爆的破版。
+.containerHealthCell {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 300px;
+}
+
+// 「接入农场」按钮防御性 nowrap：按钮文案未显式设置 white-space，CJK 文本默认
+// 允许逐字断行——一旦真实场景下本列仍被压到比按钮短文案更窄（如未实测语言
+// 估算不足），没有这条规则会让按钮文案本身逐字拆成竖排，比整体换行更像破版。
+// 加上 nowrap 后，最坏情况只会是按钮整体 wrap 到 pill 下一行（干净的纵向排布），
+// 不会出现逐字拆行。
+.onboardButton {
   white-space: nowrap;
 }
 
-// 容器健康列：HealthPill 之外，未接入农场（farm_bound=false 且未禁用）的
-// 账号在同一格追加「接入农场」按钮（P0-10，design.md 决策5）。纵向排列，
-// 避免与 pill 同排挤压导致窄屏换行错位；窄屏堆叠卡片态下该格仍保持左对齐。
-.containerHealthCell {
+// 重新授权格：按钮之外，轮询中展示等待提示 + 复制/打开/取消操作行，
+// 失败态在按钮下方追加持久错误文案（对齐 authFiles 侧 AuthFileCard 的
+// 呈现方式，见 useFarmReauth 顶部注释）。
+.reauthCell {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 6px;
+}
+
+// 直接用 --muted-foreground（=--text-secondary）而不是 .refreshTimestamp 那种
+// 固定 #6b7280 覆盖：按三套主题背景实测，--muted-foreground 本身在浅色/纯白/
+// 深色下对比度分别约 4.8/5.6/9.8:1，均满足 WCAG AA 4.5:1；固定 #6b7280 反而在
+// 深色主题（背景 #1d1b18）下只有约 3.6:1，不满足。
+.reauthWaitingLabel {
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+
+.reauthActionRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+// 错误文案对比度需求同 .refreshTimestamp：直接用 --error-color 在浅色卡片背景
+// 下仅约 3.7:1，不够 WCAG AA 正文 4.5:1；改用站内已有的
+// --failure-badge-text（AuthFilesPage/UsagePage/LogsPage 等已在用，浅色/深色
+// 主题各自取值 #8a3a30 / #f1b0a6，均已满足 4.5:1）。
+.reauthErrorText {
+  font-size: 12px;
+  color: var(--failure-badge-text, #8a3a30);
+}
+
+// 手动回调 URL 入口（对齐 authFiles 侧 AuthFilesPage.module.scss 同名区块）：
+// 远程管理端下自动轮询回调不通时的兜底手动提交入口，与上方 .reauthActionRow
+// 同格纵向堆叠。
+.reauthCallbackSection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 65%, transparent);
+  background: color-mix(in srgb, var(--bg-secondary) 60%, transparent);
+  width: 100%;
+
+  :global(.form-group) {
+    margin-bottom: 0;
+  }
+
+  :global(.hint) {
+    font-size: 12px;
+  }
+}
+
+.reauthCallbackActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+// 沿用 .reauthErrorText 同一套对比度校验结论：--success-color 在浅色卡片背景
+// 下不满足 WCAG AA 4.5:1（同 authFiles 侧 .reauthCallbackSuccess 用
+// --success-color 的差异），改用站内已有的高对比 --success-badge-text
+// （浅色/纯白/深色主题各自取值均 ≥4.5:1，FarmConfigPanel 同款用法）。
+.reauthCallbackSuccess {
+  font-size: 12px;
+  color: var(--success-badge-text, #065f46);
 }
 
 // 表头一律单行，避免窄视口下逐字竖排（如「已/禁/用」）。
@@ -164,9 +254,16 @@
     width: 100%;
   }
 
-  .reauthLink {
-    white-space: normal;
-    word-break: break-word;
+  // 窄屏改回纵向堆叠：避免 HealthPill 与「接入农场」按钮在有限列宽下同排
+  // 挤压换行错位（桌面默认同排见上方 .containerHealthCell 注释）。此处必须把
+  // 桌面版 min-width: 300px 重置为 0——窄屏下表格已整表降级成堆叠卡片
+  // （tbody td 变 display:block，宽度由卡片本身决定，见下方 .panel 卡片化
+  // 规则），卡片内容宽度在 375px 视口下常小于 300px；若不重置，min-width 会把
+  // 这一格撑到比卡片本身还宽，反而在窄屏引入新的横向溢出。
+  .containerHealthCell {
+    flex-direction: column;
+    align-items: flex-start;
+    min-width: 0;
   }
 
   .panel {
