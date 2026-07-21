@@ -1884,6 +1884,12 @@
       "hide_key": "隐藏",
       "save_success": "农场编排器配置已保存"
     },
+    "capacityModel": {
+      "title": "容量分配模型",
+      "ipSource": "住宅代理 IP 是容量真源：每个账号需绑定各自独立的住宅出口 IP，IP 稀缺才是新增容器的真正瓶颈。",
+      "deviceIdCheap": "Device ID 廉价且无上限：由编排器随机生成、一容器一个，不是接入新账号的限制项。",
+      "activationRule": "激活需三件齐备：已认证账号 ∧ 空闲容器 ∧ 可用 proxy_url，缺一不可；没有可用代理时系统拒绝直连（fail-closed），不会暴露真实 IP。"
+    },
     "accounts": {
       "title": "账号健康",
       "desc": "该环境下可用于绑定的账号列表（来自 CPA 既有认证文件健康检查）。",
@@ -1894,7 +1900,8 @@
       "status_active": "正常",
       "status_disabled": "已禁用",
       "status_pending": "待处理",
-      "status_error": "错误"
+      "status_error": "错误",
+      "status_quarantined": "已隔离"
     },
     "containers": {
       "title": "容器池",
@@ -1906,7 +1913,11 @@
       "column_device": "容器 / 设备",
       "column_status": "状态",
       "column_keepalive": "最近保活",
-      "column_token_usage": "Token 用量",
+      "column_health_reason": "健康原因",
+      "column_resource": "最近 内存/CPU",
+      "column_success_rate": "24h 成功率",
+      "column_device_alignment": "Device ID 对齐",
+      "column_next_estimate": "下次探针(估算)",
       "column_binding": "绑定账号",
       "column_actions": "操作",
       "action_bind": "绑定",
@@ -1939,6 +1950,10 @@
       "keepVolume": "保留卷（默认，推荐）",
       "deleteVolume": "同时删除卷（不可逆，会清除 machine ID 与 Claude 状态）"
     },
+    "onboardConfirm": {
+      "title": "确认接入农场？",
+      "body": "接入后会立即为账号 {{id}} 在此环境创建真实容器、绑定真实账号，并通过住宅代理对外发起请求，不是只读操作。请确认该账号可用且住宅代理配额充足后再继续，取消不会产生任何副作用。"
+    },
     "filter": {
       "statusLabel": "状态",
       "all": "全部"
@@ -1959,8 +1974,11 @@
       "columnReasoning": "思考",
       "columnBillable": "计费 Token",
       "columnRequests": "请求数",
+      "columnRequestsHint": "该账号在 CPA 的账号级累计请求数，含入农场前的真实历史请求，非农场探针心跳次数",
       "detailTitle": "Token 用量明细",
       "sinceNote": "自 CPA 上次重启起（内存态）",
+      "attributionTitle": "用量口径说明",
+      "attributionBody": "以下 Token / 请求数是该账号在 CPA 的账号级累计用量，包含账号加入农场之前的真实历史 serving，并非「绑定容器后新增的调用量」。它与农场探针保活心跳次数（容器详情可查看）是两个独立口径，不能直接对比。",
       "empty": "暂无用量数据"
     },
     "resources": {
@@ -1974,15 +1992,104 @@
       "empty": "暂无容器资源数据"
     },
     "accountHealth": {
+      "accountHealthColumn": "账号健康",
+      "containerHealthColumn": "容器健康",
+      "unbound": "未绑定",
       "deviceIdSourceColumn": "device_id 来源",
       "lastRefresh": "最近刷新",
       "reauthUrl": "重新授权链接",
       "reauthAction": "重新授权",
       "disabled": "已禁用",
       "disabledBadge": "已禁用",
-      "dimAccount": "账号",
-      "dimContainer": "容器",
-      "degradedHint": "有 LLM 请求但无遥测上报——健康信号可能不对称，未必是真实故障"
+      "degradedHint": "有 LLM 请求但无遥测上报——健康信号可能不对称，未必是真实故障",
+      "onboardAction": "接入农场",
+      "onboardActionShort": "接入",
+      "onboarding": "接入中…",
+      "reauthConfirmTitle": "确认重新授权该账号？",
+      "reauthConfirmMessage": "当前账号信息在新授权成功前保持不变，可随时取消。",
+      "reauthConfirmAction": "继续",
+      "reauthWaiting": "等待授权完成…",
+      "reauthCopyLink": "复制链接",
+      "reauthCopySuccess": "已复制授权链接",
+      "reauthCopyFailed": "复制授权链接失败",
+      "reauthOpenLink": "打开链接",
+      "reauthCancelled": "已取消重新授权",
+      "reauthCancelFailed": "取消重新授权失败",
+      "reauthCallbackLabel": "回调 URL",
+      "reauthCallbackHint": "远程管理端模式：当授权跳转到 http://localhost:... 后，复制完整 URL 并提交到这里。",
+      "reauthCallbackPlaceholder": "http://localhost:1455/auth/callback?code=...&state=...",
+      "reauthCallbackButton": "提交回调 URL",
+      "reauthCallbackRequired": "请先粘贴完整的回调 URL。",
+      "reauthCallbackSuccess": "回调 URL 已提交，请继续等待认证。",
+      "reauthCallbackError": "提交回调 URL 失败",
+      "reauthCallbackUpgradeHint": "请更新 CLI Proxy API 或检查连接。",
+      "reauthCallbackStatusSuccess": "回调 URL 已提交，等待认证中...",
+      "quarantinedBadge": "已自动隔离",
+      "quarantineTooltip": "自动隔离原因：{{reason}} · {{at}}。请重新认证以恢复该账号。",
+      "quarantineReasonUnknown": "原因未知",
+      "quarantineTimeUnknown": "时间未知",
+      "quarantineReason_terminal_auth_failure": "终端认证失败（不可重试的终态错误）",
+      "quarantineReauthNotice": "该账号已被自动隔离，请重新认证。",
+      "quarantineNoReauthUrl": "该账号已被自动隔离，但当前没有可用的重新授权入口。"
+    },
+    "overview": {
+      "running": "运行中容器",
+      "degraded": "降级容器",
+      "down": "离线容器",
+      "activeAlerts": "活跃告警",
+      "boundAccounts": "绑定账号",
+      "probeCost": "探针 cost (24h)",
+      "pendingP1": "—/待P1",
+      "generatedAt": "数据截至",
+      "generatedAtNote": "（本次 API 响应生成时间，非精确的 Poller 最近巡检时刻）"
+    },
+    "alerts": {
+      "title": "农场告警",
+      "filterFiring": "进行中",
+      "filterResolved": "已恢复",
+      "filterLabel": "告警状态",
+      "desc": "跨容器状态事件（resolved 事件历史尚未完整落地，见交付说明）。",
+      "emptyTitle": "暂无告警",
+      "emptyDesc": "当前筛选条件下没有状态事件。",
+      "resolvedLabel": "已恢复",
+      "resolvedAt": "恢复于",
+      "severity_info": "提示",
+      "severity_warning": "警告",
+      "severity_critical": "紧急"
+    },
+    "detail": {
+      "healthSection": "健康状态",
+      "keepaliveSection": "心跳成功率与延迟（近24h，1h 分桶）",
+      "successRate": "成功率",
+      "avgLatency": "平均延迟 (ms)",
+      "noKeepaliveSamples": "窗口内无心跳样本（空窗口是正常返回，不代表出错）。",
+      "nextEstimateSection": "下次探针估算",
+      "estimateRange": "配置区间",
+      "estimateBase": "基准",
+      "estimateObserved": "近24h实测均值",
+      "noEstimate": "该状态不再有下一次探针（非 running/degraded 容器）。",
+      "resourcesSection": "资源占用（近24h，1h 分桶）",
+      "noResourceSamples": "窗口内无资源样本（空窗口是正常返回，不代表出错）。",
+      "deviceIdSection": "device_id 对齐",
+      "deviceIdDriftGap": "漂移历史时间线属于 P1（container_deviceid_checks 迁移，暂未落地），这里只展示当前一次对齐判定，不是完整历史。",
+      "probeTokenSection": "探针 token 趋势",
+      "probeTokenNotBilling": "探针 token ≠ 账单：这里只反映保活探针自身消耗，不是账号真实计费用量。",
+      "probeTokenGap": "本轮聚合读取路径未接入 tokens_total 求和（见交付说明 gaps），暂无法诚实展示趋势图，待 P1/store 层补聚合列后接入。",
+      "eventsSection": "状态 / 告警事件",
+      "noOpenEvents": "当前没有仍在 firing 的事件。",
+      "eventsHistoryGap": "只展示当前仍 firing 的事件，暂非完整历史时间线（见交付说明 gaps）。"
+    },
+    "healthReason": {
+      "ok": "健康",
+      "keepalive_stale_ok": "已陈旧但最近保活成功",
+      "keepalive_recent_failures": "最近保活失败",
+      "keepalive_stale": "心跳陈旧",
+      "no_keepalive_data": "暂无心跳数据",
+      "container_exited_or_missing": "容器已退出或缺失",
+      "not_started": "未启动",
+      "container_transient_state": "启动中",
+      "retired": "已退役",
+      "docker_missing_orphaned": "Docker 容器缺失（幽灵态）"
     },
     "bind_modal": {
       "title": "绑定账号",
@@ -2001,14 +2108,20 @@
       "bind_success": "容器 {{id}} 已绑定并启动",
       "bind_pending": "容器 {{id}} 已绑定，但 CPA 侧 device_id 同步暂未上线",
       "unbind_success": "容器 {{id}} 已解绑",
-      "retire_success": "容器 {{id}} 已退役"
+      "retire_success": "容器 {{id}} 已退役",
+      "onboardSuccess": "账号 {{id}} 已接入农场",
+      "reauthSuccess": "账号 {{id}} 已重新授权"
     },
     "error": {
       "load_failed": "加载失败",
       "bind_failed": "绑定失败",
       "unbind_failed": "解绑失败",
       "create_failed": "创建容器失败",
-      "retire_failed": "退役失败"
+      "retire_failed": "退役失败",
+      "onboardFailed": "接入农场失败",
+      "onboardNoProxy": "该环境暂无可用住宅代理，请先配置代理",
+      "onboardCapacityFull": "容器池已满",
+      "reauthFailed": "重新授权失败"
     }
   }
 }

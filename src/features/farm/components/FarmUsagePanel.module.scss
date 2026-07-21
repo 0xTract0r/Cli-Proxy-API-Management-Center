@@ -32,12 +32,34 @@
   font-style: italic;
 }
 
-.loadingState {
+// 用量口径正名 callout（Q2，farm.usage.attributionTitle/Body）：视觉上与
+// FarmAccountsPanel 的 .capacityNotice 同款（浅底 + 主色边框 + 头图标 + 说明
+// 段落），保持全站"口径正名类提示"观感一致；这里独立定义样式类而非跨组件
+// 复用类名，避免与 FarmAccountsPanel.module.scss 产生隐式耦合。
+.attributionNotice {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background-color: rgba($primary-color, 0.08);
+  border: 1px solid rgba($primary-color, 0.35);
+  border-radius: $radius-sm;
+}
+
+.attributionNoticeHeader {
   display: flex;
   align-items: center;
-  gap: $spacing-sm;
-  padding: $spacing-md 0;
-  color: var(--muted-foreground);
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.attributionNoticeBody {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
 }
 
 .mono {

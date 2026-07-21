@@ -1629,6 +1629,12 @@
       "hide_key": "隱藏",
       "save_success": "農場編排器設定已儲存"
     },
+    "capacityModel": {
+      "title": "容量分配模型",
+      "ipSource": "住宅代理 IP 是容量真源：每個帳號需綁定各自獨立的住宅出口 IP，IP 稀缺才是新增容器的真正瓶頸。",
+      "deviceIdCheap": "Device ID 廉價且無上限：由編排器隨機產生、一容器一個，不是接入新帳號的限制項。",
+      "activationRule": "啟用需三件齊備：已驗證帳號 ∧ 閒置容器 ∧ 可用 proxy_url，缺一不可；沒有可用代理時系統拒絕直連（fail-closed），不會暴露真實 IP。"
+    },
     "accounts": {
       "title": "帳號健康",
       "desc": "該環境下可用於綁定的帳號清單（來自 CPA 既有驗證檔案健康檢查）。",
@@ -1639,7 +1645,8 @@
       "status_active": "正常",
       "status_disabled": "已停用",
       "status_pending": "待處理",
-      "status_error": "錯誤"
+      "status_error": "錯誤",
+      "status_quarantined": "已隔離"
     },
     "containers": {
       "title": "容器池",
@@ -1651,7 +1658,11 @@
       "column_device": "容器 / 裝置",
       "column_status": "狀態",
       "column_keepalive": "最近保活",
-      "column_token_usage": "Token 用量",
+      "column_health_reason": "健康原因",
+      "column_resource": "最近 記憶體/CPU",
+      "column_success_rate": "24h 成功率",
+      "column_device_alignment": "Device ID 對齊",
+      "column_next_estimate": "下次探針(估算)",
       "column_binding": "綁定帳號",
       "column_actions": "操作",
       "action_bind": "綁定",
@@ -1684,6 +1695,10 @@
       "keepVolume": "保留卷（預設，建議）",
       "deleteVolume": "同時刪除卷（無法復原，會清除 machine ID 與 Claude 狀態）"
     },
+    "onboardConfirm": {
+      "title": "確認接入農場？",
+      "body": "接入後會立即為帳號 {{id}} 在此環境建立真實容器、綁定真實帳號，並透過住宅代理對外發出請求，不是唯讀操作。請確認該帳號可用且住宅代理配額充足後再繼續，取消不會產生任何副作用。"
+    },
     "filter": {
       "statusLabel": "狀態",
       "all": "全部"
@@ -1704,8 +1719,11 @@
       "columnReasoning": "思考",
       "columnBillable": "計費 Token",
       "columnRequests": "請求數",
+      "columnRequestsHint": "該帳號在 CPA 的帳號級累計請求數，含入農場前的真實歷史請求，非農場探針心跳次數",
       "detailTitle": "Token 用量明細",
       "sinceNote": "自 CPA 上次重新啟動起（記憶體態）",
+      "attributionTitle": "用量口徑說明",
+      "attributionBody": "以下 Token / 請求數是該帳號在 CPA 的帳號級累計用量，包含帳號加入農場之前的真實歷史 serving，並非「綁定容器後新增的呼叫量」。它與農場探針保活心跳次數（容器詳情可查看）是兩個獨立口徑，不能直接比較。",
       "empty": "尚無用量資料"
     },
     "resources": {
@@ -1719,15 +1737,104 @@
       "empty": "尚無容器資源資料"
     },
     "accountHealth": {
+      "accountHealthColumn": "帳號健康",
+      "containerHealthColumn": "容器健康",
+      "unbound": "未綁定",
       "deviceIdSourceColumn": "device_id 來源",
       "lastRefresh": "最近重新整理",
       "reauthUrl": "重新授權連結",
       "reauthAction": "重新授權",
       "disabled": "已停用",
       "disabledBadge": "已停用",
-      "dimAccount": "帳號",
-      "dimContainer": "容器",
-      "degradedHint": "有 LLM 請求但無遙測回報——健康訊號可能不對稱，未必是真實故障"
+      "degradedHint": "有 LLM 請求但無遙測回報——健康訊號可能不對稱，未必是真實故障",
+      "onboardAction": "接入農場",
+      "onboardActionShort": "接入",
+      "onboarding": "接入中…",
+      "reauthConfirmTitle": "確認重新授權該帳號？",
+      "reauthConfirmMessage": "目前帳號資訊在新授權成功前保持不變，可隨時取消。",
+      "reauthConfirmAction": "繼續",
+      "reauthWaiting": "等待授權完成…",
+      "reauthCopyLink": "複製連結",
+      "reauthCopySuccess": "已複製授權連結",
+      "reauthCopyFailed": "複製授權連結失敗",
+      "reauthOpenLink": "開啟連結",
+      "reauthCancelled": "已取消重新授權",
+      "reauthCancelFailed": "取消重新授權失敗",
+      "reauthCallbackLabel": "回調 URL",
+      "reauthCallbackHint": "遠端管理端模式：當授權跳轉到 http://localhost:... 後，複製完整 URL 並提交到這裡。",
+      "reauthCallbackPlaceholder": "http://localhost:1455/auth/callback?code=...&state=...",
+      "reauthCallbackButton": "提交回調 URL",
+      "reauthCallbackRequired": "請先貼上完整的回調 URL。",
+      "reauthCallbackSuccess": "回調 URL 已提交，請繼續等待驗證。",
+      "reauthCallbackError": "提交回調 URL 失敗",
+      "reauthCallbackUpgradeHint": "請更新 CLI Proxy API 或檢查連線。",
+      "reauthCallbackStatusSuccess": "回調 URL 已提交，等待驗證中...",
+      "quarantinedBadge": "已自動隔離",
+      "quarantineTooltip": "自動隔離原因：{{reason}} · {{at}}。請重新認證以恢復該帳號。",
+      "quarantineReasonUnknown": "原因未知",
+      "quarantineTimeUnknown": "時間未知",
+      "quarantineReason_terminal_auth_failure": "終端認證失敗（不可重試的終態錯誤）",
+      "quarantineReauthNotice": "該帳號已被自動隔離，請重新認證。",
+      "quarantineNoReauthUrl": "該帳號已被自動隔離，但目前沒有可用的重新授權入口。"
+    },
+    "overview": {
+      "running": "運行中容器",
+      "degraded": "降級容器",
+      "down": "離線容器",
+      "activeAlerts": "活躍告警",
+      "boundAccounts": "綁定帳號",
+      "probeCost": "探針 cost (24h)",
+      "pendingP1": "—/待P1",
+      "generatedAt": "資料截至",
+      "generatedAtNote": "（本次 API 回應生成時間，非精確的 Poller 最近巡檢時刻）"
+    },
+    "alerts": {
+      "title": "農場告警",
+      "filterFiring": "進行中",
+      "filterResolved": "已恢復",
+      "filterLabel": "告警狀態",
+      "desc": "跨容器狀態事件（resolved 事件歷史尚未完整落地，見交付說明）。",
+      "emptyTitle": "暫無告警",
+      "emptyDesc": "目前篩選條件下沒有狀態事件。",
+      "resolvedLabel": "已恢復",
+      "resolvedAt": "恢復於",
+      "severity_info": "提示",
+      "severity_warning": "警告",
+      "severity_critical": "緊急"
+    },
+    "detail": {
+      "healthSection": "健康狀態",
+      "keepaliveSection": "心跳成功率與延遲（近24h，1h 分桶）",
+      "successRate": "成功率",
+      "avgLatency": "平均延遲 (ms)",
+      "noKeepaliveSamples": "視窗內無心跳樣本（空視窗是正常回應，不代表出錯）。",
+      "nextEstimateSection": "下次探針估算",
+      "estimateRange": "配置區間",
+      "estimateBase": "基準",
+      "estimateObserved": "近24h實測均值",
+      "noEstimate": "該狀態不再有下一次探針（非 running/degraded 容器）。",
+      "resourcesSection": "資源佔用（近24h，1h 分桶）",
+      "noResourceSamples": "視窗內無資源樣本（空視窗是正常回應，不代表出錯）。",
+      "deviceIdSection": "device_id 對齊",
+      "deviceIdDriftGap": "漂移歷史時間線屬於 P1（container_deviceid_checks 遷移，暫未落地），這裡只展示當前一次對齊判定，不是完整歷史。",
+      "probeTokenSection": "探針 token 趨勢",
+      "probeTokenNotBilling": "探針 token ≠ 帳單：這裡只反映保活探針自身消耗，不是帳號真實計費用量。",
+      "probeTokenGap": "本輪聚合讀取路徑未接入 tokens_total 求和（見交付說明 gaps），暫無法誠實展示趨勢圖，待 P1/store 層補聚合欄後接入。",
+      "eventsSection": "狀態 / 告警事件",
+      "noOpenEvents": "目前沒有仍在 firing 的事件。",
+      "eventsHistoryGap": "只展示目前仍 firing 的事件，暫非完整歷史時間線（見交付說明 gaps）。"
+    },
+    "healthReason": {
+      "ok": "健康",
+      "keepalive_stale_ok": "已陳舊但最近保活成功",
+      "keepalive_recent_failures": "最近保活失敗",
+      "keepalive_stale": "心跳陳舊",
+      "no_keepalive_data": "暫無心跳資料",
+      "container_exited_or_missing": "容器已退出或缺失",
+      "not_started": "未啟動",
+      "container_transient_state": "啟動中",
+      "retired": "已退役",
+      "docker_missing_orphaned": "Docker 容器缺失（幽靈態）"
     },
     "bind_modal": {
       "title": "綁定帳號",
@@ -1746,14 +1853,20 @@
       "bind_success": "容器 {{id}} 已綁定並啟動",
       "bind_pending": "容器 {{id}} 已綁定，但 CPA 端 device_id 同步暫未上線",
       "unbind_success": "容器 {{id}} 已解綁",
-      "retire_success": "容器 {{id}} 已退役"
+      "retire_success": "容器 {{id}} 已退役",
+      "onboardSuccess": "帳號 {{id}} 已接入農場",
+      "reauthSuccess": "帳號 {{id}} 已重新授權"
     },
     "error": {
       "load_failed": "載入失敗",
       "bind_failed": "綁定失敗",
       "unbind_failed": "解綁失敗",
       "create_failed": "建立容器失敗",
-      "retire_failed": "退役失敗"
+      "retire_failed": "退役失敗",
+      "onboardFailed": "接入農場失敗",
+      "onboardNoProxy": "該環境暫無可用住宅代理，請先設定代理",
+      "onboardCapacityFull": "容器池已滿",
+      "reauthFailed": "重新授權失敗"
     }
   }
 }

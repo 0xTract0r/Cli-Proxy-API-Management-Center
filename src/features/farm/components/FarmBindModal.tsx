@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Select';
+import { AsyncPanel } from '@/components/ui/AsyncPanel';
 import { useFarmAccounts } from '../hooks/useFarmAccounts';
 import type { FarmContainerView, FarmCreateBindingRequest, FarmEnv } from '@/types/farm';
 import { FARM_ENVS } from '@/types/farm';
@@ -129,11 +130,12 @@ export function FarmBindModal({
 
         <div className="form-group">
           <label>{t('farm.bind_modal.account_label')}</label>
-          {accountsLoading ? (
-            <div className="hint">{t('common.loading')}</div>
-          ) : accountOptions.length === 0 ? (
-            <div className="hint">{t('farm.bind_modal.no_accounts')}</div>
-          ) : (
+          <AsyncPanel
+            loading={accountsLoading}
+            isEmpty={accountOptions.length === 0}
+            loadingLabel={t('common.loading')}
+            empty={{ title: t('farm.bind_modal.no_accounts'), compact: true }}
+          >
             <Select
               value={accountId}
               options={accountOptions}
@@ -141,7 +143,7 @@ export function FarmBindModal({
               placeholder={t('farm.bind_modal.account_placeholder')}
               ariaLabel={t('farm.bind_modal.account_label')}
             />
-          )}
+          </AsyncPanel>
         </div>
       </div>
     </Modal>

@@ -19,15 +19,6 @@
   width: 160px;
 }
 
-.loadingState {
-  display: flex;
-  align-items: center;
-  gap: $spacing-sm;
-  padding: $spacing-xl 0;
-  color: var(--muted-foreground);
-  justify-content: center;
-}
-
 .deviceCell {
   display: flex;
   flex-direction: column;
@@ -100,6 +91,16 @@
   justify-content: flex-end;
   flex-wrap: wrap;
   gap: $spacing-sm;
+}
+
+// 行点击打开详情抽屉（P0-9）：只在传了 onSelectContainer 时才加，保持未接入
+// 场景（如未来复用本表格但不需要下钻）行为不变。
+.clickableRow {
+  cursor: pointer;
+
+  &:hover {
+    background: var(--muted-bg);
+  }
 }
 
 // 窄屏（≤768 平板/手机）响应式降级：把宽表整表改成堆叠卡片。每行渲染成一张

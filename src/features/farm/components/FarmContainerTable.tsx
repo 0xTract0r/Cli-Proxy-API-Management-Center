@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type MouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Table,
@@ -10,11 +10,18 @@ import {
 } from '@/components/ui/Table';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Select';
-import { EmptyState } from '@/components/ui/EmptyState';
-import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import { AsyncPanel } from '@/components/ui/AsyncPanel';
+import { HealthPill } from '@/components/ui/HealthPill';
 import type { FarmContainerView } from '@/types/farm';
 import { formatDateTimeUtc8 } from '@/utils/datetime';
+import { formatDurationMs } from '@/utils/usage/latency';
 import { useFarmRetiredContainers } from '../hooks/useFarmRetiredContainers';
+import {
+  deviceAlignmentToBadgeVariant,
+  farmHealthVariantToBadgeVariant,
+  healthReasonToFarmHealthVariant,
+  successRateToFarmHealthVariant,
+} from '../utils/health';
 import styles from './FarmContainerTable.module.scss';
 
 interface FarmContainerTableProps {
@@ -26,6 +33,9 @@ interface FarmContainerTableProps {
   onBind: (container: FarmContainerView) => void;
   onUnbind: (container: FarmContainerView) => void;
   onRetire: (container: FarmContainerView) => void;
+  // 行点击打开容器详情抽屉（P0-9 <FarmContainerDetail>）；可选——不传时行为
+  // 与改造前一致（行不可点，只能靠 bind/unbind/retire 按钮操作）。
+  onSelectContainer?: (container: FarmContainerView) => void;
 }
 
 // design.md 容器生命周期：created(已入池未起) / starting(已起等 Poller 判回) /
@@ -73,10 +83,17 @@ function groupOfStatus(status: string): FarmContainerGroup {
   }
 }
 
-function formatTokenUsage(value: number | undefined): string {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return '—';
-  return value.toLocaleString();
+function formatPct(pct: number | undefined): string {
+  if (typeof pct !== 'number' || !Number.isFinite(pct)) return '—';
+  return `${pct.toFixed(1)}%`;
 }
+
+// device_id 对齐徽标（容器→账号方向，dto.go deviceIDAlignment 只产出这三值，
+// 不会是 synthetic——那是账号→容器方向 FarmAccountEntry.device_id_source 专用
+// 值，见 types/farm.ts FarmContainerView.device_id_alignment 注释）。着色映射
+// 收敛进 utils/health.ts deviceAlignmentToBadgeVariant，供 FarmContainerDetail
+// 共用；文案复用 FarmAccountsPanel 同款 i18n key
+// （auth_files.account_settings_device_id_source_*）保证全站措辞一致。
 
 export function FarmContainerTable({
   containers,
@@ -87,6 +104,7 @@ export function FarmContainerTable({
   onBind,
   onUnbind,
   onRetire,
+  onSelectContainer,
 }: FarmContainerTableProps) {
   const { t, i18n } = useTranslation();
   const [groupFilter, setGroupFilter] = useState<FarmContainerFilter>('active');
@@ -130,30 +148,32 @@ export function FarmContainerTable({
         />
       </div>
 
-      {isLoading ? (
-        <div className={styles.loadingState} data-testid="farm-containers-loading">
-          <LoadingSpinner />
-          <span>{t('common.loading')}</span>
-        </div>
-      ) : combinedError ? (
-        <div className="error-box" data-testid="farm-containers-error">
-          {combinedError}
-        </div>
-      ) : rows.length === 0 ? (
-        <div data-testid="farm-containers-empty">
-          <EmptyState
-            title={t('farm.containers.empty_title')}
-            description={t('farm.containers.empty_desc')}
-          />
-        </div>
-      ) : (
+      <AsyncPanel
+        loading={isLoading}
+        error={combinedError}
+        isEmpty={rows.length === 0}
+        loadingLabel={t('common.loading')}
+        loadingSpinnerSize={20}
+        loadingCentered
+        loadingTestId="farm-containers-loading"
+        errorTestId="farm-containers-error"
+        empty={{
+          title: t('farm.containers.empty_title'),
+          description: t('farm.containers.empty_desc'),
+          testId: 'farm-containers-empty',
+        }}
+      >
         <Table data-testid="farm-container-table">
           <TableHeader>
             <TableRow>
               <TableHead>{t('farm.containers.column_device')}</TableHead>
               <TableHead>{t('farm.containers.column_status')}</TableHead>
+              <TableHead>{t('farm.containers.column_health_reason')}</TableHead>
               <TableHead>{t('farm.containers.column_keepalive')}</TableHead>
-              <TableHead>{t('farm.containers.column_token_usage')}</TableHead>
+              <TableHead>{t('farm.containers.column_resource')}</TableHead>
+              <TableHead>{t('farm.containers.column_success_rate')}</TableHead>
+              <TableHead>{t('farm.containers.column_device_alignment')}</TableHead>
+              <TableHead>{t('farm.containers.column_next_estimate')}</TableHead>
               <TableHead>{t('farm.containers.column_binding')}</TableHead>
               <TableHead alignRight>{t('farm.containers.column_actions')}</TableHead>
             </TableRow>
@@ -169,8 +189,33 @@ export function FarmContainerTable({
               const isArchived = container.status === 'retired' || container.status === 'orphaned';
               const isBound = Boolean(container.binding);
 
+              // 健康原因徽标（P0-1 假降级修复的落地点：keepalive_stale_ok 与
+              // 真正的 keepalive_stale/no_keepalive_data 用不同语义色区分）。
+              const healthVariant = healthReasonToFarmHealthVariant(container.health_reason);
+              const healthReasonLabel = container.health_reason
+                ? t(`farm.healthReason.${container.health_reason}`, {
+                    defaultValue: container.health_reason,
+                  })
+                : '—';
+
+              const successRateVariant = successRateToFarmHealthVariant(container.success_rate_24h);
+
+              const deviceAlignmentVariant = deviceAlignmentToBadgeVariant(container.device_id_alignment);
+
+              const nextEstimate = container.next_keepalive_estimate;
+
+              const handleRowClick = onSelectContainer
+                ? () => onSelectContainer(container)
+                : undefined;
+              const stopRowClick = (event: MouseEvent) => event.stopPropagation();
+
               return (
-                <TableRow key={container.id} data-testid={`farm-container-row-${container.id}`}>
+                <TableRow
+                  key={container.id}
+                  data-testid={`farm-container-row-${container.id}`}
+                  onClick={handleRowClick}
+                  className={onSelectContainer ? styles.clickableRow : undefined}
+                >
                   <TableCell data-label={t('farm.containers.column_device')}>
                     <div className={styles.deviceCell}>
                       <span className={styles.containerId}>{container.id}</span>
@@ -180,6 +225,16 @@ export function FarmContainerTable({
                   <TableCell data-label={t('farm.containers.column_status')}>
                     <span className={`status-badge ${statusVariant}`}>{statusLabel}</span>
                   </TableCell>
+                  <TableCell
+                    data-label={t('farm.containers.column_health_reason')}
+                    data-testid={`farm-container-health-reason-cell-${container.id}`}
+                  >
+                    <HealthPill
+                      status={healthVariant}
+                      label={healthReasonLabel}
+                      data-testid={`farm-container-health-reason-pill-${container.id}`}
+                    />
+                  </TableCell>
                   <TableCell data-label={t('farm.containers.column_keepalive')}>
                     <span className={styles.mono}>
                       {container.last_keepalive_at
@@ -187,8 +242,52 @@ export function FarmContainerTable({
                         : t('farm.containers.never')}
                     </span>
                   </TableCell>
-                  <TableCell data-label={t('farm.containers.column_token_usage')}>
-                    <span className={styles.mono}>{formatTokenUsage(container.token_usage)}</span>
+                  <TableCell data-label={t('farm.containers.column_resource')}>
+                    {container.latest_resource ? (
+                      <span
+                        className={styles.mono}
+                        title={formatDateTimeUtc8(container.latest_resource.ts, i18n.language)}
+                      >
+                        {formatPct(container.latest_resource.mem_pct)} mem ·{' '}
+                        {formatPct(container.latest_resource.cpu_pct)} cpu
+                      </span>
+                    ) : (
+                      <span className={styles.mono}>—</span>
+                    )}
+                  </TableCell>
+                  <TableCell data-label={t('farm.containers.column_success_rate')}>
+                    {typeof container.success_rate_24h === 'number' ? (
+                      <span className={`status-badge ${farmHealthVariantToBadgeVariant(successRateVariant)}`}>
+                        {(container.success_rate_24h * 100).toFixed(1)}%
+                      </span>
+                    ) : (
+                      <span className={styles.mono}>—</span>
+                    )}
+                  </TableCell>
+                  <TableCell data-label={t('farm.containers.column_device_alignment')}>
+                    {container.device_id_alignment ? (
+                      <span className={`status-badge ${deviceAlignmentVariant}`}>
+                        {t(
+                          `auth_files.account_settings_device_id_source_${container.device_id_alignment}`,
+                          { defaultValue: container.device_id_alignment }
+                        )}
+                      </span>
+                    ) : (
+                      <span className={styles.mono}>—</span>
+                    )}
+                  </TableCell>
+                  <TableCell data-label={t('farm.containers.column_next_estimate')}>
+                    {nextEstimate ? (
+                      <span className={styles.mono} title={nextEstimate.note}>
+                        {typeof nextEstimate.avg_observed_seconds_24h === 'number'
+                          ? formatDurationMs(nextEstimate.avg_observed_seconds_24h * 1000, {
+                              maxUnits: 1,
+                            })
+                          : `~${formatDurationMs(nextEstimate.base_seconds * 1000, { maxUnits: 1 })}`}
+                      </span>
+                    ) : (
+                      <span className={styles.mono}>—</span>
+                    )}
                   </TableCell>
                   <TableCell data-label={t('farm.containers.column_binding')}>
                     {container.binding ? (
@@ -202,7 +301,11 @@ export function FarmContainerTable({
                       <span className={styles.mono}>{t('farm.containers.no_binding')}</span>
                     )}
                   </TableCell>
-                  <TableCell alignRight data-label={t('farm.containers.column_actions')}>
+                  <TableCell
+                    alignRight
+                    data-label={t('farm.containers.column_actions')}
+                    onClick={onSelectContainer ? stopRowClick : undefined}
+                  >
                     <div className={styles.actions}>
                       {isArchived ? (
                         // 已归档容器不再提供任何行操作：不能重新绑定（设备已
@@ -246,7 +349,7 @@ export function FarmContainerTable({
             })}
           </TableBody>
         </Table>
-      )}
+      </AsyncPanel>
     </div>
   );
 }

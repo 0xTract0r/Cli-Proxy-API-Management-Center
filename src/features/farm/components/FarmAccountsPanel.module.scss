@@ -11,6 +11,40 @@
   background: var(--card-bg, var(--surface-bg));
 }
 
+// 容量分配模型正名说明卡（spec REQ-5）：视觉复用站内既有 info 提示配方
+// （UsagePage .previewNotice 同一 primary 低透明度 tint），不新造颜色 token；
+// 三条经计算在浅色/纯白/深色三套主题下前景对背景对比度均 ≥4.5:1（浅色 ~4.9:1，
+// 深色 ~9.5:1），满足 WCAG AA 正文文本要求。
+.capacityNotice {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background-color: rgba($primary-color, 0.08);
+  border: 1px solid rgba($primary-color, 0.35);
+  border-radius: $radius-sm;
+}
+
+.capacityNoticeHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.capacityNoticeList {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
 .header {
   display: flex;
   align-items: center;
@@ -35,56 +69,17 @@
   color: var(--muted-foreground);
 }
 
-.loadingState {
+// 账号名 + 「已禁用」中性 tag 同排（P0-8 状态栏双列 A1）：disabled 从状态列
+// 移除后落到这里，与真实健康状态（HealthPill）不再共享同一格、不争视觉权重。
+.nameCell {
   display: flex;
-  align-items: center;
-  gap: $spacing-sm;
-  padding: $spacing-md 0;
-  color: var(--muted-foreground);
-}
-
-.statusCell {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-}
-
-// active 主状态 + 农场容器态（幽灵态 / 运行中 等）改成同排 chip group：flex
-// 横排 + gap，窄屏也 wrap 到下一行而非逐个竖排堆叠，观感更紧凑对齐。
-.badgeGroup {
-  display: flex;
-  flex-direction: row;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
 }
 
-// 双维度徽标各包一层：小号维度标签 + 原状态徽标横向并排，作为 badgeGroup 的一个
-// flex item 整体 wrap，让「账号 正常」「容器 异常」一眼分清是两个维度，而非并排
-// 无标签被读成自相矛盾。仅在同时出现两枚徽标时给账号徽标补标签；容器徽标始终补。
-.statusDim {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-// 维度小标签（「账号」/「容器」）：小号 muted，uppercase + 微字距，与 mobile 卡片
-// data-label 同一视觉语言（中性说明性小字），不与状态胶囊抢视觉重量。
-.dimLabel {
-  font-size: 0.7rem;
-  color: var(--muted-foreground);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+.disabledTag {
   white-space: nowrap;
-}
-
-.degradedHint {
-  margin: 0;
-  font-size: 12px;
-  color: $warning-color;
-  max-width: 320px;
-  line-height: 1.4;
 }
 
 .mono {
@@ -130,11 +125,130 @@
   white-space: nowrap;
 }
 
-.reauthLink {
-  color: var(--primary-color);
-  font-size: 13px;
-  text-decoration: underline;
+// 容器健康列：HealthPill 之外，未接入农场（farm_bound=false 且未禁用）的
+// 账号在同一格追加「接入农场」按钮（P0-10，design.md 决策5）。桌面默认同排
+// 对齐（Q4 缺陷修复第二版：此前只加了 row+wrap，未解决真实 6 列表 + 长邮箱
+// 账号名场景下本列实测只分到 ~135.64px，小于 pill(99.7px)+gap(6px)+按钮
+// (132.9px，含「接入农场」全文)=238.6px 所需宽度，必然触发 wrap、导致 pill
+// 与按钮跨两行且垂直中心错位。真正修法是显式给本列一个 min-width 兜底，让
+// 表格 auto layout 不再把本列压到自身内容宽度以下——min-width 只加在这个
+// flex 容器上，不设在 <col>/<td>，且表格外层 Table 组件本身自带 .scroll 横向
+// 滚动容器（见 Table.module.scss），本列变宽不会导致页面级横向溢出，最多让
+// 表格内部可横向滚动，这是站内既有兜底机制，不是新引入的溢出问题。
+// min-width 300px 的推导（含按钮改用短文案 .onboardButton，见下方 i18n
+// onboardActionShort）：zh-CN 空闲态 pill(99.7)+gap(6)+短按钮(按 4→2 字换算并
+// 加余量约 90px)≈195.7px，接入中态（含 spinner+gap）≈270.7px，均留有余量；
+// ru 等未实测语言按字符数估算留了更小但仍为正的余量，一旦估算不足，
+// flex-wrap 兜底会让按钮整体换到下一行（配合下方 .onboardButton 的
+// white-space:nowrap，只会整体换行不会逐字拆行），不会退化成挤爆的破版。
+.containerHealthCell {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 300px;
+}
+
+// 「接入农场」按钮防御性 nowrap：按钮文案未显式设置 white-space，CJK 文本默认
+// 允许逐字断行——一旦真实场景下本列仍被压到比按钮短文案更窄（如未实测语言
+// 估算不足），没有这条规则会让按钮文案本身逐字拆成竖排，比整体换行更像破版。
+// 加上 nowrap 后，最坏情况只会是按钮整体 wrap 到 pill 下一行（干净的纵向排布），
+// 不会出现逐字拆行。
+.onboardButton {
   white-space: nowrap;
+}
+
+// 重新授权格：按钮之外，轮询中展示等待提示 + 复制/打开/取消操作行，
+// 失败态在按钮下方追加持久错误文案（对齐 authFiles 侧 AuthFileCard 的
+// 呈现方式，见 useFarmReauth 顶部注释）。
+.reauthCell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+// 直接用 --muted-foreground（=--text-secondary）而不是 .refreshTimestamp 那种
+// 固定 #6b7280 覆盖：按三套主题背景实测，--muted-foreground 本身在浅色/纯白/
+// 深色下对比度分别约 4.8/5.6/9.8:1，均满足 WCAG AA 4.5:1；固定 #6b7280 反而在
+// 深色主题（背景 #1d1b18）下只有约 3.6:1，不满足。
+.reauthWaitingLabel {
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+
+.reauthActionRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+// 错误文案对比度需求同 .refreshTimestamp：直接用 --error-color 在浅色卡片背景
+// 下仅约 3.7:1，不够 WCAG AA 正文 4.5:1；改用站内已有的
+// --failure-badge-text（AuthFilesPage/UsagePage/LogsPage 等已在用，浅色/深色
+// 主题各自取值 #8a3a30 / #f1b0a6，均已满足 4.5:1）。
+.reauthErrorText {
+  font-size: 12px;
+  color: var(--failure-badge-text, #8a3a30);
+}
+
+// 自动隔离态引导重新认证提示（T3 telemetry-farm-ux-hardening）：复用
+// .reauthErrorText 同一套已验证 AA 对比度结论（--failure-badge-text 在浅色/
+// 纯白/深色三套主题下均 ≥4.5:1），与账号健康列 err 档 HealthPill 视觉呼应，
+// 突出"需要立即处理"而非普通提示。
+.quarantineNotice {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--failure-badge-text, #8a3a30);
+}
+
+// 隔离但当前账号未提供 reauth_url（非 anthropic provider）时的兜底文案：不是
+// 错误本身，只是暂无一键入口，用中性 muted 文案而非错误色，与
+// .reauthWaitingLabel 同一对比度结论（--muted-foreground 三套主题均
+// ≥4.5:1）。
+.quarantineNoticeMuted {
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+
+// 手动回调 URL 入口（对齐 authFiles 侧 AuthFilesPage.module.scss 同名区块）：
+// 远程管理端下自动轮询回调不通时的兜底手动提交入口，与上方 .reauthActionRow
+// 同格纵向堆叠。
+.reauthCallbackSection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 65%, transparent);
+  background: color-mix(in srgb, var(--bg-secondary) 60%, transparent);
+  width: 100%;
+
+  :global(.form-group) {
+    margin-bottom: 0;
+  }
+
+  :global(.hint) {
+    font-size: 12px;
+  }
+}
+
+.reauthCallbackActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+// 沿用 .reauthErrorText 同一套对比度校验结论：--success-color 在浅色卡片背景
+// 下不满足 WCAG AA 4.5:1（同 authFiles 侧 .reauthCallbackSuccess 用
+// --success-color 的差异），改用站内已有的高对比 --success-badge-text
+// （浅色/纯白/深色主题各自取值均 ≥4.5:1，FarmConfigPanel 同款用法）。
+.reauthCallbackSuccess {
+  font-size: 12px;
+  color: var(--success-badge-text, #065f46);
 }
 
 // 表头一律单行，避免窄视口下逐字竖排（如「已/禁/用」）。
@@ -159,13 +273,16 @@
     width: 100%;
   }
 
-  .degradedHint {
-    max-width: 100%;
-  }
-
-  .reauthLink {
-    white-space: normal;
-    word-break: break-word;
+  // 窄屏改回纵向堆叠：避免 HealthPill 与「接入农场」按钮在有限列宽下同排
+  // 挤压换行错位（桌面默认同排见上方 .containerHealthCell 注释）。此处必须把
+  // 桌面版 min-width: 300px 重置为 0——窄屏下表格已整表降级成堆叠卡片
+  // （tbody td 变 display:block，宽度由卡片本身决定，见下方 .panel 卡片化
+  // 规则），卡片内容宽度在 375px 视口下常小于 300px；若不重置，min-width 会把
+  // 这一格撑到比卡片本身还宽，反而在窄屏引入新的横向溢出。
+  .containerHealthCell {
+    flex-direction: column;
+    align-items: flex-start;
+    min-width: 0;
   }
 
   .panel {

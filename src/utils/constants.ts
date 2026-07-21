@@ -49,6 +49,11 @@ export const STORAGE_KEY_FARM = 'cli-proxy-farm';
 export const FARM_REQUEST_TIMEOUT_MS = 30 * 1000;
 // 容器池轮询间隔：够快看到状态变化，又不至于把编排器打爆
 export const FARM_CONTAINERS_POLL_INTERVAL_MS = 15 * 1000;
+// 概览带 / 告警面板轮询间隔（P0-9）：KPI 聚合和跨容器告警不需要像容器池那样
+// 15s 一刷（本身就是对既有容器数据的二次聚合，Poller 巡检本身是 60s 一轮，
+// 刷太快没有新信息，只多打编排器请求）。
+export const FARM_OVERVIEW_POLL_INTERVAL_MS = 30 * 1000;
+export const FARM_ALERTS_POLL_INTERVAL_MS = 30 * 1000;
 
 // 语言配置
 export const LANGUAGE_ORDER = defineLanguageOrder(['zh-CN', 'zh-TW', 'en', 'ru'] as const);

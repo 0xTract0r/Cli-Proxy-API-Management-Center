@@ -9,25 +9,17 @@ import {
   TableRow,
 } from '@/components/ui/Table';
 import { Select } from '@/components/ui/Select';
-import { EmptyState } from '@/components/ui/EmptyState';
-import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { AsyncPanel } from '@/components/ui/AsyncPanel';
+import { HealthPill, type HealthPillStatus } from '@/components/ui/HealthPill';
+import { IconInfo } from '@/components/ui/icons';
 import { useFarmAccounts } from '../hooks/useFarmAccounts';
+import { useFarmOnboard } from '../hooks/useFarmOnboard';
+import { useFarmReauth } from '../hooks/useFarmReauth';
 import { FARM_ENVS, type FarmDeviceIDSource, type FarmEnv } from '@/types/farm';
 import { formatDateTimeUtc8 } from '@/utils/datetime';
 import styles from './FarmAccountsPanel.module.scss';
-
-// 农场绑定容器状态徽标着色，口径与 FarmContainerTable 的 STATUS_BADGE_VARIANT
-// 一致（复制一份小映射，不跨组件文件耦合导出）：created/starting=muted，
-// running=success，degraded/orphaned=warning，down=error，retired=muted。
-const FARM_CONTAINER_STATUS_VARIANT: Record<string, 'success' | 'warning' | 'error' | 'muted'> = {
-  created: 'muted',
-  starting: 'muted',
-  running: 'success',
-  degraded: 'warning',
-  down: 'error',
-  retired: 'muted',
-  orphaned: 'warning',
-};
 
 // device_id 展示口径四态着色（spec「device_id 展示口径全站对齐」）：
 // container_synced=真实容器同步(success)，drift=正在漂移待对账(warning)，
@@ -40,22 +32,40 @@ const DEVICE_ID_SOURCE_VARIANT: Record<FarmDeviceIDSource, 'success' | 'warning'
   unknown: 'muted',
 };
 
-// 账号真实状态徽标着色，参照 FarmContainerTable.tsx 的 STATUS_BADGE_VARIANT 范式，
-// 但按语义分组而非逐值枚举（account.status 是 CPA 透传的自由字符串，未必收敛到
-// coreauth.Status 的 active/pending/error/disabled 四值）：error/fatal→error（真实
-// 故障）；warn/degraded→warning（需要关注）；active/running/healthy/ok/valid→success
-// （健康态）；其它未知值一律 muted 中性回退。修复前的 bug：徽标只按 account.disabled
-// 布尔选色（非 disabled 恒绿、disabled 恒红），完全忽略真实 status 严重度。
-const ACCOUNT_STATUS_VARIANT: Record<string, 'success' | 'warning' | 'error' | 'muted'> = {
-  error: 'error',
-  fatal: 'error',
-  warn: 'warning',
-  degraded: 'warning',
-  active: 'success',
-  running: 'success',
-  healthy: 'success',
-  ok: 'success',
-  valid: 'success',
+// 账号健康四态映射（design.md 决策6「状态栏双列 A1」）：account.status 是 CPA
+// 透传的自由字符串，未必收敛到 coreauth.Status 的 active/pending/error/disabled
+// 四值，按语义分组而非逐值枚举。error/fatal→err（真实故障）；warn/degraded→warn
+// （需要关注）；active/running/healthy/ok/valid→ok（健康态）；其它未知值（含
+// status 字面量 "disabled"，disabled 已降级为账号名旁中性 tag，不在本列重复
+// 表达）一律 idle 中性回退，不再借用 muted 徽标语义。quarantined→err 只是防御性
+// 兜底（万一 auto_quarantined 意外为 false 但 status 字面量已是
+// "quarantined"）；渲染时真正权威判定走下方 isAutoQuarantined 布尔分支，不依赖
+// 这张表能否命中该 key（T3 telemetry-farm-ux-hardening）。
+const ACCOUNT_HEALTH_STATUS: Record<string, HealthPillStatus> = {
+  error: 'err',
+  fatal: 'err',
+  quarantined: 'err',
+  warn: 'warn',
+  degraded: 'warn',
+  active: 'ok',
+  running: 'ok',
+  healthy: 'ok',
+  ok: 'ok',
+  valid: 'ok',
+};
+
+// 容器健康四态映射：running=ok，degraded/orphaned=warn（幽灵态待人工核实，非
+// 已确认故障），down=err，created/starting/retired=idle（未激活/已退役，非
+// 故障态）。口径与 FarmContainerTable 的 STATUS_BADGE_VARIANT 分组一致，只是
+// 四值枚举（ok/warn/err/idle）替代旧 success/warning/error/muted 徽标枚举。
+const CONTAINER_HEALTH_STATUS: Record<string, HealthPillStatus> = {
+  running: 'ok',
+  degraded: 'warn',
+  orphaned: 'warn',
+  down: 'err',
+  created: 'idle',
+  starting: 'idle',
+  retired: 'idle',
 };
 
 /**
@@ -67,12 +77,48 @@ const ACCOUNT_STATUS_VARIANT: Record<string, 'success' | 'warning' | 'error' | '
 export function FarmAccountsPanel() {
   const { t, i18n } = useTranslation();
   const [env, setEnv] = useState<FarmEnv>('test');
-  const { accounts, loading, error } = useFarmAccounts(env);
+  const { accounts, loading, error, reload } = useFarmAccounts(env);
+  const { onboardingAccountId, onboard } = useFarmOnboard({ reload });
+  const {
+    reauthStates,
+    startReauth,
+    copyReauthLink,
+    openReauthLink,
+    cancelReauth,
+    updateReauthCallbackUrl,
+    submitReauthCallback,
+  } = useFarmReauth({ reload });
 
   const envOptions = FARM_ENVS.map((value) => ({ value, label: t(`farm.env.${value}`) }));
 
+  // 双列列头文案同时复用为 <HealthPill dimension> 值（拼进 aria-label，如
+  // 「账号健康: 运行中」），保证可见列头与朗读维度语义一致，只算一次而非
+  // 每行重复 t() 调用。
+  const accountHealthColumnLabel = t('farm.accountHealth.accountHealthColumn', {
+    defaultValue: '账号健康',
+  });
+  const containerHealthColumnLabel = t('farm.accountHealth.containerHealthColumn', {
+    defaultValue: '容器健康',
+  });
+
   return (
     <div className={styles.panel} data-testid="farm-accounts-panel">
+      {/* 容量分配模型正名（spec REQ-5「文档与农场页 SHALL 明确」的农场页半边）：
+          住宅 IP 是容量真源、device_id 廉价无上限、激活需三件齐备。放在账号面板
+          顶部、紧邻「接入农场」操作语境，帮 operator 一眼理解容器池为何受限、
+          何时能接新账号。 */}
+      <div className={styles.capacityNotice} data-testid="farm-capacity-model-callout">
+        <div className={styles.capacityNoticeHeader}>
+          <IconInfo size={14} />
+          <span>{t('farm.capacityModel.title')}</span>
+        </div>
+        <ul className={styles.capacityNoticeList}>
+          <li>{t('farm.capacityModel.ipSource')}</li>
+          <li>{t('farm.capacityModel.deviceIdCheap')}</li>
+          <li>{t('farm.capacityModel.activationRule')}</li>
+        </ul>
+      </div>
+
       <div className={styles.header}>
         <div className={styles.title}>{t('farm.accounts.title')}</div>
         <Select
@@ -87,24 +133,22 @@ export function FarmAccountsPanel() {
       </div>
       <p className={styles.desc}>{t('farm.accounts.desc')}</p>
 
-      {loading ? (
-        <div className={styles.loadingState}>
-          <LoadingSpinner size={16} />
-          <span>{t('common.loading')}</span>
-        </div>
-      ) : error ? (
-        <div className="error-box">{error}</div>
-      ) : accounts.length === 0 ? (
-        <EmptyState
-          title={t('farm.accounts.empty_title')}
-          description={t('farm.accounts.empty_desc')}
-        />
-      ) : (
+      <AsyncPanel
+        loading={loading}
+        error={error}
+        isEmpty={accounts.length === 0}
+        loadingLabel={t('common.loading')}
+        empty={{
+          title: t('farm.accounts.empty_title'),
+          description: t('farm.accounts.empty_desc'),
+        }}
+      >
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>{t('farm.accounts.column_name')}</TableHead>
-              <TableHead>{t('farm.accounts.column_status')}</TableHead>
+              <TableHead>{accountHealthColumnLabel}</TableHead>
+              <TableHead>{containerHealthColumnLabel}</TableHead>
               <TableHead>
                 {t('farm.accountHealth.deviceIdSourceColumn', {
                   defaultValue: 'Device ID source',
@@ -124,69 +168,142 @@ export function FarmAccountsPanel() {
               const showDegradedHint =
                 account.farm_bound && account.farm_container_status === 'degraded' && hasLlmTraffic;
 
-              // 真实状态严重度徽标：按 account.status 查表，不再按 account.disabled
-              // 布尔选色。disabled 是良性暂停态（operator 主动关闭，非故障），单独
-              // 用一个中性 muted 徽标承载，与状态徽标并列展示，不覆盖/掩盖真实 status。
+              // 账号健康四态：按 account.status 查表，不再按 account.disabled 布尔
+              // 选色。disabled 是良性暂停态（operator 主动关闭，非故障），已降级
+              // 为账号名旁的中性 tag，不再挤占本列视觉权重（design.md 决策6）。
               const normalizedStatus = (account.status || 'active').trim().toLowerCase();
-              const statusVariant = ACCOUNT_STATUS_VARIANT[normalizedStatus] ?? 'muted';
-              const statusLabel = t(`farm.accounts.status_${normalizedStatus}`, {
-                defaultValue: account.status || t('farm.accounts.status_active'),
-              });
 
-              // 账号级 status（account.status）与容器级 farm_container_status 是两个
-              // 不同维度：账号有 LLM 流量可判「正常」，同时其绑定容器遥测降级为
-              // 「异常」，两枚徽标并排却无标签会被读成自相矛盾。仅当两枚徽标同时出现
-              // 时给账号徽标补维度标签「账号」；容器徽标只在 farm_bound 时渲染，始终补
-              //「容器」标签（本就讲容器，永不冗余）。containerStatus 先收窄到 string，
-              // 供下方索引 FARM_CONTAINER_STATUS_VARIANT 与 i18n key 使用。
+              // 自动隔离态（T3 telemetry-farm-ux-hardening）：优先按
+              // account.auto_quarantined 布尔判定，不单独按 status 字符串分支——
+              // core 侧复核指出两者可能短暂不一致（清隔离锁与 status 落库非原子），
+              // 布尔更稳。true 时无条件盖成 err 档 + 专用文案，即便 normalizedStatus
+              // 恰好仍是 "active" 之类的健康值。
+              const isAutoQuarantined = Boolean(account.auto_quarantined);
+              const accountHealthStatus: HealthPillStatus = isAutoQuarantined
+                ? 'err'
+                : ACCOUNT_HEALTH_STATUS[normalizedStatus] ?? 'idle';
+              const statusLabel = isAutoQuarantined
+                ? t('farm.accountHealth.quarantinedBadge', { defaultValue: 'Auto-quarantined' })
+                : t(`farm.accounts.status_${normalizedStatus}`, {
+                    defaultValue: account.status || t('farm.accounts.status_active'),
+                  });
+              // 隔离详情进 HealthPill 的 title tooltip（同 containerHealthReason 的
+              // 呈现方式）：原因 + 发生时间，缺失时用中性占位文案兜底，不留空。
+              const quarantineReasonLabel = account.quarantine_reason
+                ? t(`farm.accountHealth.quarantineReason_${account.quarantine_reason}`, {
+                    defaultValue: account.quarantine_reason,
+                  })
+                : t('farm.accountHealth.quarantineReasonUnknown', { defaultValue: 'unknown reason' });
+              const quarantineAtLabel = account.quarantined_at
+                ? formatDateTimeUtc8(account.quarantined_at, i18n.language)
+                : t('farm.accountHealth.quarantineTimeUnknown', { defaultValue: 'unknown time' });
+              const accountHealthReason = isAutoQuarantined
+                ? t('farm.accountHealth.quarantineTooltip', {
+                    reason: quarantineReasonLabel,
+                    at: quarantineAtLabel,
+                    defaultValue:
+                      'Auto-quarantined: {{reason}} · {{at}}. Please re-authenticate to restore this account.',
+                  })
+                : undefined;
+              const showDisabledTag = account.disabled && normalizedStatus !== 'disabled';
+
+              // 容器健康四态：只在 farm_bound 时有意义；未绑定不是「故障」而是
+              // 「无容器可报告」，仍用 idle HealthPill 呈现（而非留空/破版），
+              // 保持两列视觉对称。containerStatus 收窄到 string 供下方索引
+              // CONTAINER_HEALTH_STATUS 与 i18n key 使用。
               const containerStatus = account.farm_bound ? account.farm_container_status : undefined;
-              const hasContainerBadge = Boolean(containerStatus);
+              const containerHealthStatus: HealthPillStatus = containerStatus
+                ? CONTAINER_HEALTH_STATUS[containerStatus] ?? 'idle'
+                : 'idle';
+              const containerHealthLabel = containerStatus
+                ? t(`farm.status.${containerStatus}`, { defaultValue: containerStatus })
+                : t('farm.accountHealth.unbound', { defaultValue: 'Unbound' });
+              // "有 LLM 请求但无遥测"不对称归因提示不再单独占一行可见文字，收进
+              // HealthPill 的 title tooltip（HealthPill.reason），避免误导
+              // operator 直接下线仍有真实流量的账号，同时不挤占列宽。
+              const containerHealthReason = showDegradedHint
+                ? t('farm.accountHealth.degradedHint')
+                : undefined;
+              // testid 固定为 farm-container-health-<name>，不随 showDegradedHint
+              // 分支切换，保证真机断言可稳定定位该 pill；degraded 提示改由
+              // TableCell 的 data-degraded-hint 属性单独标记，不覆盖主 testid。
+              const containerHealthTestId = `farm-container-health-${account.name}`;
+
+              // 「已认证但未接入农场」按钮门控（design.md 决策5 / P0-10）：
+              // farm_bound=false 即未接入；disabled 账号是 operator 主动
+              // 关闭，不提供一键接入入口（避免把停用账号又拉回农场）。不额外
+              // 按 accountHealthStatus 收窄——账号能出现在这份 CPA 透传列表
+              // 里即代表已认证，故障态账号 operator 仍可能想先接入再排查。
+              const canOnboard = !account.farm_bound && !account.disabled;
+              const isOnboarding = onboardingAccountId === account.name;
+
+              // 重新授权（Q5 缺陷修复）：account.reauth_url 非空即代表 CPA 认为
+              // 该账号可重新授权（经验上仅 anthropic provider 会返回该字段），
+              // 非 claude provider 该字段为空，继续走「—」占位分支，不误覆盖。
+              const reauthState = reauthStates[account.name];
+              const isReauthStarting = reauthState?.status === 'starting';
+              const isReauthPolling = reauthState?.status === 'polling';
+              const reauthErrorMessage = reauthState?.status === 'error' ? reauthState.error : undefined;
 
               return (
                 <TableRow key={account.name} data-testid={`farm-account-row-${account.name}`}>
-                  <TableCell data-label={t('farm.accounts.column_name')}>{account.name}</TableCell>
-                  <TableCell data-label={t('farm.accounts.column_status')}>
-                    <div className={styles.statusCell}>
-                      <div className={styles.badgeGroup}>
-                        {hasContainerBadge ? (
-                          <span className={styles.statusDim}>
-                            <span className={styles.dimLabel}>
-                              {t('farm.accountHealth.dimAccount', { defaultValue: '账号' })}
-                            </span>
-                            <span className={`status-badge ${statusVariant}`}>{statusLabel}</span>
-                          </span>
-                        ) : (
-                          <span className={`status-badge ${statusVariant}`}>{statusLabel}</span>
-                        )}
-                        {account.disabled && normalizedStatus !== 'disabled' ? (
-                          <span className="status-badge muted">
-                            {t('farm.accountHealth.disabledBadge', { defaultValue: 'Disabled' })}
-                          </span>
-                        ) : null}
-                        {containerStatus ? (
-                          <span className={styles.statusDim}>
-                            <span className={styles.dimLabel}>
-                              {t('farm.accountHealth.dimContainer', { defaultValue: '容器' })}
-                            </span>
-                            <span
-                              className={`status-badge ${
-                                FARM_CONTAINER_STATUS_VARIANT[containerStatus] ?? 'muted'
-                              }`}
-                            >
-                              {t(`farm.status.${containerStatus}`, {
-                                defaultValue: containerStatus,
-                              })}
-                            </span>
-                          </span>
-                        ) : null}
-                      </div>
-                      {showDegradedHint ? (
-                        <p
-                          className={styles.degradedHint}
-                          data-testid={`farm-account-degraded-hint-${account.name}`}
+                  <TableCell data-label={t('farm.accounts.column_name')}>
+                    <div className={styles.nameCell}>
+                      <span>{account.name}</span>
+                      {showDisabledTag ? (
+                        <span
+                          className={`status-badge muted ${styles.disabledTag}`}
+                          data-testid={`farm-account-disabled-tag-${account.name}`}
                         >
-                          {t('farm.accountHealth.degradedHint')}
-                        </p>
+                          {t('farm.accountHealth.disabledBadge', { defaultValue: 'Disabled' })}
+                        </span>
+                      ) : null}
+                    </div>
+                  </TableCell>
+                  <TableCell
+                    data-testid={`farm-account-health-cell-${account.name}`}
+                    data-label={accountHealthColumnLabel}
+                  >
+                    <HealthPill
+                      status={accountHealthStatus}
+                      label={statusLabel}
+                      dimension={accountHealthColumnLabel}
+                      reason={accountHealthReason}
+                      data-testid={`farm-account-health-pill-${account.name}`}
+                    />
+                  </TableCell>
+                  <TableCell
+                    data-testid={`farm-container-health-cell-${account.name}`}
+                    data-label={containerHealthColumnLabel}
+                    data-degraded-hint={showDegradedHint ? 'true' : undefined}
+                  >
+                    <div className={styles.containerHealthCell}>
+                      <HealthPill
+                        status={containerHealthStatus}
+                        label={containerHealthLabel}
+                        dimension={containerHealthColumnLabel}
+                        reason={containerHealthReason}
+                        data-testid={containerHealthTestId}
+                      />
+                      {canOnboard ? (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          loading={isOnboarding}
+                          onClick={() => onboard(account.name, env)}
+                          className={styles.onboardButton}
+                          // 可见文案改用紧凑版（见下方 onboardActionShort），但无障碍名称与
+                          // 悬浮提示仍用完整语义文案，避免视觉紧凑化丢失屏幕阅读器/鼠标
+                          // 悬浮场景下的上下文（真实 6 列表 + 长邮箱账号名下本列可用宽度
+                          // 有限，见 .containerHealthCell 注释的几何推导）。
+                          aria-label={t('farm.accountHealth.onboardAction', { defaultValue: 'Onboard to farm' })}
+                          title={t('farm.accountHealth.onboardAction', { defaultValue: 'Onboard to farm' })}
+                          data-testid={`farm-account-onboard-${account.name}`}
+                        >
+                          {isOnboarding
+                            ? t('farm.accountHealth.onboarding', { defaultValue: 'Onboarding…' })
+                            : t('farm.accountHealth.onboardActionShort', { defaultValue: 'Onboard' })}
+                        </Button>
                       ) : null}
                     </div>
                   </TableCell>
@@ -228,15 +345,137 @@ export function FarmAccountsPanel() {
                   </TableCell>
                   <TableCell data-label={t('farm.accountHealth.reauthUrl')}>
                     {account.reauth_url ? (
-                      <a
-                        className={styles.reauthLink}
-                        href={account.reauth_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        data-testid={`farm-account-reauth-${account.name}`}
+                      <div className={styles.reauthCell}>
+                        {/* 隔离态引导重新认证（T3）：紧邻按钮上方提示"已被自动隔离，
+                            请重新认证"，不管当前是否已在轮询中都保持可见，帮助 operator
+                            一眼理解为何这个账号出现在需要处理的列表里。 */}
+                        {isAutoQuarantined ? (
+                          <span
+                            className={styles.quarantineNotice}
+                            data-testid={`farm-account-quarantine-notice-${account.name}`}
+                          >
+                            {t('farm.accountHealth.quarantineReauthNotice', {
+                              defaultValue: 'This account was auto-quarantined. Please re-authenticate.',
+                            })}
+                          </span>
+                        ) : null}
+                        {isReauthPolling ? (
+                          <>
+                            <span className={styles.reauthWaitingLabel}>
+                              {t('farm.accountHealth.reauthWaiting', {
+                                defaultValue: 'Waiting for authorization…',
+                              })}
+                            </span>
+                            <div className={styles.reauthActionRow}>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => copyReauthLink(account.name)}
+                                data-testid={`farm-account-reauth-copy-${account.name}`}
+                              >
+                                {t('farm.accountHealth.reauthCopyLink', { defaultValue: 'Copy link' })}
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => openReauthLink(account.name)}
+                                data-testid={`farm-account-reauth-open-${account.name}`}
+                              >
+                                {t('farm.accountHealth.reauthOpenLink', { defaultValue: 'Open link' })}
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => cancelReauth(account.name)}
+                                data-testid={`farm-account-reauth-cancel-${account.name}`}
+                              >
+                                {t('common.cancel')}
+                              </Button>
+                            </div>
+                            {/* 手动回调 URL 入口（对齐 authFiles 侧 AuthFileCard）：远程
+                                管理端（cpamp 部署在 201）下 OAuth 回调回不到发起授权请求的
+                                管理端 origin，自动轮询永远等不到成功；用户从浏览器地址栏
+                                复制完整回调 URL 粘贴到这里，与自动轮询两条路径并存。 */}
+                            <div className={styles.reauthCallbackSection}>
+                              <Input
+                                label={t('farm.accountHealth.reauthCallbackLabel', {
+                                  defaultValue: 'Callback URL',
+                                })}
+                                hint={t('farm.accountHealth.reauthCallbackHint', {
+                                  defaultValue:
+                                    'Remote management: after the provider redirects to http://localhost:..., copy the full URL and submit it here.',
+                                })}
+                                value={reauthState?.callbackUrl || ''}
+                                onChange={(e) => updateReauthCallbackUrl(account.name, e.target.value)}
+                                placeholder={t('farm.accountHealth.reauthCallbackPlaceholder', {
+                                  defaultValue:
+                                    'http://localhost:1455/auth/callback?code=...&state=...',
+                                })}
+                                disabled={Boolean(reauthState?.callbackSubmitting)}
+                                error={
+                                  reauthState?.callbackStatus === 'error'
+                                    ? reauthState.callbackError
+                                    : undefined
+                                }
+                                data-testid={`farm-account-reauth-callback-input-${account.name}`}
+                              />
+                              <div className={styles.reauthCallbackActions}>
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  onClick={() => submitReauthCallback(account.name)}
+                                  loading={Boolean(reauthState?.callbackSubmitting)}
+                                  data-testid={`farm-account-reauth-callback-submit-${account.name}`}
+                                >
+                                  {t('farm.accountHealth.reauthCallbackButton', {
+                                    defaultValue: 'Submit Callback URL',
+                                  })}
+                                </Button>
+                                {reauthState?.callbackStatus === 'success' && (
+                                  <span className={styles.reauthCallbackSuccess}>
+                                    {t('farm.accountHealth.reauthCallbackStatusSuccess', {
+                                      defaultValue: 'Callback URL submitted, waiting for authentication...',
+                                    })}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </>
+                        ) : (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            loading={isReauthStarting}
+                            onClick={() => startReauth(account.name)}
+                            data-testid={`farm-account-reauth-${account.name}`}
+                          >
+                            {t('farm.accountHealth.reauthAction', { defaultValue: 'Re-authenticate' })}
+                          </Button>
+                        )}
+                        {reauthErrorMessage ? (
+                          <span
+                            className={styles.reauthErrorText}
+                            role="alert"
+                            data-testid={`farm-account-reauth-error-${account.name}`}
+                          >
+                            {reauthErrorMessage}
+                          </span>
+                        ) : null}
+                      </div>
+                    ) : isAutoQuarantined ? (
+                      // 隔离但当前 provider 未提供 reauth_url 的兜底文案（经验上只有
+                      // anthropic/claude 账号会拿到该字段，见 useFarmReauth 顶部注释）：
+                      // 非错误态本身的再次报错，只是提示 operator 这里暂无一键入口，
+                      // 需要另寻恢复路径，故用中性 muted 文案而非错误色。
+                      <span
+                        className={styles.quarantineNoticeMuted}
+                        data-testid={`farm-account-quarantine-no-url-${account.name}`}
                       >
-                        {t('farm.accountHealth.reauthAction', { defaultValue: 'Re-authenticate' })}
-                      </a>
+                        {t('farm.accountHealth.quarantineNoReauthUrl', {
+                          defaultValue:
+                            'This account was auto-quarantined, but no re-authentication entry is available.',
+                        })}
+                      </span>
                     ) : (
                       <span className={styles.mono}>—</span>
                     )}
@@ -246,7 +485,7 @@ export function FarmAccountsPanel() {
             })}
           </TableBody>
         </Table>
-      )}
+      </AsyncPanel>
     </div>
   );
 }

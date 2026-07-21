@@ -13,11 +13,14 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { farmApi } from '@/services/api/farm';
 import { useFarmStore, useNotificationStore } from '@/stores';
 import { FarmConfigPanel } from '@/features/farm/components/FarmConfigPanel';
+import { FarmOverviewBar } from '@/features/farm/components/FarmOverviewBar';
 import { FarmAccountsPanel } from '@/features/farm/components/FarmAccountsPanel';
 import { FarmContainerTable } from '@/features/farm/components/FarmContainerTable';
+import { FarmContainerDetail } from '@/features/farm/components/FarmContainerDetail';
 import { FarmBindModal } from '@/features/farm/components/FarmBindModal';
 import { FarmResourcePanel } from '@/features/farm/components/FarmResourcePanel';
 import { FarmUsagePanel } from '@/features/farm/components/FarmUsagePanel';
+import { FarmAlertsPanel } from '@/features/farm/components/FarmAlertsPanel';
 import { useFarmContainers } from '@/features/farm/hooks/useFarmContainers';
 import { useFarmBindings } from '@/features/farm/hooks/useFarmBindings';
 import { useFarmRetire } from '@/features/farm/hooks/useFarmRetire';
@@ -40,6 +43,10 @@ export function FarmPage() {
   const [preselectedContainerId, setPreselectedContainerId] = useState<string | null>(null);
   const [newContainerSuffix, setNewContainerSuffix] = useState('');
   const [creatingContainer, setCreatingContainer] = useState(false);
+  // 容器详情抽屉（P0-9 <FarmContainerDetail>）：只存被选中的容器行本身（表格
+  // 轮询更新时这个引用可能变旧，但抽屉内部用 container.id 重新拉聚合详情/
+  // 时序，不依赖这里的字段实时性，只用它决定"抽屉该不该开、开哪个 id"）。
+  const [selectedContainer, setSelectedContainer] = useState<FarmContainerView | null>(null);
 
   const openBindModal = useCallback((container?: FarmContainerView) => {
     setPreselectedContainerId(container?.id ?? null);
@@ -73,6 +80,8 @@ export function FarmPage() {
       <div className={styles.content}>
         <FarmConfigPanel />
 
+        {isConfigured ? <FarmOverviewBar containers={containers} /> : null}
+        {isConfigured ? <FarmAlertsPanel /> : null}
         {isConfigured ? <FarmAccountsPanel /> : null}
 
         <Card
@@ -118,6 +127,7 @@ export function FarmPage() {
               onBind={openBindModal}
               onUnbind={unbind}
               onRetire={retire}
+              onSelectContainer={setSelectedContainer}
             />
           )}
         </Card>
@@ -133,6 +143,11 @@ export function FarmPage() {
         preselectedContainerId={preselectedContainerId}
         onClose={closeBindModal}
         onSubmit={bind}
+      />
+
+      <FarmContainerDetail
+        container={selectedContainer}
+        onClose={() => setSelectedContainer(null)}
       />
     </div>
   );
