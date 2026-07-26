@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
+import { useInterval } from '@/hooks/useInterval';
 import {
   Table,
   TableBody,
@@ -10,16 +12,37 @@ import {
 } from '@/components/ui/Table';
 import { Select } from '@/components/ui/Select';
 import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
 import { AsyncPanel } from '@/components/ui/AsyncPanel';
 import { HealthPill, type HealthPillStatus } from '@/components/ui/HealthPill';
 import { IconInfo } from '@/components/ui/icons';
 import { useFarmAccounts } from '../hooks/useFarmAccounts';
+import { useFarmAccountState } from '../hooks/useFarmAccountState';
+import { useFarmContainers } from '../hooks/useFarmContainers';
 import { useFarmOnboard } from '../hooks/useFarmOnboard';
-import { useFarmReauth } from '../hooks/useFarmReauth';
+import {
+  accountAuthStatusToHealthPillStatus,
+  farmHealthVariantToBadgeVariant,
+  findAccountStateForAccount,
+  healthReasonToFarmHealthVariant,
+  isAccountStateStale,
+} from '../utils/health';
 import { FARM_ENVS, type FarmDeviceIDSource, type FarmEnv } from '@/types/farm';
 import { formatDateTimeUtc8 } from '@/utils/datetime';
 import styles from './FarmAccountsPanel.module.scss';
+
+// 容器注册表快照「陈旧」的前端展示阈值：本列只用它给「容器运行态」pill 的
+// as-of（container.updated_at）补陈旧标记，不是判定逻辑本身——真正的健康
+// 判定仍由后端 farmrunner.DecideStatus/CombineHealth 完成。Poller 轮询节拍
+// 默认 60s（见 farmrunner 注释），10 分钟留了充分余量吸收单次轮询失败/网络
+// 抖动，只在长时间没有任何注册表写入时才提示陈旧。
+const CONTAINER_SNAPSHOT_STALE_THRESHOLD_MS = 10 * 60 * 1000;
+
+// 陈旧判定用的「当前时刻」时钟节拍：React 19 render-purity 规则不允许在 render
+// 期间直接读 Date.now()（会随机在任意一次重渲染悄悄改变陈旧结果）。改用一个
+// 每 30s 刷新一次的 state 时钟（对齐本模块既有轮询节拍 FARM_OVERVIEW_POLL_
+// INTERVAL_MS/FARM_ALERTS_POLL_INTERVAL_MS=30s），render 只读这个稳定值，
+// 陈旧判定口径（10 分钟阈值）本身不变。
+const STALE_CLOCK_TICK_MS = 30 * 1000;
 
 // device_id 展示口径四态着色（spec「device_id 展示口径全站对齐」）：
 // container_synced=真实容器同步(success)，drift=正在漂移待对账(warning)，
@@ -30,28 +53,6 @@ const DEVICE_ID_SOURCE_VARIANT: Record<FarmDeviceIDSource, 'success' | 'warning'
   drift: 'warning',
   synthetic: 'muted',
   unknown: 'muted',
-};
-
-// 账号健康四态映射（design.md 决策6「状态栏双列 A1」）：account.status 是 CPA
-// 透传的自由字符串，未必收敛到 coreauth.Status 的 active/pending/error/disabled
-// 四值，按语义分组而非逐值枚举。error/fatal→err（真实故障）；warn/degraded→warn
-// （需要关注）；active/running/healthy/ok/valid→ok（健康态）；其它未知值（含
-// status 字面量 "disabled"，disabled 已降级为账号名旁中性 tag，不在本列重复
-// 表达）一律 idle 中性回退，不再借用 muted 徽标语义。quarantined→err 只是防御性
-// 兜底（万一 auto_quarantined 意外为 false 但 status 字面量已是
-// "quarantined"）；渲染时真正权威判定走下方 isAutoQuarantined 布尔分支，不依赖
-// 这张表能否命中该 key（T3 telemetry-farm-ux-hardening）。
-const ACCOUNT_HEALTH_STATUS: Record<string, HealthPillStatus> = {
-  error: 'err',
-  fatal: 'err',
-  quarantined: 'err',
-  warn: 'warn',
-  degraded: 'warn',
-  active: 'ok',
-  running: 'ok',
-  healthy: 'ok',
-  ok: 'ok',
-  valid: 'ok',
 };
 
 // 容器健康四态映射：running=ok，degraded/orphaned=warn（幽灵态待人工核实，非
@@ -73,32 +74,54 @@ const CONTAINER_HEALTH_STATUS: Record<string, HealthPillStatus> = {
  * 环境既有 GET /auth-files 健康列表，见 handlers.go handleListAccounts），
  * operator 借此在挑账号绑定前先看清哪些账号可用；同时展示最近刷新时间、
  * 重新授权入口与禁用状态，帮助定位需要人工介入的账号。
+ *
+ * P7 两项改动（本文件本次交付）：
+ *   1. 账号行主行展示 note（如 "AC04"），email/文件名降为副行小字，note
+ *      为空时回退显示 email（P7-2）。
+ *   2. 「重新授权」不再在本页内嵌 OAuth 回调状态机（原 useFarmReauth 那套
+ *      starting/polling/callback 轮询已整体移除），改为静态「需要重新
+ *      授权」badge + 深链跳到 /auth-files 对应账号（P7-4）。
+ *   3. 「账号健康」列改为「账号认证态」：数据源从 CPA 透传的 account.status/
+ *      auto_quarantined 换成 FO2 两平面判定结果
+ *      （FarmContainerView.account_auth_status/account_auth_reason，与
+ *      「容器运行态」列各自独立推导，见 utils/health.ts
+ *      accountAuthStatusToHealthPillStatus 顶部注释）；两列的风险 reason
+ *      从 HealthPill 的 title tooltip 升级为可见 badge，并各自补 as-of
+ *      时间戳 + 陈旧标记（用户②）。
  */
 export function FarmAccountsPanel() {
   const { t, i18n } = useTranslation();
+  const navigate = useNavigate();
   const [env, setEnv] = useState<FarmEnv>('test');
   const { accounts, loading, error, reload } = useFarmAccounts(env);
   const { onboardingAccountId, onboard } = useFarmOnboard({ reload });
-  const {
-    reauthStates,
-    startReauth,
-    copyReauthLink,
-    openReauthLink,
-    cancelReauth,
-    updateReauthCallbackUrl,
-    submitReauthCallback,
-  } = useFarmReauth({ reload });
+  // 两平面徽标的两个数据源：containers 列表带 account_auth_status/
+  // account_auth_reason（已绑定账号才有，按 farm_container_id 关联）+
+  // health_reason（容器运行态列真实 reason）；account-state 列表只用来补
+  // as-of 时间戳/陈旧标记（见 utils/health.ts findAccountStateForAccount/
+  // isAccountStateStale 顶部注释——状态判定本身信 containers 列表，不在前端
+  // 重新实现 farmrunner.DecideAccountAuthPlane）。
+  const { containers } = useFarmContainers();
+  const { accountStates } = useFarmAccountState(env);
+  // 容器运行态 as-of 陈旧判定用的稳定「当前时刻」，见 STALE_CLOCK_TICK_MS 注释。
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useInterval(() => setNowMs(Date.now()), STALE_CLOCK_TICK_MS);
+  const containersById = useMemo(() => {
+    const map = new Map<string, (typeof containers)[number]>();
+    for (const c of containers) map.set(c.id, c);
+    return map;
+  }, [containers]);
 
   const envOptions = FARM_ENVS.map((value) => ({ value, label: t(`farm.env.${value}`) }));
 
   // 双列列头文案同时复用为 <HealthPill dimension> 值（拼进 aria-label，如
-  // 「账号健康: 运行中」），保证可见列头与朗读维度语义一致，只算一次而非
+  // 「账号认证态: 存活」），保证可见列头与朗读维度语义一致，只算一次而非
   // 每行重复 t() 调用。
   const accountHealthColumnLabel = t('farm.accountHealth.accountHealthColumn', {
-    defaultValue: '账号健康',
+    defaultValue: '账号认证态',
   });
   const containerHealthColumnLabel = t('farm.accountHealth.containerHealthColumn', {
-    defaultValue: '容器健康',
+    defaultValue: '容器运行态',
   });
 
   return (
@@ -160,35 +183,14 @@ export function FarmAccountsPanel() {
           </TableHeader>
           <TableBody>
             {accounts.map((account) => {
-              // "有 LLM 请求但无遥测"不对称归因提示：账号绑定的农场容器已经
-              // 被判 degraded，但账号本身仍有真实 LLM 流量（recent_requests
-              // 或 success > 0），说明当前 degraded 更可能是遥测/保活侧信号
-              // 缺失，未必是账号真的故障——避免误导 operator 直接下线账号。
-              const hasLlmTraffic = (account.recent_requests ?? 0) > 0 || (account.success ?? 0) > 0;
-              const showDegradedHint =
-                account.farm_bound && account.farm_container_status === 'degraded' && hasLlmTraffic;
-
-              // 账号健康四态：按 account.status 查表，不再按 account.disabled 布尔
-              // 选色。disabled 是良性暂停态（operator 主动关闭，非故障），已降级
-              // 为账号名旁的中性 tag，不再挤占本列视觉权重（design.md 决策6）。
               const normalizedStatus = (account.status || 'active').trim().toLowerCase();
 
               // 自动隔离态（T3 telemetry-farm-ux-hardening）：优先按
               // account.auto_quarantined 布尔判定，不单独按 status 字符串分支——
               // core 侧复核指出两者可能短暂不一致（清隔离锁与 status 落库非原子），
-              // 布尔更稳。true 时无条件盖成 err 档 + 专用文案，即便 normalizedStatus
-              // 恰好仍是 "active" 之类的健康值。
+              // 布尔更稳。
               const isAutoQuarantined = Boolean(account.auto_quarantined);
-              const accountHealthStatus: HealthPillStatus = isAutoQuarantined
-                ? 'err'
-                : ACCOUNT_HEALTH_STATUS[normalizedStatus] ?? 'idle';
-              const statusLabel = isAutoQuarantined
-                ? t('farm.accountHealth.quarantinedBadge', { defaultValue: 'Auto-quarantined' })
-                : t(`farm.accounts.status_${normalizedStatus}`, {
-                    defaultValue: account.status || t('farm.accounts.status_active'),
-                  });
-              // 隔离详情进 HealthPill 的 title tooltip（同 containerHealthReason 的
-              // 呈现方式）：原因 + 发生时间，缺失时用中性占位文案兜底，不留空。
+              // 隔离详情文案（用于「需要重新授权」badge 旁的隔离提示）。
               const quarantineReasonLabel = account.quarantine_reason
                 ? t(`farm.accountHealth.quarantineReason_${account.quarantine_reason}`, {
                     defaultValue: account.quarantine_reason,
@@ -197,7 +199,7 @@ export function FarmAccountsPanel() {
               const quarantineAtLabel = account.quarantined_at
                 ? formatDateTimeUtc8(account.quarantined_at, i18n.language)
                 : t('farm.accountHealth.quarantineTimeUnknown', { defaultValue: 'unknown time' });
-              const accountHealthReason = isAutoQuarantined
+              const quarantineTooltip = isAutoQuarantined
                 ? t('farm.accountHealth.quarantineTooltip', {
                     reason: quarantineReasonLabel,
                     at: quarantineAtLabel,
@@ -207,10 +209,51 @@ export function FarmAccountsPanel() {
                 : undefined;
               const showDisabledTag = account.disabled && normalizedStatus !== 'disabled';
 
-              // 容器健康四态：只在 farm_bound 时有意义；未绑定不是「故障」而是
-              // 「无容器可报告」，仍用 idle HealthPill 呈现（而非留空/破版），
-              // 保持两列视觉对称。containerStatus 收窄到 string 供下方索引
-              // CONTAINER_HEALTH_STATUS 与 i18n key 使用。
+              // ---------------------------------------------------------
+              // P7-2：账号行主行显示 note，email/文件名降为副行；note 为空
+              // 时回退显示 account（CPA 邮箱）或 name（auth 文件名）。
+              // ---------------------------------------------------------
+              const trimmedNote = account.note?.trim();
+              const secondaryIdentity = account.account?.trim() || account.name;
+              const primaryDisplayName = trimmedNote || secondaryIdentity;
+              const showSecondaryIdentity = Boolean(trimmedNote) && secondaryIdentity !== primaryDisplayName;
+
+              // ---------------------------------------------------------
+              // 用户②：账号认证态平面（与容器运行态各自独立），源数据是
+              // 已绑定容器上的 account_auth_status/account_auth_reason
+              // （FO2 两平面，见 dto.go containerView 注释）；未绑定账号
+              // 没有容器可关联，恒回退 unknown（不默认绿也不默认红）。
+              // ---------------------------------------------------------
+              const joinedContainer =
+                account.farm_bound && account.farm_container_id
+                  ? containersById.get(account.farm_container_id)
+                  : undefined;
+              const authStatusRaw = joinedContainer?.account_auth_status;
+              const authReasonRaw = joinedContainer?.account_auth_reason;
+              const authPillStatus = accountAuthStatusToHealthPillStatus(authStatusRaw);
+              const authLabel = t(`farm.accountHealth.authStatus_${authStatusRaw ?? 'unknown'}`, {
+                defaultValue: authStatusRaw ?? 'unknown',
+              });
+              // reason 只在 dead 态给出具体原因（account_disabled/
+              // account_auto_quarantined/account_token_dead）；unknown 态
+              // 的原始 reason（可能是空串或字面 "stale"）不是给人看的措辞，
+              // 不直接展示，unknown 本身已经足够诚实。
+              const authReasonLabel =
+                authStatusRaw === 'dead' && authReasonRaw
+                  ? t(`farm.accountHealth.authReason_${authReasonRaw}`, { defaultValue: authReasonRaw })
+                  : undefined;
+              const accountStateRow = findAccountStateForAccount(accountStates, account.name);
+              const authAsOf = accountStateRow?.observed_at;
+              const authStale = isAccountStateStale(authAsOf);
+
+              // ---------------------------------------------------------
+              // 容器运行态平面（既有列，本轮升级 reason 来源）：状态本身仍
+              // 用账号视图自带的 farm_container_status（未绑定回退
+              // idle/Unbound）；reason 从 containers 列表 join 拿真实
+              // health_reason（含 FO2 的 account_state_unknown/stale/
+              // not_wired 三个新 reason），取不到时（如 join 未命中）回退
+              // 「有 LLM 请求但无遥测」不对称归因提示。
+              // ---------------------------------------------------------
               const containerStatus = account.farm_bound ? account.farm_container_status : undefined;
               const containerHealthStatus: HealthPillStatus = containerStatus
                 ? CONTAINER_HEALTH_STATUS[containerStatus] ?? 'idle'
@@ -218,12 +261,37 @@ export function FarmAccountsPanel() {
               const containerHealthLabel = containerStatus
                 ? t(`farm.status.${containerStatus}`, { defaultValue: containerStatus })
                 : t('farm.accountHealth.unbound', { defaultValue: 'Unbound' });
-              // "有 LLM 请求但无遥测"不对称归因提示不再单独占一行可见文字，收进
-              // HealthPill 的 title tooltip（HealthPill.reason），避免误导
-              // operator 直接下线仍有真实流量的账号，同时不挤占列宽。
-              const containerHealthReason = showDegradedHint
-                ? t('farm.accountHealth.degradedHint')
-                : undefined;
+              const hasLlmTraffic = (account.recent_requests ?? 0) > 0 || (account.success ?? 0) > 0;
+              const showDegradedHint =
+                account.farm_bound && account.farm_container_status === 'degraded' && hasLlmTraffic;
+              const containerReasonRaw = joinedContainer?.health_reason;
+              const containerReasonLabel = containerReasonRaw
+                ? t(`farm.healthReason.${containerReasonRaw}`, { defaultValue: containerReasonRaw })
+                : showDegradedHint
+                  ? t('farm.accountHealth.degradedHint')
+                  : undefined;
+              // 只在非「健康」时才把 reason 升级成可见 badge——ok 态的 reason
+              // 只是「ok」本身，跟 pill 的可见 label 重复，不值得再占一格。
+              const showContainerReasonBadge = Boolean(
+                containerReasonLabel && containerReasonRaw !== 'ok'
+              );
+              // reason badge 颜色需跟随 pill 的健康四态派生（原先硬编码
+              // status-badge warning，红 pill 如 container_exited_or_missing 时
+              // 颜色会跟 err 态不一致）：有真实 health_reason 时按
+              // healthReasonToFarmHealthVariant 判定；没有真实 reason（走
+              // showDegradedHint 兜底文案分支）时该提示本身描述的就是当前
+              // containerHealthStatus（degraded→warn），直接复用 pill 自身状态。
+              const containerReasonVariant = containerReasonRaw
+                ? healthReasonToFarmHealthVariant(containerReasonRaw)
+                : containerHealthStatus;
+              const containerReasonBadgeVariant = farmHealthVariantToBadgeVariant(
+                containerReasonVariant
+              );
+              const containerAsOf = joinedContainer?.updated_at;
+              const containerStale = joinedContainer
+                ? nowMs - new Date(joinedContainer.updated_at).getTime() >
+                  CONTAINER_SNAPSHOT_STALE_THRESHOLD_MS
+                : false;
               // testid 固定为 farm-container-health-<name>，不随 showDegradedHint
               // 分支切换，保证真机断言可稳定定位该 pill；degraded 提示改由
               // TableCell 的 data-degraded-hint 属性单独标记，不覆盖主 testid。
@@ -231,31 +299,40 @@ export function FarmAccountsPanel() {
 
               // 「已认证但未接入农场」按钮门控（design.md 决策5 / P0-10）：
               // farm_bound=false 即未接入；disabled 账号是 operator 主动
-              // 关闭，不提供一键接入入口（避免把停用账号又拉回农场）。不额外
-              // 按 accountHealthStatus 收窄——账号能出现在这份 CPA 透传列表
-              // 里即代表已认证，故障态账号 operator 仍可能想先接入再排查。
+              // 关闭，不提供一键接入入口（避免把停用账号又拉回农场）。
               const canOnboard = !account.farm_bound && !account.disabled;
               const isOnboarding = onboardingAccountId === account.name;
 
-              // 重新授权（Q5 缺陷修复）：account.reauth_url 非空即代表 CPA 认为
+              // 重新授权门控（P7-4）：account.reauth_url 非空即代表 CPA 认为
               // 该账号可重新授权（经验上仅 anthropic provider 会返回该字段），
-              // 非 claude provider 该字段为空，继续走「—」占位分支，不误覆盖。
-              const reauthState = reauthStates[account.name];
-              const isReauthStarting = reauthState?.status === 'starting';
-              const isReauthPolling = reauthState?.status === 'polling';
-              const reauthErrorMessage = reauthState?.status === 'error' ? reauthState.error : undefined;
+              // 门控条件与此前一致，只是不再内嵌 OAuth 回调状态机——改为跳到
+              // 账号管理页（/auth-files）对应账号，由那边既有 useAuthFilesReauth
+              // 承接实际授权流程，本页不重复维护第二套。
+              const reauthNeeded = Boolean(account.reauth_url);
 
               return (
                 <TableRow key={account.name} data-testid={`farm-account-row-${account.name}`}>
                   <TableCell data-label={t('farm.accounts.column_name')}>
                     <div className={styles.nameCell}>
-                      <span>{account.name}</span>
-                      {showDisabledTag ? (
+                      <div className={styles.nameCellPrimary}>
+                        <span data-testid={`farm-account-primary-name-${account.name}`}>
+                          {primaryDisplayName}
+                        </span>
+                        {showDisabledTag ? (
+                          <span
+                            className={`status-badge muted ${styles.disabledTag}`}
+                            data-testid={`farm-account-disabled-tag-${account.name}`}
+                          >
+                            {t('farm.accountHealth.disabledBadge', { defaultValue: 'Disabled' })}
+                          </span>
+                        ) : null}
+                      </div>
+                      {showSecondaryIdentity ? (
                         <span
-                          className={`status-badge muted ${styles.disabledTag}`}
-                          data-testid={`farm-account-disabled-tag-${account.name}`}
+                          className={`${styles.mono} ${styles.nameCellSecondary}`}
+                          data-testid={`farm-account-secondary-identity-${account.name}`}
                         >
-                          {t('farm.accountHealth.disabledBadge', { defaultValue: 'Disabled' })}
+                          {secondaryIdentity}
                         </span>
                       ) : null}
                     </div>
@@ -264,47 +341,106 @@ export function FarmAccountsPanel() {
                     data-testid={`farm-account-health-cell-${account.name}`}
                     data-label={accountHealthColumnLabel}
                   >
-                    <HealthPill
-                      status={accountHealthStatus}
-                      label={statusLabel}
-                      dimension={accountHealthColumnLabel}
-                      reason={accountHealthReason}
-                      data-testid={`farm-account-health-pill-${account.name}`}
-                    />
+                    <div className={styles.planeCell}>
+                      <HealthPill
+                        status={authPillStatus}
+                        label={authLabel}
+                        dimension={accountHealthColumnLabel}
+                        reason={authReasonLabel}
+                        data-testid={`farm-account-health-pill-${account.name}`}
+                      />
+                      {authReasonLabel ? (
+                        <span
+                          className={`status-badge error ${styles.reasonBadge}`}
+                          data-testid={`farm-account-auth-reason-${account.name}`}
+                        >
+                          {authReasonLabel}
+                        </span>
+                      ) : null}
+                      <div className={styles.asOfRow} data-testid={`farm-account-auth-asof-${account.name}`}>
+                        <span className={styles.asOfLabel}>
+                          {t('farm.accountHealth.asOf', { defaultValue: '截至' })}
+                        </span>
+                        <span className={styles.mono}>
+                          {authAsOf
+                            ? formatDateTimeUtc8(authAsOf, i18n.language)
+                            : t('farm.accountHealth.neverObserved', { defaultValue: '从未采集' })}
+                        </span>
+                        {authStale ? (
+                          <span
+                            className={`status-badge warning ${styles.staleBadge}`}
+                            data-testid={`farm-account-auth-stale-${account.name}`}
+                          >
+                            {t('farm.accountHealth.staleBadge', { defaultValue: '陈旧' })}
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
                   </TableCell>
                   <TableCell
                     data-testid={`farm-container-health-cell-${account.name}`}
                     data-label={containerHealthColumnLabel}
                     data-degraded-hint={showDegradedHint ? 'true' : undefined}
                   >
-                    <div className={styles.containerHealthCell}>
-                      <HealthPill
-                        status={containerHealthStatus}
-                        label={containerHealthLabel}
-                        dimension={containerHealthColumnLabel}
-                        reason={containerHealthReason}
-                        data-testid={containerHealthTestId}
-                      />
-                      {canOnboard ? (
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          loading={isOnboarding}
-                          onClick={() => onboard(account.name, env)}
-                          className={styles.onboardButton}
-                          // 可见文案改用紧凑版（见下方 onboardActionShort），但无障碍名称与
-                          // 悬浮提示仍用完整语义文案，避免视觉紧凑化丢失屏幕阅读器/鼠标
-                          // 悬浮场景下的上下文（真实 6 列表 + 长邮箱账号名下本列可用宽度
-                          // 有限，见 .containerHealthCell 注释的几何推导）。
-                          aria-label={t('farm.accountHealth.onboardAction', { defaultValue: 'Onboard to farm' })}
-                          title={t('farm.accountHealth.onboardAction', { defaultValue: 'Onboard to farm' })}
-                          data-testid={`farm-account-onboard-${account.name}`}
+                    <div className={styles.planeCell}>
+                      <div className={styles.containerHealthCell}>
+                        <HealthPill
+                          status={containerHealthStatus}
+                          label={containerHealthLabel}
+                          dimension={containerHealthColumnLabel}
+                          reason={containerReasonLabel}
+                          data-testid={containerHealthTestId}
+                        />
+                        {canOnboard ? (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            loading={isOnboarding}
+                            onClick={() => onboard(account.name, env)}
+                            className={styles.onboardButton}
+                            // 可见文案改用紧凑版（见下方 onboardActionShort），但无障碍名称与
+                            // 悬浮提示仍用完整语义文案，避免视觉紧凑化丢失屏幕阅读器/鼠标
+                            // 悬浮场景下的上下文（真实 6 列表 + 长邮箱账号名下本列可用宽度
+                            // 有限，见 .containerHealthCell 注释的几何推导）。
+                            aria-label={t('farm.accountHealth.onboardAction', { defaultValue: 'Onboard to farm' })}
+                            title={t('farm.accountHealth.onboardAction', { defaultValue: 'Onboard to farm' })}
+                            data-testid={`farm-account-onboard-${account.name}`}
+                          >
+                            {isOnboarding
+                              ? t('farm.accountHealth.onboarding', { defaultValue: 'Onboarding…' })
+                              : t('farm.accountHealth.onboardActionShort', { defaultValue: 'Onboard' })}
+                          </Button>
+                        ) : null}
+                      </div>
+                      {showContainerReasonBadge ? (
+                        <span
+                          className={`status-badge ${containerReasonBadgeVariant} ${styles.reasonBadge}`}
+                          data-testid={`farm-container-health-reason-${account.name}`}
                         >
-                          {isOnboarding
-                            ? t('farm.accountHealth.onboarding', { defaultValue: 'Onboarding…' })
-                            : t('farm.accountHealth.onboardActionShort', { defaultValue: 'Onboard' })}
-                        </Button>
+                          {containerReasonLabel}
+                        </span>
                       ) : null}
+                      <div
+                        className={styles.asOfRow}
+                        data-testid={`farm-container-health-asof-${account.name}`}
+                      >
+                        <span className={styles.asOfLabel}>
+                          {t('farm.accountHealth.asOf', { defaultValue: '截至' })}
+                        </span>
+                        <span className={styles.mono}>
+                          {containerAsOf
+                            ? formatDateTimeUtc8(containerAsOf, i18n.language)
+                            : '—'}
+                        </span>
+                        {containerStale ? (
+                          <span
+                            className={`status-badge warning ${styles.staleBadge}`}
+                            data-testid={`farm-container-health-stale-${account.name}`}
+                          >
+                            {t('farm.accountHealth.staleBadge', { defaultValue: '陈旧' })}
+                          </span>
+                        ) : null}
+                      </div>
                     </div>
                   </TableCell>
                   <TableCell
@@ -344,129 +480,49 @@ export function FarmAccountsPanel() {
                     </span>
                   </TableCell>
                   <TableCell data-label={t('farm.accountHealth.reauthUrl')}>
-                    {account.reauth_url ? (
+                    {reauthNeeded ? (
                       <div className={styles.reauthCell}>
-                        {/* 隔离态引导重新认证（T3）：紧邻按钮上方提示"已被自动隔离，
-                            请重新认证"，不管当前是否已在轮询中都保持可见，帮助 operator
-                            一眼理解为何这个账号出现在需要处理的列表里。 */}
+                        {/* 隔离态引导重新认证（T3）：紧邻 badge 上方提示"已被自动隔离，
+                            请重新认证"，帮助 operator 一眼理解为何这个账号出现在需要
+                            处理的列表里。 */}
                         {isAutoQuarantined ? (
                           <span
                             className={styles.quarantineNotice}
                             data-testid={`farm-account-quarantine-notice-${account.name}`}
+                            title={quarantineTooltip}
                           >
                             {t('farm.accountHealth.quarantineReauthNotice', {
                               defaultValue: 'This account was auto-quarantined. Please re-authenticate.',
                             })}
                           </span>
                         ) : null}
-                        {isReauthPolling ? (
-                          <>
-                            <span className={styles.reauthWaitingLabel}>
-                              {t('farm.accountHealth.reauthWaiting', {
-                                defaultValue: 'Waiting for authorization…',
-                              })}
-                            </span>
-                            <div className={styles.reauthActionRow}>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => copyReauthLink(account.name)}
-                                data-testid={`farm-account-reauth-copy-${account.name}`}
-                              >
-                                {t('farm.accountHealth.reauthCopyLink', { defaultValue: 'Copy link' })}
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => openReauthLink(account.name)}
-                                data-testid={`farm-account-reauth-open-${account.name}`}
-                              >
-                                {t('farm.accountHealth.reauthOpenLink', { defaultValue: 'Open link' })}
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => cancelReauth(account.name)}
-                                data-testid={`farm-account-reauth-cancel-${account.name}`}
-                              >
-                                {t('common.cancel')}
-                              </Button>
-                            </div>
-                            {/* 手动回调 URL 入口（对齐 authFiles 侧 AuthFileCard）：远程
-                                管理端（cpamp 部署在 201）下 OAuth 回调回不到发起授权请求的
-                                管理端 origin，自动轮询永远等不到成功；用户从浏览器地址栏
-                                复制完整回调 URL 粘贴到这里，与自动轮询两条路径并存。 */}
-                            <div className={styles.reauthCallbackSection}>
-                              <Input
-                                label={t('farm.accountHealth.reauthCallbackLabel', {
-                                  defaultValue: 'Callback URL',
-                                })}
-                                hint={t('farm.accountHealth.reauthCallbackHint', {
-                                  defaultValue:
-                                    'Remote management: after the provider redirects to http://localhost:..., copy the full URL and submit it here.',
-                                })}
-                                value={reauthState?.callbackUrl || ''}
-                                onChange={(e) => updateReauthCallbackUrl(account.name, e.target.value)}
-                                placeholder={t('farm.accountHealth.reauthCallbackPlaceholder', {
-                                  defaultValue:
-                                    'http://localhost:1455/auth/callback?code=...&state=...',
-                                })}
-                                disabled={Boolean(reauthState?.callbackSubmitting)}
-                                error={
-                                  reauthState?.callbackStatus === 'error'
-                                    ? reauthState.callbackError
-                                    : undefined
-                                }
-                                data-testid={`farm-account-reauth-callback-input-${account.name}`}
-                              />
-                              <div className={styles.reauthCallbackActions}>
-                                <Button
-                                  variant="secondary"
-                                  size="sm"
-                                  onClick={() => submitReauthCallback(account.name)}
-                                  loading={Boolean(reauthState?.callbackSubmitting)}
-                                  data-testid={`farm-account-reauth-callback-submit-${account.name}`}
-                                >
-                                  {t('farm.accountHealth.reauthCallbackButton', {
-                                    defaultValue: 'Submit Callback URL',
-                                  })}
-                                </Button>
-                                {reauthState?.callbackStatus === 'success' && (
-                                  <span className={styles.reauthCallbackSuccess}>
-                                    {t('farm.accountHealth.reauthCallbackStatusSuccess', {
-                                      defaultValue: 'Callback URL submitted, waiting for authentication...',
-                                    })}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          </>
-                        ) : (
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            loading={isReauthStarting}
-                            onClick={() => startReauth(account.name)}
-                            data-testid={`farm-account-reauth-${account.name}`}
-                          >
-                            {t('farm.accountHealth.reauthAction', { defaultValue: 'Re-authenticate' })}
-                          </Button>
-                        )}
-                        {reauthErrorMessage ? (
-                          <span
-                            className={styles.reauthErrorText}
-                            role="alert"
-                            data-testid={`farm-account-reauth-error-${account.name}`}
-                          >
-                            {reauthErrorMessage}
-                          </span>
-                        ) : null}
+                        {/* 静态「需要重新授权」状态（P7-4）：不再内嵌 OAuth 回调状态机
+                            （原 starting/polling/callback 轮询已整体移除），本页只
+                            负责标注状态，实际授权动作交给账号管理页对应账号卡片。 */}
+                        <span
+                          className={`status-badge warning ${styles.reauthNeededBadge}`}
+                          data-testid={`farm-account-reauth-needed-${account.name}`}
+                        >
+                          {t('farm.accountHealth.reauthNeededBadge', {
+                            defaultValue: 'Re-authentication required',
+                          })}
+                        </span>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() =>
+                            navigate(`/auth-files?highlight=${encodeURIComponent(account.name)}`)
+                          }
+                          data-testid={`farm-account-reauth-link-${account.name}`}
+                        >
+                          {t('farm.accountHealth.reauthAction', { defaultValue: 'Re-authenticate' })}
+                        </Button>
                       </div>
                     ) : isAutoQuarantined ? (
                       // 隔离但当前 provider 未提供 reauth_url 的兜底文案（经验上只有
-                      // anthropic/claude 账号会拿到该字段，见 useFarmReauth 顶部注释）：
-                      // 非错误态本身的再次报错，只是提示 operator 这里暂无一键入口，
-                      // 需要另寻恢复路径，故用中性 muted 文案而非错误色。
+                      // anthropic/claude 账号会拿到该字段）：非错误态本身的再次报错，
+                      // 只是提示 operator 这里暂无一键入口，需要另寻恢复路径，故用
+                      // 中性 muted 文案而非错误色。
                       <span
                         className={styles.quarantineNoticeMuted}
                         data-testid={`farm-account-quarantine-no-url-${account.name}`}

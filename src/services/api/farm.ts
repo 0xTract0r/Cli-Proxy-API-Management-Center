@@ -22,11 +22,16 @@
  *          半自动 onboard（design.md 决策5，P0-10）。后端 P0-6 已落地并注册
  *          路由，成功体 = bindingResponse + container_created；失败体是独立
  *          形状 onboardErrorResponse{ error, code }，机器码在 code 字段。
+ * - GET    /api/farm/account-state?env=<env>            账号认证态快照（FO1，
+ *          env 可选，不传返回跨 test/prod 全量）
+ * - GET    /api/farm/containers/{id}/probe-cadence?window=&limit=
+ *          探针到达间隔（用户④「请求间隔 DTO」，与 .../usage 分栏口径）
  */
 
 import { farmClient } from './farmClient';
 import type {
   FarmAccountEntry,
+  FarmAccountStateListResponse,
   FarmAlertsResponse,
   FarmBindingResponse,
   FarmContainerDetailView,
@@ -39,6 +44,7 @@ import type {
   FarmOnboardRequest,
   FarmOnboardResponse,
   FarmOverviewResponse,
+  FarmProbeCadenceView,
   FarmResourceResponse,
   FarmResourceSeriesResponse,
   FarmRetireContainerResponse,
@@ -59,6 +65,14 @@ export interface FarmSeriesQuery {
 export interface FarmAlertsQuery {
   window?: string;
   status?: 'firing' | 'resolved' | 'all';
+}
+
+// GET .../probe-cadence 查询参数（观察窗口 + 原始样本条数上限，httpapi
+// handleGetContainerProbeCadence：window 复用 parseDurationParam 的
+// "24h"/"7d" 语法，默认 24h、上限 30d；limit 默认 200、上限 1000）。
+export interface FarmProbeCadenceQuery {
+  window?: string;
+  limit?: number;
 }
 
 // handleListContainers 的 status 语义：不传=默认活跃视图（后端排除 retired/
@@ -85,6 +99,15 @@ export const farmApi = {
 
   listAccounts: (env: FarmEnv) =>
     farmClient.get<FarmAccountEntry[]>('/api/farm/accounts', { params: { env } }),
+
+  // 账号认证态快照（FO1「账号态单一采集源」，dto.go accountStateListResponse）：
+  // 供两维徽标的账号认证态平面补 as-of 时间戳 + 陈旧标记（见
+  // features/farm/hooks/useFarmAccountState）。env 可选，不传返回跨
+  // test/prod 全量；未装配时后端优雅退化为空列表，不 500。
+  listAccountState: (env?: FarmEnv) =>
+    farmClient.get<FarmAccountStateListResponse>('/api/farm/account-state', {
+      params: env ? { env } : undefined,
+    }),
 
   createBinding: (request: FarmCreateBindingRequest) =>
     farmClient.post<FarmBindingResponse>('/api/farm/bindings', request),
@@ -161,4 +184,14 @@ export const farmApi = {
   // error 态如实呈现，不会伪造成功响应。
   getAlerts: (query?: FarmAlertsQuery) =>
     farmClient.get<FarmAlertsResponse>('/api/farm/alerts', { params: query }),
+
+  // 探针到达间隔（用户④「请求间隔 DTO」）：与 getUsage 刻意分成两个独立
+  // 端点/字段，前端不应把两者相加或互相替代，见 FarmProbeCadenceView 顶部
+  // 注释。?window=（默认 24h，上限 30d）与 ?limit=（默认 200，上限 1000）
+  // 均可选。
+  getContainerProbeCadence: (containerId: string, query?: FarmProbeCadenceQuery) =>
+    farmClient.get<FarmProbeCadenceView>(
+      `/api/farm/containers/${encodeURIComponent(containerId)}/probe-cadence`,
+      { params: query }
+    ),
 };

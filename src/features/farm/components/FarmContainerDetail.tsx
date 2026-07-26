@@ -8,6 +8,7 @@ import type { FarmContainerView, FarmEventView } from '@/types/farm';
 import { formatDateTimeUtc8 } from '@/utils/datetime';
 import { formatFileSize } from '@/utils/format';
 import { formatDurationMs } from '@/utils/usage/latency';
+import { formatUsd } from '@/utils/usage';
 import { useFarmContainerDetail } from '../hooks/useFarmContainerDetail';
 import {
   deviceAlignmentToBadgeVariant,
@@ -20,10 +21,12 @@ import {
 // 集合逐字相同，下方直接把 healthReasonToFarmHealthVariant 等函数的返回值
 // 传给 <HealthPill status=...>，不需要额外映射表/类型断言。
 import {
+  buildHistogram,
   mapSeriesToPoints,
   segmentToAreaPath,
   segmentToPolylinePoints,
   splitIntoSegments,
+  type HistogramBucket,
 } from '../utils/chart';
 import styles from './FarmContainerDetail.module.scss';
 
@@ -34,6 +37,12 @@ interface FarmContainerDetailProps {
 
 const CHART_WIDTH = 320;
 const CHART_HEIGHT = 64;
+
+// probeCadence 未加载/无数据时的稳定空数组引用：直接写字面量 `[]` 会在每次
+// render 产生新引用，导致依赖它的 useMemo（interval 时间轴/直方图）每次都
+// 认为依赖变化而重新计算。提到模块级常量后引用稳定，行为（空输入→空输出）
+// 不变。
+const EMPTY_PROBE_INTERVALS: number[] = [];
 
 const SEVERITY_TO_PILL: Record<FarmEventView['severity'], HealthPillStatus> = {
   critical: 'err',
@@ -61,8 +70,19 @@ function formatPct(pct: number | undefined): string {
 export function FarmContainerDetail({ container, onClose }: FarmContainerDetailProps) {
   const { t, i18n } = useTranslation();
   const containerId = container?.id ?? null;
-  const { detail, keepalive, resources, loading, error, keepaliveError, resourcesError } =
-    useFarmContainerDetail(containerId);
+  const {
+    detail,
+    keepalive,
+    resources,
+    probeCadence,
+    usage,
+    loading,
+    error,
+    keepaliveError,
+    resourcesError,
+    probeCadenceError,
+    usageError,
+  } = useFarmContainerDetail(containerId);
 
   const successRatePoints = useMemo(() => {
     const values = (keepalive?.buckets ?? []).map((b) =>
@@ -85,6 +105,18 @@ export function FarmContainerDetail({ container, onClose }: FarmContainerDetailP
     const values = (resources?.buckets ?? []).map((b) => b.avg_cpu_pct ?? null);
     return mapSeriesToPoints(values, CHART_WIDTH, CHART_HEIGHT, { min: 0, max: 100 });
   }, [resources]);
+
+  // 用户④「请求间隔 DTO」：探针到达间隔时间轴（按样本顺序，不是按时间跨度
+  // 等距——每个点就是相邻探针的一次间隔，保序但不保跨度）+ 直方图（分布
+  // 形状，不保序）。两者是对同一组 intervals_seconds 的两种不同问法，见
+  // utils/chart.ts buildHistogram 顶部注释。
+  const probeIntervals = probeCadence?.intervals_seconds ?? EMPTY_PROBE_INTERVALS;
+  const intervalTimelinePoints = useMemo(
+    () => mapSeriesToPoints(probeIntervals, CHART_WIDTH, CHART_HEIGHT),
+    [probeIntervals]
+  );
+  const intervalHistogram = useMemo(() => buildHistogram(probeIntervals), [probeIntervals]);
+  const intervalHistogramMaxCount = Math.max(1, ...intervalHistogram.map((b) => b.count));
 
   const open = Boolean(container);
   const healthVariant = healthReasonToFarmHealthVariant(detail?.health_reason);
@@ -227,6 +259,156 @@ export function FarmContainerDetail({ container, onClose }: FarmContainerDetailP
                     <p className={styles.hintText}>
                       {t('farm.detail.noEstimate', {
                         defaultValue: '该状态不再有下一次探针（非 running/degraded 容器）。',
+                      })}
+                    </p>
+                  )}
+                </section>
+
+                {/* 用户④「请求间隔 DTO」：探针保活节奏 vs 账号 CPA 累计用量，
+                    两栏各标口径（scope），消除两时钟混淆（sorrygml40「一绑定
+                    就163次」曾把账号累计请求数误当成探针触发次数）。 */}
+                <section className={styles.section} data-testid="farm-detail-probe-cadence">
+                  <h3 className={styles.sectionTitle}>
+                    {t('farm.detail.probeCadenceSection', {
+                      defaultValue: '探针保活节奏（到达间隔）',
+                    })}
+                  </h3>
+                  <span
+                    className={styles.scopeBadge}
+                    data-testid="farm-detail-probe-cadence-scope"
+                  >
+                    {t('farm.detail.probeCadenceScopeBadge', { defaultValue: '口径：探针到达间隔' })}
+                  </span>
+                  {probeCadenceError ? (
+                    <DataState
+                      variant="error"
+                      message={probeCadenceError}
+                      testId="farm-detail-probe-cadence-error"
+                    />
+                  ) : (
+                    <>
+                      {probeCadence?.note ? <p className={styles.hintText}>{probeCadence.note}</p> : null}
+                      <div className={styles.estimateBox}>
+                        <span>
+                          {t('farm.detail.probeCadenceLastFired', { defaultValue: '最近一次探针' })}:{' '}
+                          {probeCadence?.last_fired_at
+                            ? formatDateTimeUtc8(probeCadence.last_fired_at, i18n.language)
+                            : t('farm.containers.never')}
+                        </span>
+                        <span>
+                          {t('farm.detail.probeCadenceSampleCount', { defaultValue: '样本数' })}:{' '}
+                          {probeCadence?.sample_count ?? 0}
+                        </span>
+                      </div>
+                      {probeIntervals.length === 0 ? (
+                        <p className={styles.hintText} data-testid="farm-detail-probe-cadence-empty">
+                          {t('farm.detail.probeCadenceIntervalsEmpty', {
+                            defaultValue:
+                              '窗口内暂无探针间隔样本（空窗口是正常返回，不代表出错）。',
+                          })}
+                        </p>
+                      ) : (
+                        <>
+                          <div className={styles.chartCol}>
+                            <span className={styles.chartLabel}>
+                              {t('farm.detail.probeCadenceTimelineTitle', {
+                                defaultValue: '间隔时间轴（按到达顺序，秒）',
+                              })}
+                            </span>
+                            <SparklineChart
+                              segments={splitIntoSegments(intervalTimelinePoints)}
+                              testId="farm-detail-probe-cadence-timeline"
+                            />
+                          </div>
+                          <div className={styles.chartCol}>
+                            <span className={styles.chartLabel}>
+                              {t('farm.detail.probeCadenceHistogramTitle', {
+                                defaultValue: '间隔分布直方图',
+                              })}
+                            </span>
+                            <div
+                              className={styles.histogramRow}
+                              data-testid="farm-detail-probe-cadence-histogram"
+                            >
+                              {intervalHistogram.map((bucket, i) => (
+                                <HistogramBar
+                                  key={i}
+                                  bucket={bucket}
+                                  maxCount={intervalHistogramMaxCount}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        </>
+                      )}
+                      {probeCadence?.next_expected_window ? (
+                        <div className={styles.estimateBox}>
+                          <span>
+                            {t('farm.detail.probeCadenceNextWindow', { defaultValue: '下次预计窗口' })}
+                            :{' '}
+                            {formatDurationMs(
+                              probeCadence.next_expected_window.min_seconds * 1000,
+                              { maxUnits: 1 }
+                            )}{' '}
+                            ~{' '}
+                            {formatDurationMs(
+                              probeCadence.next_expected_window.max_seconds * 1000,
+                              { maxUnits: 1 }
+                            )}
+                            {typeof probeCadence.next_expected_window.avg_observed_seconds_24h ===
+                            'number'
+                              ? ` (${t('farm.detail.estimateObserved', { defaultValue: '近24h实测均值' })} ${formatDurationMs(
+                                  probeCadence.next_expected_window.avg_observed_seconds_24h * 1000,
+                                  { maxUnits: 1 }
+                                )})`
+                              : ''}
+                          </span>
+                          <p className={styles.hintText}>{probeCadence.next_expected_window.note}</p>
+                        </div>
+                      ) : null}
+                    </>
+                  )}
+                </section>
+
+                <section className={styles.section} data-testid="farm-detail-cpa-usage">
+                  <h3 className={styles.sectionTitle}>
+                    {t('farm.detail.cpaUsageSection', { defaultValue: '账号 CPA 累计用量' })}
+                  </h3>
+                  <span className={styles.scopeBadge} data-testid="farm-detail-cpa-usage-scope">
+                    {t('farm.detail.cpaUsageScopeBadge', { defaultValue: '口径：账号 CPA 累计' })}
+                  </span>
+                  {usageError ? (
+                    <DataState
+                      variant="error"
+                      message={usageError}
+                      testId="farm-detail-cpa-usage-error"
+                    />
+                  ) : usage ? (
+                    <div className={styles.estimateBox}>
+                      <span>
+                        {t('farm.detail.cpaUsageRequests', { defaultValue: '累计请求数' })}:{' '}
+                        {usage.requests.toLocaleString()}
+                      </span>
+                      <span>
+                        {t('farm.detail.cpaUsageTokensTotal', { defaultValue: '累计 Token' })}:{' '}
+                        {usage.tokens.total.toLocaleString()}
+                      </span>
+                      <span>
+                        {t('farm.detail.cpaUsageCost', { defaultValue: '累计费用（USD）' })}:{' '}
+                        {formatUsd(usage.cost_usd)}
+                      </span>
+                      <p className={styles.hintText}>
+                        {t('farm.detail.cpaUsageVsProbeHint', {
+                          defaultValue:
+                            '此处请求数是账号在 CPA 侧的累计计数，不等于上方探针到达次数，两者口径独立，不能相加或替代。',
+                        })}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className={styles.hintText} data-testid="farm-detail-cpa-usage-empty">
+                      {t('farm.detail.cpaUsageNotFound', {
+                        defaultValue:
+                          '本容器绑定账号暂无用量数据（可能尚未产生任何请求，或用量聚合暂不可用）。',
                       })}
                     </p>
                   )}
@@ -431,5 +613,31 @@ function AreaChart({
         return <path key={i} d={path} className={styles.areaFill} />;
       })}
     </svg>
+  );
+}
+
+/**
+ * 探针到达间隔直方图的单个条形（用户④「请求间隔 DTO」）。用 CSS 高度百分比
+ * 而非 SVG——分桶数少（默认 8 桶）、不需要坐标几何映射，纯 flex+div 已经
+ * 足够清晰，避免为一个简单条形图重新实现 SVG path 计算（对齐 design.md
+ * 「可用轻量能力，不引重型图表库」的既有取舍，见 utils/chart.ts 顶部注释）。
+ */
+function HistogramBar({ bucket, maxCount }: { bucket: HistogramBucket; maxCount: number }) {
+  const heightPct = maxCount > 0 ? Math.max(4, (bucket.count / maxCount) * 100) : 0;
+  const rangeLabel = `${formatDurationMs(bucket.rangeStart * 1000, { maxUnits: 1 })} ~ ${formatDurationMs(
+    bucket.rangeEnd * 1000,
+    { maxUnits: 1 }
+  )}`;
+  return (
+    <div className={styles.histogramBarCol} title={`${rangeLabel}: ${bucket.count}`}>
+      <div className={styles.histogramBarTrack}>
+        <div
+          className={styles.histogramBar}
+          style={{ height: `${heightPct}%` }}
+          data-testid="farm-detail-probe-cadence-histogram-bar"
+        />
+      </div>
+      <span className={styles.histogramBarCount}>{bucket.count}</span>
+    </div>
   );
 }

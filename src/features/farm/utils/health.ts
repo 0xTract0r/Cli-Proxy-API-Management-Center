@@ -11,6 +11,8 @@
  * CSS token 里再重复放运行时用不上的纯数字阈值。
  */
 
+import type { FarmAccountStateView } from '@/types/farm';
+
 /** 与 --health-ok/warn/err/idle 一一对应的健康四态。 */
 export type FarmHealthVariant = 'ok' | 'warn' | 'err' | 'idle';
 
@@ -59,6 +61,12 @@ export function successRateToFarmHealthVariant(rate: number | undefined): FarmHe
  * - container_exited_or_missing：down 的成因，映射 err。
  * - not_started / container_transient_state / retired /
  *   docker_missing_orphaned：非故障的生命周期占位态，映射 idle。
+ * - account_state_unknown / account_state_stale / account_state_not_wired
+ *   （FO2「假绿修复：健康两平面」CombineHealth 收敛结果，farmrunner/
+ *   health.go CombineHealthReason* 常量）：账号认证态平面 unknown/not_wired
+ *   时，容器运行态原判 running 会被 fail-closed 封顶为 degraded，这三个
+ *   reason 就是「为什么被封顶」——与 keepalive_* 系列同属「degraded 的具体
+ *   成因」，同样映射 warn（本列已经是 degraded 状态色，这里只是解释原因）。
  * - 其余未知值（含 computeHealthReason 探测不到时回退的 status 字面值，如
  *   直接是 'degraded'/'down'）按字面值本身兜底判断，避免整列失去信号。
  */
@@ -73,6 +81,9 @@ const HEALTH_REASON_VARIANT: Record<string, FarmHealthVariant> = {
   container_transient_state: 'idle',
   retired: 'idle',
   docker_missing_orphaned: 'idle',
+  account_state_unknown: 'warn',
+  account_state_stale: 'warn',
+  account_state_not_wired: 'warn',
 };
 
 /**
@@ -124,4 +135,74 @@ export function farmHealthVariantToBadgeVariant(variant: FarmHealthVariant): Sta
 /** 数值水位直接映射到既有 status-badge className，桥接旧调用点（不改变视觉输出）。 */
 export function pctToFarmHealthBadgeVariant(pct: number | undefined): StatusBadgeVariant {
   return farmHealthVariantToBadgeVariant(pctToFarmHealthVariant(pct));
+}
+
+// ---------------------------------------------------------------------------
+// P7「状态栏两维徽标」：账号认证态平面（用户②）
+// ---------------------------------------------------------------------------
+
+/**
+ * 账号态快照陈旧门槛，对齐后端 farmrunner.AccountStateStaleThreshold（3×
+ * DefaultAccountStatePollInterval=3×5min=15min，见 services/farm-orchestrator/
+ * internal/farmrunner/health.go）。前端只用它给 GET /api/farm/account-state
+ * 的 observed_at 补「陈旧标记」；账号认证态本身的 alive/dead/unknown 判定
+ * 优先信 FarmContainerView.account_auth_status（后端已经用同一个门槛算好，
+ * 见 decideAccountAuthPlane 顶部注释），这里独立维护一份只是为了在前端也能
+ * 展示「这条快照是否还新鲜」，两处判断口径必须保持一致，未来后端阈值调整需
+ * 手工同步到这里。
+ */
+export const ACCOUNT_STATE_STALE_THRESHOLD_MS = 15 * 60 * 1000;
+
+/** 账号认证态平面判定结果三态，逐字对应 farmrunner.AccountAuth* 常量。 */
+export type FarmAccountAuthStatus = 'alive' | 'dead' | 'unknown';
+
+/** 账号认证态平面 dead 时的具体原因，逐字对应 farmrunner.AccountAuthReason* 常量。 */
+export const FARM_ACCOUNT_AUTH_REASONS = [
+  'account_disabled',
+  'account_auto_quarantined',
+  'account_token_dead',
+] as const;
+export type FarmAccountAuthReason = (typeof FARM_ACCOUNT_AUTH_REASONS)[number];
+
+/** account_auth_status 字面值 → HealthPill 四态：alive→ok、dead→err。
+ * unknown（含未绑定、从未采集、账号态存储未装配等一切"无法确认"的情形）→
+ * idle——design.md P7 决策「账号态 unknown 显示 unknown，既不默认绿也不默认
+ * 红」，idle 是本设计系统里唯一"中性、非健康非故障"的语义色，不能借用 warn
+ * （warn 意味着"已确认需要关注"，unknown 是"根本不知道"，两者不是同一件事）。 */
+export function accountAuthStatusToHealthPillStatus(
+  status: string | undefined
+): FarmHealthVariant {
+  if (status === 'alive') return 'ok';
+  if (status === 'dead') return 'err';
+  return 'idle';
+}
+
+/**
+ * 用绑定表 account_id 的三种形态兜底查找该账号的认证态快照（原形/去 .json
+ * 后缀/补 .json 后缀），对齐后端 farmrunner.AccountStateIndex.Lookup 同款
+ * 兜底思路（两处独立实现，任一方修改匹配逻辑需要手工同步到另一处，见后端
+ * 该函数文档同款取舍说明）。
+ */
+export function findAccountStateForAccount(
+  states: FarmAccountStateView[],
+  accountID: string
+): FarmAccountStateView | undefined {
+  const base = accountID.endsWith('.json') ? accountID.slice(0, -'.json'.length) : accountID;
+  const candidates = [accountID, base, `${base}.json`];
+  for (const candidate of candidates) {
+    const found = states.find((s) => s.account_id === candidate);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+/** observed_at 是否已超过陈旧门槛（含缺失快照——缺失同样视为"不可信"）。 */
+export function isAccountStateStale(
+  observedAt: string | undefined,
+  now: Date = new Date()
+): boolean {
+  if (!observedAt) return true;
+  const observedMs = new Date(observedAt).getTime();
+  if (!Number.isFinite(observedMs)) return true;
+  return now.getTime() - observedMs > ACCOUNT_STATE_STALE_THRESHOLD_MS;
 }
