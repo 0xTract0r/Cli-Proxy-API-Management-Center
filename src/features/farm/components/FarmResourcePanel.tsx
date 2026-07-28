@@ -78,7 +78,13 @@ export function FarmResourcePanel() {
         </Button>
       </div>
 
-      <AsyncPanel loading={loading} error={error} loadingLabel={t('common.loading')}>
+      <AsyncPanel
+        loading={loading}
+        error={error}
+        loadingLabel={t('common.loading')}
+        loadingTestId="farm-resources-loading"
+        errorTestId="farm-resources-error"
+      >
         <>
           {host ? (
             <div className={styles.hostRow} data-testid="farm-resource-host">

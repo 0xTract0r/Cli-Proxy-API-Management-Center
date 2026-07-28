@@ -1616,6 +1616,20 @@
   "farm": {
     "title": "設備農場",
     "subtitle": "管理獨立農場編排器的住宅代理容器池：容器保活狀態、帳號綁定與解綁。",
+    "ia": {
+      "connectionStatus": "編排器連線狀態",
+      "connectionSettings": "連線設定",
+      "configureNow": "立即設定",
+      "notConfiguredDesc": "設定獨立編排器位址與 Admin Key 後，才能載入真實農場狀態。尚未設定時不會發出農場請求。",
+      "operationsTitle": "管理入口",
+      "operationsDesc": "長表與明細按需從右側開啟，首屏保持聚焦於健康與告警。",
+      "openSection": "開啟",
+      "accountsEntryDesc": "查看帳號認證態、容器運行態、隔離與重新授權入口。",
+      "containersEntryDesc": "篩選容器池，建立、綁定、解綁、退役並查看詳情。",
+      "resourcesEntryDesc": "查看整機與容器記憶體、CPU 水位及限制口徑。",
+      "usageEntryDesc": "查看帳號與容器的累計 Token、請求數和費用口徑。",
+      "backToContainers": "返回容器池"
+    },
     "config": {
       "title": "編排器連線設定",
       "desc": "農場編排器是獨立於本管理中心的後端服務，需單獨設定位址與 admin key 才能載入容器池資料。",
@@ -1800,6 +1814,10 @@
     },
     "alerts": {
       "title": "農場告警",
+      "allTitle": "全部農場告警",
+      "summaryDesc": "最多顯示 3 筆進行中的告警，完整事件可從右側查看。",
+      "viewAll": "查看全部",
+      "moreCount": "另有 {{count}} 筆進行中告警",
       "filterFiring": "進行中",
       "filterResolved": "已恢復",
       "filterLabel": "告警狀態",

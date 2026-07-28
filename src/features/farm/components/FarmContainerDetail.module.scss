@@ -32,8 +32,19 @@
 }
 
 @include mobile {
+  :global(.modal-overlay):has(.drawer) {
+    padding: $spacing-sm;
+  }
+
   .drawer {
-    width: 100vw !important;
+    width: 100% !important;
+    max-height: calc(100vh - #{$spacing-sm} * 2);
+  }
+
+  @supports (height: 100dvh) {
+    .drawer {
+      max-height: calc(100dvh - #{$spacing-sm} * 2);
+    }
   }
 }
 
@@ -57,7 +68,16 @@
 .body {
   display: flex;
   flex-direction: column;
-  gap: $spacing-lg;
+  gap: $spacing-md;
+  min-width: 0;
+}
+
+.drawerActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-sm;
+  flex-wrap: wrap;
 }
 
 .section {

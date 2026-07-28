@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Modal } from '@/components/ui/Modal';
 import { AsyncPanel } from '@/components/ui/AsyncPanel';
+import { Button } from '@/components/ui/Button';
 import { DataState } from '@/components/ui/DataState';
 import { HealthPill, type HealthPillStatus } from '@/components/ui/HealthPill';
 import type { FarmContainerView, FarmEventView } from '@/types/farm';
@@ -33,6 +34,7 @@ import styles from './FarmContainerDetail.module.scss';
 interface FarmContainerDetailProps {
   container: FarmContainerView | null;
   onClose: () => void;
+  onBack?: () => void;
 }
 
 const CHART_WIDTH = 320;
@@ -67,7 +69,7 @@ function formatPct(pct: number | undefined): string {
  * 渲染，心跳或资源时序其中一条失败只让对应图表区块落 block 级 error 态
  * （<DataState variant="error">），不连累已成功的主详情或另一条时序。
  */
-export function FarmContainerDetail({ container, onClose }: FarmContainerDetailProps) {
+export function FarmContainerDetail({ container, onClose, onBack }: FarmContainerDetailProps) {
   const { t, i18n } = useTranslation();
   const containerId = container?.id ?? null;
   const {
@@ -138,7 +140,32 @@ export function FarmContainerDetail({ container, onClose }: FarmContainerDetailP
       className={styles.drawer}
     >
       {!container ? null : (
-        <div className={styles.body} data-testid={`farm-container-detail-${container.id}`}>
+        <div
+          className={styles.body}
+          data-testid="farm-container-detail-drawer"
+          data-container-id={container.id}
+        >
+          <div className={styles.drawerActions}>
+            {onBack ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onBack}
+                data-testid="farm-container-detail-back"
+              >
+                {t('farm.ia.backToContainers')}
+              </Button>
+            ) : null}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onClose}
+              data-testid="farm-container-detail-close"
+            >
+              {t('common.close')}
+            </Button>
+          </div>
+          <div data-testid={`farm-container-detail-${container.id}`}>
           <AsyncPanel
             loading={loading}
             error={error}
@@ -542,6 +569,7 @@ export function FarmContainerDetail({ container, onClose }: FarmContainerDetailP
               </>
             )}
           </AsyncPanel>
+          </div>
         </div>
       )}
     </Modal>

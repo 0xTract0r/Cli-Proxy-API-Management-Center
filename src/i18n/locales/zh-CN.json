@@ -1871,6 +1871,20 @@
   "farm": {
     "title": "设备农场",
     "subtitle": "管理独立农场编排器的住宅代理容器池：容器保活状态、账号绑定与解绑。",
+    "ia": {
+      "connectionStatus": "编排器连接状态",
+      "connectionSettings": "连接设置",
+      "configureNow": "立即配置",
+      "notConfiguredDesc": "配置独立编排器地址与 Admin Key 后，才能加载真实农场状态。未配置时不会发起农场请求。",
+      "operationsTitle": "管理入口",
+      "operationsDesc": "长表和明细按需在右侧打开，首屏保持聚焦于健康与告警。",
+      "openSection": "打开",
+      "accountsEntryDesc": "查看账号认证态、容器运行态、隔离与重新授权入口。",
+      "containersEntryDesc": "筛选容器池，创建、绑定、解绑、退役并下钻详情。",
+      "resourcesEntryDesc": "查看整机与容器内存、CPU 水位及限制口径。",
+      "usageEntryDesc": "查看账号与容器的累计 Token、请求数和费用口径。",
+      "backToContainers": "返回容器池"
+    },
     "config": {
       "title": "编排器连接配置",
       "desc": "农场编排器是独立于本管理中心的后端服务，需单独配置地址与 admin key 才能加载容器池数据。",
@@ -2036,6 +2050,10 @@
     },
     "alerts": {
       "title": "农场告警",
+      "allTitle": "全部农场告警",
+      "summaryDesc": "最多展示 3 条进行中的告警，完整事件可在右侧查看。",
+      "viewAll": "查看全部",
+      "moreCount": "另有 {{count}} 条进行中告警",
       "filterFiring": "进行中",
       "filterResolved": "已恢复",
       "filterLabel": "告警状态",

@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { createElement, useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { farmApi } from '@/services/api/farm';
 import { useNotificationStore } from '@/stores';
@@ -67,7 +67,11 @@ export function useFarmBindings(options: UseFarmBindingsOptions): UseFarmBinding
       const previousBinding = container.binding;
       showConfirmation({
         title: t('farm.unbind_confirm_title'),
-        message: t('farm.unbind_confirm_message', { id: container.id }),
+        message: createElement(
+          'div',
+          { 'data-testid': 'farm-unbind-confirm' },
+          t('farm.unbind_confirm_message', { id: container.id })
+        ),
         variant: 'danger',
         confirmText: t('common.confirm'),
         onConfirm: async () => {

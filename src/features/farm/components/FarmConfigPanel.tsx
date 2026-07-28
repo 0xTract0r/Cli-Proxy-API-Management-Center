@@ -45,7 +45,10 @@ export function FarmConfigPanel() {
     <div className={styles.panel} data-testid="farm-config-panel">
       <div className={styles.header}>
         <div className={styles.title}>{t('farm.config.title')}</div>
-        <span className={`status-badge ${isConfigured ? 'success' : 'warning'}`}>
+        <span
+          className={`status-badge ${isConfigured ? 'success' : 'warning'}`}
+          data-testid="farm-header-config-status"
+        >
           {isConfigured ? t('farm.config.status_ready') : t('farm.config.status_missing')}
         </span>
       </div>
@@ -71,6 +74,7 @@ export function FarmConfigPanel() {
               className={styles.toggleVisibility}
               onClick={() => setShowKey((prev) => !prev)}
               aria-label={showKey ? t('farm.config.hide_key') : t('farm.config.show_key')}
+              data-testid="farm-config-key-visibility-toggle"
             >
               {showKey ? <IconEyeOff size={16} /> : <IconEye size={16} />}
             </button>

@@ -63,7 +63,7 @@
 // --success-badge-text / --success-badge-bg / --success-badge-border 高对比
 // 语义色 token（浅色 #065f46 on #d1fae5 ≈ 6.78:1，深色 #6ee7b7 on 实际合成
 // 背景 ≈ 10.5:1，两套主题都清晰高于 4.5 门槛）。
-.panel :global(.status-badge.success) {
+.header > :global(.status-badge.success) {
   color: var(--success-badge-text, #065f46);
   background: var(--success-badge-bg, #d1fae5);
   border-color: var(--success-badge-border, #6ee7b7);

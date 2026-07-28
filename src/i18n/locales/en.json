@@ -1871,6 +1871,20 @@
   "farm": {
     "title": "Device Farm",
     "subtitle": "Manage the residential-proxy container pool of the standalone farm orchestrator: keepalive status, account binding and unbinding.",
+    "ia": {
+      "connectionStatus": "Orchestrator connection status",
+      "connectionSettings": "Connection settings",
+      "configureNow": "Configure now",
+      "notConfiguredDesc": "Configure the standalone orchestrator URL and Admin Key before loading real farm status. No farm requests are sent while unconfigured.",
+      "operationsTitle": "Management areas",
+      "operationsDesc": "Open long tables and details on demand while keeping the first screen focused on health and alerts.",
+      "openSection": "Open",
+      "accountsEntryDesc": "Review account auth, container runtime, quarantine, and re-authentication actions.",
+      "containersEntryDesc": "Filter the pool, create, bind, unbind, retire, and inspect containers.",
+      "resourcesEntryDesc": "Review host and container memory/CPU levels and limit semantics.",
+      "usageEntryDesc": "Review cumulative tokens, requests, and cost by account and container.",
+      "backToContainers": "Back to container pool"
+    },
     "config": {
       "title": "Orchestrator Connection",
       "desc": "The farm orchestrator is a backend independent from this management center; configure its base URL and admin key to load the container pool.",
@@ -2055,6 +2069,10 @@
     },
     "alerts": {
       "title": "Farm Alerts",
+      "allTitle": "All farm alerts",
+      "summaryDesc": "Shows up to three firing alerts; open the drawer for the complete feed.",
+      "viewAll": "View all",
+      "moreCount": "{{count}} more firing alerts",
       "filterFiring": "Firing",
       "filterResolved": "Resolved",
       "filterLabel": "Alert status",

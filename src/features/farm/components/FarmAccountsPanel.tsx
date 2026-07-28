@@ -26,7 +26,12 @@ import {
   healthReasonToFarmHealthVariant,
   isAccountStateStale,
 } from '../utils/health';
-import { FARM_ENVS, type FarmDeviceIDSource, type FarmEnv } from '@/types/farm';
+import {
+  FARM_ENVS,
+  type FarmContainerView,
+  type FarmDeviceIDSource,
+  type FarmEnv,
+} from '@/types/farm';
 import { formatDateTimeUtc8 } from '@/utils/datetime';
 import styles from './FarmAccountsPanel.module.scss';
 
@@ -89,7 +94,12 @@ const CONTAINER_HEALTH_STATUS: Record<string, HealthPillStatus> = {
  *      从 HealthPill 的 title tooltip 升级为可见 badge，并各自补 as-of
  *      时间戳 + 陈旧标记（用户②）。
  */
-export function FarmAccountsPanel() {
+interface FarmAccountsPanelProps {
+  /** 页面级容器快照；传入后不再启动本面板自己的 15 秒轮询。 */
+  containers?: FarmContainerView[];
+}
+
+export function FarmAccountsPanel({ containers: sharedContainers }: FarmAccountsPanelProps = {}) {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const [env, setEnv] = useState<FarmEnv>('test');
@@ -101,7 +111,10 @@ export function FarmAccountsPanel() {
   // as-of 时间戳/陈旧标记（见 utils/health.ts findAccountStateForAccount/
   // isAccountStateStale 顶部注释——状态判定本身信 containers 列表，不在前端
   // 重新实现 farmrunner.DecideAccountAuthPlane）。
-  const { containers } = useFarmContainers();
+  const { containers: independentlyLoadedContainers } = useFarmContainers({
+    enabled: sharedContainers === undefined,
+  });
+  const containers = sharedContainers ?? independentlyLoadedContainers;
   const { accountStates } = useFarmAccountState(env);
   // 容器运行态 as-of 陈旧判定用的稳定「当前时刻」，见 STALE_CLOCK_TICK_MS 注释。
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -144,15 +157,18 @@ export function FarmAccountsPanel() {
 
       <div className={styles.header}>
         <div className={styles.title}>{t('farm.accounts.title')}</div>
-        <Select
-          value={env}
-          options={envOptions}
-          onChange={(value) => setEnv(value as FarmEnv)}
-          ariaLabel={t('farm.bind_modal.env_label')}
-          size="sm"
-          fullWidth={false}
-          className={styles.envSelect}
-        />
+        <div data-testid="farm-accounts-env-select">
+          <Select
+            value={env}
+            options={envOptions}
+            onChange={(value) => setEnv(value as FarmEnv)}
+            ariaLabel={t('farm.bind_modal.env_label')}
+            size="sm"
+            fullWidth={false}
+            className={styles.envSelect}
+            id="farm-accounts-env-select-control"
+          />
+        </div>
       </div>
       <p className={styles.desc}>{t('farm.accounts.desc')}</p>
 
@@ -161,12 +177,15 @@ export function FarmAccountsPanel() {
         error={error}
         isEmpty={accounts.length === 0}
         loadingLabel={t('common.loading')}
+        loadingTestId="farm-accounts-loading"
+        errorTestId="farm-accounts-error"
         empty={{
           title: t('farm.accounts.empty_title'),
           description: t('farm.accounts.empty_desc'),
+          testId: 'farm-accounts-empty',
         }}
       >
-        <Table>
+        <Table data-testid="farm-accounts-table">
           <TableHeader>
             <TableRow>
               <TableHead>{t('farm.accounts.column_name')}</TableHead>

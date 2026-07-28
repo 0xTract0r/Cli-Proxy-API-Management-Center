@@ -49,7 +49,7 @@ export function useFarmRetire(options: UseFarmRetireOptions): UseFarmRetireResul
 
       const message = createElement(
         'div',
-        null,
+        { 'data-testid': 'farm-retire-confirm' },
         createElement('p', null, t('farm.retire.confirmBody', { id: container.id })),
         createElement(
           'label',
@@ -58,6 +58,7 @@ export function useFarmRetire(options: UseFarmRetireOptions): UseFarmRetireResul
             type: 'radio',
             name: radioName,
             defaultChecked: true,
+            'data-testid': 'farm-retire-keep-volume',
             onChange: () => {
               deleteVolume = false;
             },
@@ -70,6 +71,7 @@ export function useFarmRetire(options: UseFarmRetireOptions): UseFarmRetireResul
           createElement('input', {
             type: 'radio',
             name: radioName,
+            'data-testid': 'farm-retire-delete-volume',
             onChange: () => {
               deleteVolume = true;
             },
