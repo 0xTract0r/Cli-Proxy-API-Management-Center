@@ -88,7 +88,12 @@ export function FarmBindModal({
       className={styles.modal}
       footer={
         <>
-          <Button variant="secondary" onClick={onClose} disabled={submitting}>
+          <Button
+            variant="secondary"
+            onClick={onClose}
+            disabled={submitting}
+            data-testid="farm-bind-modal-cancel"
+          >
             {t('common.cancel')}
           </Button>
           <Button
@@ -106,7 +111,7 @@ export function FarmBindModal({
         {unboundContainers.length === 0 ? (
           <div className="hint">{t('farm.bind_modal.no_unbound_containers')}</div>
         ) : (
-          <div className="form-group">
+          <div className="form-group" data-testid="farm-bind-modal-container">
             <label>{t('farm.bind_modal.container_label')}</label>
             <Select
               value={containerId}
@@ -118,7 +123,7 @@ export function FarmBindModal({
           </div>
         )}
 
-        <div className="form-group">
+        <div className="form-group" data-testid="farm-bind-modal-env-select">
           <label>{t('farm.bind_modal.env_label')}</label>
           <Select
             value={env}
@@ -128,7 +133,7 @@ export function FarmBindModal({
           />
         </div>
 
-        <div className="form-group">
+        <div className="form-group" data-testid="farm-bind-modal-account-select">
           <label>{t('farm.bind_modal.account_label')}</label>
           <AsyncPanel
             loading={accountsLoading}

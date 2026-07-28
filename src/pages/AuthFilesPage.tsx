@@ -10,7 +10,7 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { animate } from 'motion/mini';
 import type { AnimationPlaybackControlsWithThen } from 'motion-dom';
 import { useInterval } from '@/hooks/useInterval';
@@ -240,6 +240,7 @@ export function AuthFilesPage() {
   const pageTransitionLayer = usePageTransitionLayer();
   const isCurrentLayer = pageTransitionLayer ? pageTransitionLayer.status === 'current' : true;
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [filter, setFilter] = useState<'all' | string>('all');
   const [problemOnly, setProblemOnly] = useState(false);
@@ -430,6 +431,35 @@ export function AuthFilesPage() {
     }
 
     setUiStateHydrated(true);
+  }, []);
+
+  // 深链高亮（P7-4「重新授权移出农场页」）：农场页需要重新授权的账号跳转到
+  // `/auth-files?highlight=<accountName>` 时，直接用账号名覆盖上面持久化
+  // 恢复的搜索词/类型筛选，把该账号单独筛出来，不需要用户自己再手动搜索。
+  // 只在挂载时读一次 query 参数（不跟随用户后续输入持续同步），随后清掉
+  // query 参数——避免用户改了搜索框后，浏览器前进/后退或刷新又把旧的
+  // highlight 值重新带回来覆盖用户已经改过的输入。effect 顺序放在上面的
+  // 「从 localStorage 恢复」effect 之后声明，保证同为 `[]` 依赖时后声明的
+  // 覆盖先声明的（React 按声明顺序依次触发 mount 阶段的 effect）。
+  useEffect(() => {
+    const highlightAccount = searchParams.get('highlight');
+    if (!highlightAccount) return;
+    setSearch(highlightAccount);
+    setFilter('all');
+    // 深链目标账号未必是「有问题」的账号（也可能只是需要重新授权但当前
+    // 没有报错状态消息）；若用户此前开过「仅问题」过滤（从 localStorage
+    // 恢复），不重置就会把深链目标过滤掉，reauth 入口静默断掉。
+    setProblemOnly(false);
+    setPage(1);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('highlight');
+        return next;
+      },
+      { replace: true }
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {

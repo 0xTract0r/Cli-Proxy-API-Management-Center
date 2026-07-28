@@ -18,7 +18,8 @@ export interface UseFarmContainersResult {
  * 拉容器池 + 轮询保活状态。isConfigured=false（编排器地址/admin key 未配置）
  * 时不发请求，直接给空态，交由页面展示配置引导。
  */
-export function useFarmContainers(): UseFarmContainersResult {
+export function useFarmContainers(options: { enabled?: boolean } = {}): UseFarmContainersResult {
+  const { enabled = true } = options;
   const { t } = useTranslation();
   const isConfigured = useFarmStore((state) => state.isConfigured);
   const [containers, setContainers] = useState<FarmContainerView[]>([]);
@@ -26,7 +27,7 @@ export function useFarmContainers(): UseFarmContainersResult {
   const [error, setError] = useState('');
 
   const reload = useCallback(async () => {
-    if (!isConfigured) {
+    if (!isConfigured || !enabled) {
       setContainers([]);
       setError('');
       setLoading(false);
@@ -42,7 +43,7 @@ export function useFarmContainers(): UseFarmContainersResult {
     } finally {
       setLoading(false);
     }
-  }, [isConfigured, t]);
+  }, [enabled, isConfigured, t]);
 
   useEffect(() => {
     setLoading(true);
@@ -51,7 +52,7 @@ export function useFarmContainers(): UseFarmContainersResult {
 
   useInterval(() => {
     reload();
-  }, isConfigured ? FARM_CONTAINERS_POLL_INTERVAL_MS : null);
+  }, isConfigured && enabled ? FARM_CONTAINERS_POLL_INTERVAL_MS : null);
 
   return { containers, setContainers, loading, error, reload };
 }

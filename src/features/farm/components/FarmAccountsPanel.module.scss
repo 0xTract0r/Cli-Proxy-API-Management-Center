@@ -69,16 +69,61 @@
   color: var(--muted-foreground);
 }
 
-// 账号名 + 「已禁用」中性 tag 同排（P0-8 状态栏双列 A1）：disabled 从状态列
-// 移除后落到这里，与真实健康状态（HealthPill）不再共享同一格、不争视觉权重。
+// 账号名主/副行（P7-2）：主行 note（或回退 email/文件名）+ 「已禁用」中性
+// tag 同排；note 非空时副行用 mono 小字展示 email/文件名，帮助 operator 在
+// 一眼认出"AC04"这类简短备注的同时，仍能核对回真实账号标识。
 .nameCell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nameCellPrimary {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
 }
 
+.nameCellSecondary {
+  font-size: 12px;
+}
+
 .disabledTag {
+  white-space: nowrap;
+}
+
+// 两维徽标公共外壳（用户②「状态栏两维徽标」）：HealthPill 之外纵向堆叠
+// 可见 reason badge + as-of 行，账号认证态列与容器运行态列共用同一套视觉。
+.planeCell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+// 风险 reason 从 HealthPill 的 title tooltip 升级为可见 badge（用户②）：
+// 复用站内已有 status-badge error/warning 着色，不新造颜色 token。与下方
+// .panel :global(.status-badge) 的 nowrap 规则保持一致（不单独覆盖），本列
+// reason 文案控制在短语级别，nowrap 不会造成裁切。
+.reasonBadge {
+  font-size: 11px;
+}
+
+.asOfRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+}
+
+.asOfLabel {
+  color: var(--muted-foreground);
+}
+
+.staleBadge {
+  font-size: 10px;
   white-space: nowrap;
 }
 
@@ -102,6 +147,13 @@
   flex-direction: column;
   align-items: flex-start;
   gap: 4px;
+
+  // 账号行每行一个 device_id 来源徽标；全局 success 的亮绿色正文在浅色底仅约
+  // 2.2:1。仅在农场账号来源列改用主题化 success badge 文本色，图形语义与底色
+  // 不变；浅色/纯白/深色主题下分别约 6.2/7.1/10.0:1。
+  :global(.status-badge.success) {
+    color: var(--success-badge-text, #065f46);
+  }
 }
 
 .deviceSourceMeta {
@@ -120,7 +172,9 @@
   border-radius: var(--radius-md, $radius-md);
   border: 1px solid var(--border-color);
   background: var(--muted-bg);
-  color: var(--muted-foreground);
+  // 环境 chip 是农场自有中性标签；muted 前景/背景在默认浅色主题仅约 4.48:1。
+  // 改用主题主文字色后仍保持中性底色，浅色/纯白/深色均远高于 AA（≥11.46:1）。
+  color: var(--text-primary);
   font-size: 12px;
   white-space: nowrap;
 }
@@ -159,9 +213,10 @@
   white-space: nowrap;
 }
 
-// 重新授权格：按钮之外，轮询中展示等待提示 + 复制/打开/取消操作行，
-// 失败态在按钮下方追加持久错误文案（对齐 authFiles 侧 AuthFileCard 的
-// 呈现方式，见 useFarmReauth 顶部注释）。
+// 重新授权格（P7-4）：不再内嵌 OAuth 回调状态机（原
+// starting/polling/callback 轮询 + 手动回调 URL 表单已整体移除，改为静态
+// 「需要重新授权」badge + 深链按钮跳到账号管理页），本格只剩隔离提示
+// （可选）+ badge + 按钮三者纵向堆叠。
 .reauthCell {
   display: flex;
   flex-direction: column;
@@ -169,86 +224,27 @@
   gap: 6px;
 }
 
-// 直接用 --muted-foreground（=--text-secondary）而不是 .refreshTimestamp 那种
-// 固定 #6b7280 覆盖：按三套主题背景实测，--muted-foreground 本身在浅色/纯白/
-// 深色下对比度分别约 4.8/5.6/9.8:1，均满足 WCAG AA 4.5:1；固定 #6b7280 反而在
-// 深色主题（背景 #1d1b18）下只有约 3.6:1，不满足。
-.reauthWaitingLabel {
-  font-size: 12px;
-  color: var(--muted-foreground);
-}
-
-.reauthActionRow {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-}
-
-// 错误文案对比度需求同 .refreshTimestamp：直接用 --error-color 在浅色卡片背景
-// 下仅约 3.7:1，不够 WCAG AA 正文 4.5:1；改用站内已有的
-// --failure-badge-text（AuthFilesPage/UsagePage/LogsPage 等已在用，浅色/深色
-// 主题各自取值 #8a3a30 / #f1b0a6，均已满足 4.5:1）。
-.reauthErrorText {
-  font-size: 12px;
-  color: var(--failure-badge-text, #8a3a30);
-}
-
-// 自动隔离态引导重新认证提示（T3 telemetry-farm-ux-hardening）：复用
-// .reauthErrorText 同一套已验证 AA 对比度结论（--failure-badge-text 在浅色/
-// 纯白/深色三套主题下均 ≥4.5:1），与账号健康列 err 档 HealthPill 视觉呼应，
-// 突出"需要立即处理"而非普通提示。
+// 自动隔离态引导重新认证提示（T3 telemetry-farm-ux-hardening）：
+// --failure-badge-text 在浅色/纯白/深色三套主题下均 ≥4.5:1 WCAG AA 对比度，
+// 与账号认证态列 err 档 HealthPill 视觉呼应，突出"需要立即处理"而非普通提示。
 .quarantineNotice {
   font-size: 12px;
   font-weight: 600;
   color: var(--failure-badge-text, #8a3a30);
 }
 
+// 「需要重新授权」静态 badge（P7-4）：复用站内 status-badge warning 着色，
+// 与下方深链按钮同排堆叠，明确告知 operator"这里需要处理"而不直接内嵌操作。
+.reauthNeededBadge {
+  white-space: nowrap;
+}
+
 // 隔离但当前账号未提供 reauth_url（非 anthropic provider）时的兜底文案：不是
 // 错误本身，只是暂无一键入口，用中性 muted 文案而非错误色，与
-// .reauthWaitingLabel 同一对比度结论（--muted-foreground 三套主题均
-// ≥4.5:1）。
+// --muted-foreground 三套主题均 ≥4.5:1 对比度结论一致。
 .quarantineNoticeMuted {
   font-size: 12px;
   color: var(--muted-foreground);
-}
-
-// 手动回调 URL 入口（对齐 authFiles 侧 AuthFilesPage.module.scss 同名区块）：
-// 远程管理端下自动轮询回调不通时的兜底手动提交入口，与上方 .reauthActionRow
-// 同格纵向堆叠。
-.reauthCallbackSection {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px;
-  border-radius: 8px;
-  border: 1px solid color-mix(in srgb, var(--border-color) 65%, transparent);
-  background: color-mix(in srgb, var(--bg-secondary) 60%, transparent);
-  width: 100%;
-
-  :global(.form-group) {
-    margin-bottom: 0;
-  }
-
-  :global(.hint) {
-    font-size: 12px;
-  }
-}
-
-.reauthCallbackActions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-// 沿用 .reauthErrorText 同一套对比度校验结论：--success-color 在浅色卡片背景
-// 下不满足 WCAG AA 4.5:1（同 authFiles 侧 .reauthCallbackSuccess 用
-// --success-color 的差异），改用站内已有的高对比 --success-badge-text
-// （浅色/纯白/深色主题各自取值均 ≥4.5:1，FarmConfigPanel 同款用法）。
-.reauthCallbackSuccess {
-  font-size: 12px;
-  color: var(--success-badge-text, #065f46);
 }
 
 // 表头一律单行，避免窄视口下逐字竖排（如「已/禁/用」）。

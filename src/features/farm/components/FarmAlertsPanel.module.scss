@@ -75,9 +75,11 @@
 }
 
 .containerId {
+  min-width: 0;
   font-family: $font-mono;
   font-weight: 500;
   color: var(--text-primary);
+  overflow-wrap: anywhere;
 }
 
 .reason {
@@ -96,6 +98,21 @@
 
 .mono {
   font-family: $font-mono;
+  overflow-wrap: anywhere;
+}
+
+.summary {
+  border-color: color-mix(in srgb, var(--health-err) 22%, var(--border-color));
+}
+
+.moreRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-sm;
+  padding-top: $spacing-sm;
+  font-size: 13px;
+  color: var(--muted-foreground);
 }
 
 @include mobile {

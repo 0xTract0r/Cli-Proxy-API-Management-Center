@@ -89,3 +89,48 @@ export function segmentToAreaPath(segment: ChartPoint[], height: number, padding
   const last = segment[segment.length - 1];
   return `${line} L${last.x.toFixed(2)},${baseline.toFixed(2)} L${first.x.toFixed(2)},${baseline.toFixed(2)} Z`;
 }
+
+/**
+ * 直方图分桶（用户④「请求间隔 DTO」inter-arrival 直方图，容器详情「探针
+ * 保活节奏」区块）：把一组原始数值（探针到达间隔，单位秒）按值域均分成
+ * `bucketCount` 个等宽区间并计数，供渲染方直接映射到条形高度。
+ *
+ * 与 mapSeriesToPoints（时序 → 坐标点）是两个不同的几何问题：时序图关心
+ * "第 i 个样本的值是多少"（保序），直方图关心"落在某个值区间的样本有多少个"
+ * （不保序，反映分布形状）。不复用 mapSeriesToPoints。
+ *
+ * 空数组或全部同值时退化为单一桶（避免除零把值域压成 0 宽区间）。
+ */
+export interface HistogramBucket {
+  /** 区间下界（含），单位与输入值相同。 */
+  rangeStart: number;
+  /** 区间上界（不含，最后一个桶含上界本身）。 */
+  rangeEnd: number;
+  count: number;
+}
+
+export function buildHistogram(values: number[], bucketCount = 8): HistogramBucket[] {
+  const finite = values.filter((v) => typeof v === 'number' && Number.isFinite(v));
+  if (finite.length === 0) return [];
+
+  const min = Math.min(...finite);
+  const max = Math.max(...finite);
+  if (max - min < 1e-9) {
+    return [{ rangeStart: min, rangeEnd: max, count: finite.length }];
+  }
+
+  const buckets: HistogramBucket[] = Array.from({ length: bucketCount }, (_, i) => {
+    const rangeStart = min + (i * (max - min)) / bucketCount;
+    const rangeEnd = min + ((i + 1) * (max - min)) / bucketCount;
+    return { rangeStart, rangeEnd, count: 0 };
+  });
+
+  for (const v of finite) {
+    // 按值域比例定位桶下标；最大值本身落进最后一个桶（避免越界）。
+    const ratio = (v - min) / (max - min);
+    const idx = Math.min(bucketCount - 1, Math.floor(ratio * bucketCount));
+    buckets[idx].count += 1;
+  }
+
+  return buckets;
+}

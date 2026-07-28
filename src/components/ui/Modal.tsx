@@ -24,6 +24,51 @@ interface ModalProps {
 
 const CLOSE_ANIMATION_DURATION = 350;
 
+type OpenModalEntry = {
+  id: symbol;
+  elementRef: { current: HTMLDivElement | null };
+  closeDisabledRef: { current: boolean };
+  closeRef: { current: () => void };
+};
+
+const openModalStack: OpenModalEntry[] = [];
+let isModalKeydownListenerAttached = false;
+
+function removeOpenModal(id: symbol) {
+  for (let index = openModalStack.length - 1; index >= 0; index -= 1) {
+    if (openModalStack[index].id === id) openModalStack.splice(index, 1);
+  }
+}
+
+function handleModalKeyDown(event: KeyboardEvent) {
+  if (event.key !== 'Escape') return;
+
+  // Effects may clean up after a portal has already left the DOM. Prune those stale entries so
+  // a closing/unmounted modal can never consume the top position from a newly opened modal.
+  while (openModalStack.length > 0) {
+    const topModal = openModalStack[openModalStack.length - 1];
+    if (topModal.elementRef.current?.isConnected) {
+      if (topModal.closeDisabledRef.current) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      topModal.closeRef.current();
+      return;
+    }
+    openModalStack.pop();
+  }
+}
+
+function syncModalKeydownListener() {
+  if (typeof window === 'undefined') return;
+  if (openModalStack.length > 0 && !isModalKeydownListenerAttached) {
+    window.addEventListener('keydown', handleModalKeyDown, true);
+    isModalKeydownListenerAttached = true;
+  } else if (openModalStack.length === 0 && isModalKeydownListenerAttached) {
+    window.removeEventListener('keydown', handleModalKeyDown, true);
+    isModalKeydownListenerAttached = false;
+  }
+}
+
 export function Modal({
   open,
   title,
@@ -39,7 +84,10 @@ export function Modal({
   const [isVisible, setIsVisible] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const modalStackIdRef = useRef(Symbol('modal'));
   const modalRef = useRef<HTMLDivElement | null>(null);
+  const closeDisabledRef = useRef(closeDisabled);
+  const closeRef = useRef<() => void>(() => undefined);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
 
@@ -95,6 +143,9 @@ export function Modal({
     startClose(true);
   }, [startClose]);
 
+  closeDisabledRef.current = closeDisabled;
+  closeRef.current = handleClose;
+
   useEffect(() => {
     return () => {
       if (closeTimerRef.current !== null) {
@@ -136,14 +187,26 @@ export function Modal({
   useEffect(() => {
     if (!open) return;
 
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        if (closeDisabled) return;
-        event.preventDefault();
-        handleClose();
-        return;
-      }
+    const modalStackId = modalStackIdRef.current;
+    removeOpenModal(modalStackId);
+    openModalStack.push({
+      id: modalStackId,
+      elementRef: modalRef,
+      closeDisabledRef,
+      closeRef,
+    });
+    syncModalKeydownListener();
 
+    return () => {
+      removeOpenModal(modalStackId);
+      syncModalKeydownListener();
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Tab') return;
 
       const focusableElements = getFocusableElements();
@@ -173,7 +236,7 @@ export function Modal({
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [closeDisabled, getFocusableElements, handleClose, open]);
+  }, [getFocusableElements, open]);
 
   if (!open && !isVisible) return null;
 

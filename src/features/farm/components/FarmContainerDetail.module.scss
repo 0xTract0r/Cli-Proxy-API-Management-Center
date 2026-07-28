@@ -32,8 +32,19 @@
 }
 
 @include mobile {
+  :global(.modal-overlay):has(.drawer) {
+    padding: $spacing-sm;
+  }
+
   .drawer {
-    width: 100vw !important;
+    width: 100% !important;
+    max-height: calc(100vh - #{$spacing-sm} * 2);
+  }
+
+  @supports (height: 100dvh) {
+    .drawer {
+      max-height: calc(100dvh - #{$spacing-sm} * 2);
+    }
   }
 }
 
@@ -57,7 +68,16 @@
 .body {
   display: flex;
   flex-direction: column;
-  gap: $spacing-lg;
+  gap: $spacing-md;
+  min-width: 0;
+}
+
+.drawerActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-sm;
+  flex-wrap: wrap;
 }
 
 .section {
@@ -234,4 +254,65 @@
   align-items: center;
   gap: $spacing-sm;
   flex-wrap: wrap;
+}
+
+// 用户④「请求间隔 DTO」：口径徽标（"口径：探针到达间隔" / "口径：账号 CPA
+// 累计"），复用站内 status-badge 视觉但用中性 muted 底色——这不是健康状态，
+// 只是标注数据来源/统计口径，不该借用语义色误导成"警告/正常"。
+.scopeBadge {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  padding: 2px 8px;
+  border-radius: var(--radius-md, $radius-md);
+  border: 1px solid var(--border-color);
+  background: var(--muted-bg);
+  color: var(--muted-foreground);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+// 探针到达间隔直方图：默认 8 桶，等宽条形 + 底部计数，用纯 CSS 高度百分比
+// 渲染（见 FarmContainerDetail.tsx HistogramBar 顶部注释，不引入额外 SVG
+// 几何计算）。
+.histogramRow {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 64px;
+  padding: 4px;
+  border: 1px solid var(--border-color);
+  border-radius: $radius-sm;
+  background: var(--bg-primary);
+}
+
+.histogramBarCol {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+}
+
+.histogramBarTrack {
+  display: flex;
+  align-items: flex-end;
+  width: 100%;
+  height: 100%;
+}
+
+.histogramBar {
+  width: 100%;
+  min-height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--primary-color);
+}
+
+.histogramBarCount {
+  font-size: 10px;
+  color: var(--muted-foreground);
 }

@@ -68,7 +68,9 @@ export function FarmUsagePanel() {
       </div>
 
       {note ? (
-        <p className={styles.note}>{t('farm.usage.sinceNote', { defaultValue: note })}</p>
+        <p className={styles.note} data-testid="farm-usage-note">
+          {t('farm.usage.sinceNote', { defaultValue: note })}
+        </p>
       ) : null}
 
       <AsyncPanel
@@ -76,6 +78,8 @@ export function FarmUsagePanel() {
         error={error}
         isEmpty={items.length === 0}
         loadingLabel={t('common.loading')}
+        loadingTestId="farm-usage-loading"
+        errorTestId="farm-usage-error"
         empty={{ title: t('farm.usage.empty'), testId: 'farm-usage-empty' }}
       >
         <Table data-testid="farm-usage-table">

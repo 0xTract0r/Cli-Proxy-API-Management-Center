@@ -75,7 +75,9 @@
   border-radius: var(--radius-md, $radius-md);
   border: 1px solid var(--border-color);
   background: var(--muted-bg);
-  color: var(--muted-foreground);
+  // 环境 chip 是农场自有中性标签；muted 前景/背景在默认浅色主题仅约 4.48:1。
+  // 改用主题主文字色后仍保持中性底色，浅色/纯白/深色均远高于 AA（≥11.46:1）。
+  color: var(--text-primary);
   font-size: 12px;
   white-space: nowrap;
 }

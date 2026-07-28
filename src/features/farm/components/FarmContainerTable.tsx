@@ -1,4 +1,4 @@
-import { useMemo, useState, type MouseEvent } from 'react';
+import { useMemo, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Table,
@@ -36,6 +36,8 @@ interface FarmContainerTableProps {
   // 行点击打开容器详情抽屉（P0-9 <FarmContainerDetail>）；可选——不传时行为
   // 与改造前一致（行不可点，只能靠 bind/unbind/retire 按钮操作）。
   onSelectContainer?: (container: FarmContainerView) => void;
+  groupFilter?: FarmContainerFilter;
+  onGroupFilterChange?: (filter: FarmContainerFilter) => void;
 }
 
 // design.md 容器生命周期：created(已入池未起) / starting(已起等 Poller 判回) /
@@ -61,7 +63,7 @@ const STATUS_BADGE_VARIANT: Record<string, 'success' | 'warning' | 'error' | 'mu
 // 而非「已退役」，保证过滤标签与行内容（可能是已退役或幽灵态）语义自洽；行内
 // 状态徽标仍按各自精确状态（已退役 / 幽灵态）着色区分。
 type FarmContainerGroup = 'active' | 'created' | 'degraded' | 'down' | 'retired';
-type FarmContainerFilter = 'all' | FarmContainerGroup;
+export type FarmContainerFilter = 'all' | FarmContainerGroup;
 
 const FARM_CONTAINER_GROUPS: FarmContainerGroup[] = ['active', 'created', 'degraded', 'down', 'retired'];
 
@@ -105,9 +107,16 @@ export function FarmContainerTable({
   onUnbind,
   onRetire,
   onSelectContainer,
+  groupFilter: controlledGroupFilter,
+  onGroupFilterChange,
 }: FarmContainerTableProps) {
   const { t, i18n } = useTranslation();
-  const [groupFilter, setGroupFilter] = useState<FarmContainerFilter>('active');
+  const [internalGroupFilter, setInternalGroupFilter] = useState<FarmContainerFilter>('active');
+  const groupFilter = controlledGroupFilter ?? internalGroupFilter;
+  const setGroupFilter = (value: FarmContainerFilter) => {
+    if (controlledGroupFilter === undefined) setInternalGroupFilter(value);
+    onGroupFilterChange?.(value);
+  };
 
   // "已退役"分组数据不在默认活跃轮询里（见 useFarmContainers 顶部注释），只
   // 在 operator 选中 retired 或 all 时才按需拉取，避免默认视图/绑定弹窗的
@@ -121,7 +130,13 @@ export function FarmContainerTable({
 
   const rows = useMemo(() => {
     if (groupFilter === 'retired') return retiredContainers;
-    if (groupFilter === 'all') return [...containers, ...retiredContainers];
+    if (groupFilter === 'all') {
+      const rowsById = new Map<string, FarmContainerView>();
+      for (const container of [...containers, ...retiredContainers]) {
+        if (!rowsById.has(container.id)) rowsById.set(container.id, container);
+      }
+      return [...rowsById.values()];
+    }
     return containers.filter((c) => groupOfStatus(c.status) === groupFilter);
   }, [containers, retiredContainers, groupFilter]);
 
@@ -137,15 +152,18 @@ export function FarmContainerTable({
     <div className={styles.tableWrap} data-testid="farm-container-table-wrap">
       <div className={styles.filterBar} data-testid="farm-container-filter">
         <span className={styles.filterLabel}>{t('farm.filter.statusLabel')}</span>
-        <Select
-          value={groupFilter}
-          options={filterOptions}
-          onChange={(value) => setGroupFilter(value as FarmContainerFilter)}
-          ariaLabel={t('farm.filter.statusLabel')}
-          size="sm"
-          fullWidth={false}
-          className={styles.filterSelect}
-        />
+        <div data-testid="farm-container-status-select">
+          <Select
+            value={groupFilter}
+            options={filterOptions}
+            onChange={(value) => setGroupFilter(value as FarmContainerFilter)}
+            ariaLabel={t('farm.filter.statusLabel')}
+            size="sm"
+            fullWidth={false}
+            className={styles.filterSelect}
+            id="farm-container-status-select-control"
+          />
+        </div>
       </div>
 
       <AsyncPanel
@@ -207,13 +225,25 @@ export function FarmContainerTable({
               const handleRowClick = onSelectContainer
                 ? () => onSelectContainer(container)
                 : undefined;
+              const handleRowKeyDown = onSelectContainer
+                ? (event: KeyboardEvent<HTMLTableRowElement>) => {
+                    if (event.target !== event.currentTarget) return;
+                    if (event.key !== 'Enter' && event.key !== ' ') return;
+                    event.preventDefault();
+                    onSelectContainer(container);
+                  }
+                : undefined;
               const stopRowClick = (event: MouseEvent) => event.stopPropagation();
+              const stopRowKeyDown = (event: KeyboardEvent) => event.stopPropagation();
 
               return (
                 <TableRow
                   key={container.id}
                   data-testid={`farm-container-row-${container.id}`}
                   onClick={handleRowClick}
+                  onKeyDown={handleRowKeyDown}
+                  tabIndex={onSelectContainer ? 0 : undefined}
+                  aria-label={onSelectContainer ? `${container.id} · ${statusLabel}` : undefined}
                   className={onSelectContainer ? styles.clickableRow : undefined}
                 >
                   <TableCell data-label={t('farm.containers.column_device')}>
@@ -305,6 +335,7 @@ export function FarmContainerTable({
                     alignRight
                     data-label={t('farm.containers.column_actions')}
                     onClick={onSelectContainer ? stopRowClick : undefined}
+                    onKeyDown={onSelectContainer ? stopRowKeyDown : undefined}
                   >
                     <div className={styles.actions}>
                       {isArchived ? (

@@ -17,15 +17,15 @@
   gap: $spacing-md;
 }
 
-// tablet(1024) 中间档：6 列在平板宽度会挤得每格文字换行，降到 3 列 x 2 行；
-// 桌面(>1024)维持 6 列一行，手机(<=768)降到 2 列。
+// 1440：6 列；768：3×2；390：2×3。精确 768 不能落到手机两列，
+// 否则平板首屏会无谓拉长。
 @include tablet {
   .kpiRow {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
-@include mobile {
+@media (max-width: 480px) {
   .kpiRow {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

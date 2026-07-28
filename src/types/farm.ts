@@ -73,6 +73,19 @@ export interface FarmContainerView {
   device_id_alignment?: Extract<FarmDeviceIDSource, 'container_synced' | 'drift' | 'unknown'>;
   // 下一次探针估算，仅 running/degraded 容器给出。
   next_keepalive_estimate?: FarmNextEstimateView;
+  // AccountAuthStatus/AccountAuthReason（FO2「假绿修复：健康两平面」，dto.go
+  // containerView 同名字段）：账号认证态平面，与本结构体其余「容器运行态」
+  // 字段（status/health_reason）完全独立推导，供前端展示两个独立维度的徽标。
+  // 取值：alive（快照新鲜且账号未 disabled/auto_quarantined、token 存活）/
+  // dead（新鲜快照证实账号 disabled/auto_quarantined 或 token 不活，
+  // account_auth_reason 给出具体原因）/ unknown（未绑定 / 从未采集 / 快照已
+  // 陈旧超过后端 AccountStateStaleThreshold(15min) / 账号态存储未装配）。
+  // account_auth_reason 只在 dead 时有意义，取值
+  // account_disabled/account_auto_quarantined/account_token_dead 三者之一；
+  // unknown 态下可能为空串或字面 "stale"（陈旧但曾采集到过），前端不应假造
+  // 其它文案。未绑定容器留空（无账号可判定）。
+  account_auth_status?: string;
+  account_auth_reason?: string;
 }
 
 // 容器状态取值（store.Status* 常量，供前端徽标着色用；未知值按 fallback 灰色处理）
@@ -186,6 +199,16 @@ export type FarmDeviceIDSource = (typeof FARM_DEVICE_ID_SOURCES)[number];
 // （Go 侧 omitempty），非农场账号不出现这几个字段。
 export interface FarmAccountEntry {
   name: string;
+  // Account 是 CPA 侧的邮箱账号（cpa.AuthFileEntry.Account，如
+  // "acct1@example.com"），区别于 name（auth 文件名，如
+  // "claude-acct1@example.com.json"）。仅在 CPA 返回时才有值，声明
+  // omitempty 对齐字段可选。
+  account?: string;
+  // Note 是账号备注（P7-2，cpa.AuthFileEntry.Note，如 "AC04"/"GC08"），
+  // synthesizer 从 auth 文件 JSON 的 "note" 字段派生或回退读
+  // Metadata["note"]，仅在非空时才出现。前端账号行主行优先展示该字段，
+  // 空时回退显示 account/name（P7-2 备注展示口径）。
+  note?: string;
   // "quarantined" 是新增可能值（T3 telemetry-farm-ux-hardening，core 自动隔离），
   // 与既有 active/error/disabled 等值并列；core 侧复核指出该字符串可能与
   // auto_quarantined 短暂不一致（清隔离锁与 status 落库非原子），前端判定
@@ -251,10 +274,15 @@ export interface FarmUsageItem {
 }
 
 // GET /api/farm/usage 响应体。note 固定携带口径说明（"自 CPA 上次重启起
-// (内存态)"），前端应原样展示，不要另造措辞。
+// (内存态)"），前端应原样展示，不要另造措辞。scope 固定为 "cpa_account_
+// cumulative"（用户④「请求间隔 DTO」分栏要求，dto.go usageScope 常量），
+// 供前端程序化区分「账号 CPA 累计用量」与容器详情「探针保活节奏」
+// （FarmProbeCadenceView.scope="farm_probe_cadence"）两个口径，不需要解析
+// note 中文文案。
 export interface FarmUsageResponse {
   items: FarmUsageItem[];
   note: string;
+  scope: string;
 }
 
 // GET /api/farm/resources 单条容器资源记录（对已绑定且 running 的农场容器执行
@@ -393,4 +421,72 @@ export type FarmAlertEntry = FarmEventView;
 
 export interface FarmAlertsResponse {
   alerts: FarmAlertEntry[];
+}
+
+// ---------------------------------------------------------------------------
+// FO1「账号态单一采集源」：GET /api/farm/account-state（dto.go
+// accountStateView / accountStateListResponse）
+// ---------------------------------------------------------------------------
+
+// accountStateView 是 account_state 表一行的只读投影（farmrunner.
+// AccountStateCollector 周期采集落库），供前端核对「后端到底采到了什么」，
+// 以及本轮 P7 用它的 observed_at 给两维徽标补「as-of 时间戳 + 陈旧标记」
+// （见 features/farm/utils/health.ts decideAccountAuthPlane 对
+// farmrunner.DecideAccountAuthPlane 的前端复刻）。
+export interface FarmAccountStateView {
+  account_id: string;
+  env: string;
+  status?: string;
+  disabled: boolean;
+  auto_quarantined: boolean;
+  quarantine_reason?: string;
+  quarantined_at?: string;
+  last_refresh?: string;
+  reauth_url?: string;
+  // token_alive 见 store.AccountState.TokenAlive 文档：采集时刻派生
+  // （reauth_url 为空时为 true），不是本端点新发明的健康算法。
+  token_alive: boolean;
+  observed_at: string;
+}
+
+// GET /api/farm/account-state 响应体。env 回显请求的 ?env= 过滤值，未传时
+// 为空串（表示跨 test/prod 不限）。
+export interface FarmAccountStateListResponse {
+  env?: string;
+  accounts: FarmAccountStateView[];
+}
+
+// ---------------------------------------------------------------------------
+// 用户④「请求间隔 DTO」：GET /api/farm/containers/{id}/probe-cadence
+// （dto.go probeCadenceView）
+// ---------------------------------------------------------------------------
+
+// probeCadenceView 是「探针节奏」维度的对外形状，与 FarmUsageItem（账号 CPA
+// 累计用量维度）刻意分成两个独立端点/两套字段，不合并计数——避免
+// sorrygml40「一绑定就163次」把 usageItemView.Requests 误当成"绑定后触发了
+// 163 次探针"的口径混淆（见 scope 字段注释）。
+export interface FarmProbeCadenceView {
+  container_id: string;
+  // 相邻探针到达时间的间隔（inter-arrival，单位秒），按时间升序排列，长度
+  // = sample_count-1（sample_count<=1 时为空数组，不是 undefined，对齐
+  // FarmKeepaliveBucketView 同款「空窗口返回空序列」口径）。不区分 ok/
+  // fail——探针节奏统计「到达」这个事实本身。
+  intervals_seconds: number[];
+  // 本次用于推导 intervals_seconds 的原始样本数（?window= 窗口内最近至多
+  // ?limit= 条）。
+  sample_count: number;
+  // 窗口内最近一次探针到达时间；从未有样本或窗口内无样本时缺失。
+  last_fired_at?: string;
+  // 复用既有「下次探针估算」口径（FarmNextEstimateView），显式标注随机
+  // 抖动、非精确唤醒时间；这里的 avg_observed_seconds_24h 直接由
+  // intervals_seconds 求平均得出（不是分桶近似），比容器列表/详情里的桶
+  // 近似版本更精确。只对 running/degraded 容器给出，其余状态缺失（不会
+  // 再有下一次探针）。
+  next_expected_window?: FarmNextEstimateView;
+  // 固定为 "farm_probe_cadence"，供前端程序化区分口径（对照
+  // FarmUsageResponse.scope="cpa_account_cumulative"）。
+  scope: string;
+  // 固定携带口径说明，不能省略——这个端点存在的唯一理由就是把「探针节奏」
+  // 和「账号累计用量」两个容易被混淆的数字显式分开标注。
+  note: string;
 }

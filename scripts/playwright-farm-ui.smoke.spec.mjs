@@ -66,6 +66,38 @@ async function setupMockedFarmApi(page) {
   let bindingCalls = 0;
   let unbindCalls = 0;
 
+  await page.route('**/v0/management/**', async (route) => {
+    const pathname = new URL(route.request().url()).pathname;
+    const respond = (body, status = 200) =>
+      route.fulfill({
+        status,
+        contentType: 'application/json',
+        body: JSON.stringify(body),
+        headers: {
+          'X-CPA-VERSION': 'playwright-smoke',
+          'X-CPA-COMMIT': 'mock',
+          'X-CPA-BUILD-DATE': new Date().toISOString(),
+        },
+      });
+    if (pathname.endsWith('/config')) {
+      return respond({
+        debug: false,
+        'api-keys': [],
+        'proxy-url': '',
+        'request-retry': 2,
+        'usage-statistics-enabled': false,
+        routing: { strategy: 'round-robin' },
+      });
+    }
+    return respond({});
+  });
+
+  await page.addInitScript(() => {
+    window.localStorage.setItem('apiBase', '');
+    window.localStorage.setItem('managementKey', 'mock-management-key');
+    window.localStorage.setItem('isLoggedIn', 'true');
+  });
+
   await page.route('**/api/farm/containers', async (route) => {
     const request = route.request();
     if (request.method() === 'GET') {
@@ -143,31 +175,43 @@ test('farm page: configure orchestrator, render container pool, bind and unbind'
 
   await page.goto(targetUrl, { waitUntil: 'domcontentloaded' });
 
-  // 1) 页面加载 + 配置面板存在
-  const configPanel = page.locator('[data-testid="farm-config-panel"]');
+  // 1) 页面加载 + 打开配置抽屉，确认配置面板存在
+  await page.locator('[data-testid="farm-config-trigger"]').click();
+  const configDrawer = page.locator('[data-testid="farm-config-drawer"]');
+  const configPanel = configDrawer.locator('[data-testid="farm-config-panel"]');
   await expect(configPanel).toBeVisible({ timeout: 15000 });
 
   // 2) 未配置前，容器池区域展示配置引导，不是表格
   await expect(page.locator('[data-testid="farm-not-configured"]')).toBeVisible();
 
-  // 3) 填写编排器地址 + admin key 并保存（真实表单交互，不是 localStorage 注入）
-  await page.locator('[data-testid="farm-config-base-url"]').fill(farmOrchestratorBase);
-  await page.locator('[data-testid="farm-config-admin-key"]').fill(farmAdminKey);
-  await page.locator('[data-testid="farm-config-save"]').click();
+  // 3) 在配置抽屉填写编排器地址 + admin key 并保存（真实表单交互，不是 localStorage 注入）
+  await configDrawer.locator('[data-testid="farm-config-base-url"]').fill(farmOrchestratorBase);
+  await configDrawer.locator('[data-testid="farm-config-admin-key"]').fill(farmAdminKey);
+  await configDrawer.locator('[data-testid="farm-config-save"]').click();
 
   // 4) 保存后应显示「已配置」，并自动拉取容器池表格（真实数据渲染断言）
   await expect(configPanel).toContainText(/已配置|Configured/i);
-  const table = page.locator('[data-testid="farm-container-table"]');
+  await page.locator('[data-testid="farm-section-drawer-close-config"]').click();
+  await page.locator('[data-testid="farm-containers-trigger"]').click();
+  const containersDrawer = page.locator('[data-testid="farm-containers-drawer"]');
+  const table = containersDrawer.locator('[data-testid="farm-container-table"]');
   await expect(table).toBeVisible({ timeout: 15000 });
 
-  const boundRow = page.locator(`[data-testid="farm-container-row-${boundContainerId}"]`);
-  const unboundRow = page.locator(`[data-testid="farm-container-row-${unboundContainerId}"]`);
+  await containersDrawer.locator('[data-testid="farm-container-status-select"] button').click();
+  await page.getByRole('option', { name: /全部|All/i }).click();
+
+  const boundRow = containersDrawer.locator(`[data-testid="farm-container-row-${boundContainerId}"]`);
+  const unboundRow = containersDrawer.locator(`[data-testid="farm-container-row-${unboundContainerId}"]`);
   await expect(boundRow).toBeVisible();
   await expect(unboundRow).toBeVisible();
 
   // 已绑定容器展示解绑按钮 + 绑定账号名；未绑定容器展示绑定按钮
-  const unbindButton = page.locator(`[data-testid="farm-unbind-button-${boundContainerId}"]`);
-  const bindButton = page.locator(`[data-testid="farm-bind-button-${unboundContainerId}"]`);
+  const unbindButton = containersDrawer.locator(
+    `[data-testid="farm-unbind-button-${boundContainerId}"]`
+  );
+  const bindButton = containersDrawer.locator(
+    `[data-testid="farm-bind-button-${unboundContainerId}"]`
+  );
   await expect(unbindButton).toBeVisible();
   await expect(bindButton).toBeVisible();
   await expect(boundRow).toContainText(testAccountName);
@@ -189,18 +233,36 @@ test('farm page: configure orchestrator, render container pool, bind and unbind'
   await expect.poll(() => api.getBindingCalls(), { timeout: 15000 }).toBeGreaterThan(0);
 
   // 绑定成功后该容器应从「绑定」按钮变为「解绑」按钮（真实状态断言，非关键字数数）
-  await expect(page.locator(`[data-testid="farm-unbind-button-${unboundContainerId}"]`)).toBeVisible({
+  await expect(
+    containersDrawer.locator(`[data-testid="farm-unbind-button-${unboundContainerId}"]`)
+  ).toBeVisible({
     timeout: 15000,
   });
 
-  // 6) 解绑流程：走二次确认弹窗
+  // 6) 嵌套 ESC：只关闭栈顶解绑确认框，底层容器抽屉保持打开
   await unbindButton.click();
-  const confirmDialog = page.getByRole('dialog');
+  const confirmDialog = page
+    .getByRole('dialog')
+    .filter({ has: page.locator('[data-testid="farm-unbind-confirm"]') });
   await expect(confirmDialog).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(confirmDialog).not.toBeVisible();
+  await expect(containersDrawer).toBeVisible();
+
+  // 7) 键盘触发解绑按钮时，Enter 不得冒泡到容器行并打开详情抽屉
+  await unbindButton.focus();
+  await expect(unbindButton).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(confirmDialog).toBeVisible();
+  await expect(page.locator('[data-testid="farm-container-detail-drawer"]')).not.toBeVisible();
+
+  // 8) 确认解绑后，绑定状态和请求计数同步更新
   await confirmDialog.getByRole('button', { name: /确认|Confirm/ }).click();
 
   await expect.poll(() => api.getUnbindCalls(), { timeout: 15000 }).toBeGreaterThan(0);
-  await expect(page.locator(`[data-testid="farm-bind-button-${boundContainerId}"]`)).toBeVisible({
+  await expect(
+    containersDrawer.locator(`[data-testid="farm-bind-button-${boundContainerId}"]`)
+  ).toBeVisible({
     timeout: 15000,
   });
 
