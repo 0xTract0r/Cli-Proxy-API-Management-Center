@@ -25,6 +25,7 @@ import {
   getTypeColor,
   getTypeLabel,
   hasAuthFileStatusWarning,
+  isAuthFileAutoQuarantined,
   isAuthFileMissingProxyUrl,
   isRuntimeOnlyAuthFile,
   parsePriorityValue,
@@ -199,6 +200,29 @@ export function AuthFileCard(props: AuthFileCardProps) {
     (authIndexKey && statusBarCache.get(authIndexKey)) || calculateStatusBarData([]);
   const rawStatusMessage = getAuthFileStatusMessage(file);
   const hasStatusWarning = hasAuthFileStatusWarning(file);
+  // 自动隔离态（T3 telemetry-farm-ux-hardening 对齐）：core 权威隔离位，独立于
+  // status/unavailable 判断，避免"已隔离但显健康/启用"假绿——判定口径与农场页
+  // FarmAccountsPanel 的 isAutoQuarantined 一致。
+  const isQuarantined = isAuthFileAutoQuarantined(file);
+  // 隔离原因/时间 tooltip：复用农场页 farm.accountHealth.* 的既有 i18n 键
+  // （reason 枚举文案 + tooltip 拼句），同一份隔离说明不在两个 feature 各自
+  // 重复维护一份文案。
+  const quarantineReasonLabel = file.quarantine_reason
+    ? t(`farm.accountHealth.quarantineReason_${file.quarantine_reason}`, {
+        defaultValue: file.quarantine_reason,
+      })
+    : t('farm.accountHealth.quarantineReasonUnknown', { defaultValue: 'unknown reason' });
+  const quarantineAtLabel = file.quarantined_at
+    ? formatDateTimeUtc8(file.quarantined_at)
+    : t('farm.accountHealth.quarantineTimeUnknown', { defaultValue: 'unknown time' });
+  const quarantineTooltip = isQuarantined
+    ? t('farm.accountHealth.quarantineTooltip', {
+        reason: quarantineReasonLabel,
+        at: quarantineAtLabel,
+        defaultValue:
+          'Auto-quarantined: {{reason}} · {{at}}. Please re-authenticate to restore this account.',
+      })
+    : undefined;
   const canRefreshStatus = canReauthenticate && hasStatusWarning && !file.disabled;
   const canViewStatusHistory = canReauthenticate;
   const waitingStatusTitle = t('auth_files.reauth_waiting', {
@@ -249,22 +273,30 @@ export function AuthFileCard(props: AuthFileCardProps) {
 
   const priorityValue = parsePriorityValue(file.priority ?? file['priority']);
   const noteValue = typeof file.note === 'string' ? file.note.trim() : '';
+  // 隔离优先级：仅次于「虚拟认证文件」，高于 disabled/健康/启用兜底——
+  // auto_quarantined 是 core 权威终态信号（终态认证失败等不可重试错误），
+  // 比 operator 手动 disabled 或默认「启用」兜底更具体、更需要 operator
+  // 立即处理，不应该被其中任何一个掩盖成假绿。
   const stateLabel = isRuntimeOnly
     ? t('auth_files.type_virtual') || '虚拟认证文件'
-    : file.disabled
-      ? t('auth_files.health_status_disabled')
-      : hasStatusWarning
-        ? t('auth_files.health_status_warning')
-        : rawStatusMessage
-          ? t('auth_files.health_status_healthy')
-          : t('auth_files.status_toggle_label');
+    : isQuarantined
+      ? t('auth_files.health_status_quarantined', { defaultValue: 'Quarantined' })
+      : file.disabled
+        ? t('auth_files.health_status_disabled')
+        : hasStatusWarning
+          ? t('auth_files.health_status_warning')
+          : rawStatusMessage
+            ? t('auth_files.health_status_healthy')
+            : t('auth_files.status_toggle_label');
   const stateBadgeClass = isRuntimeOnly
     ? styles.stateBadgeVirtual
-    : file.disabled
-      ? styles.stateBadgeDisabled
-      : hasStatusWarning
-        ? styles.stateBadgeWarning
-        : styles.stateBadgeActive;
+    : isQuarantined
+      ? styles.stateBadgeWarning
+      : file.disabled
+        ? styles.stateBadgeDisabled
+        : hasStatusWarning
+          ? styles.stateBadgeWarning
+          : styles.stateBadgeActive;
   const modelsButtonTitle = t('auth_files.models_button', { defaultValue: '模型' });
   const refreshStatusButtonTitle = t('auth_files.status_refresh_button', {
     defaultValue: 'Refresh status',
@@ -327,7 +359,8 @@ export function AuthFileCard(props: AuthFileCardProps) {
                 </span>
                 <span
                   className={`${styles.stateBadge} ${stateBadgeClass}`}
-                  title={fileStatusMarkerTitle || undefined}
+                  title={quarantineTooltip || fileStatusMarkerTitle || undefined}
+                  data-testid={isQuarantined ? 'auth-file-quarantined-badge' : undefined}
                 >
                   {stateLabel}
                 </span>

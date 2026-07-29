@@ -227,6 +227,7 @@
     "health_status_healthy": "健康",
     "health_status_warning": "警告",
     "health_status_disabled": "已停用",
+    "health_status_quarantined": "已隔離",
     "health_status_unknown": "未知",
     "health_status_no_message": "暫無狀態說明",
     "last_refresh_label": "最近重新整理",

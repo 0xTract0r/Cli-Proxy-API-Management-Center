@@ -187,6 +187,18 @@ export const getAuthFileUnavailable = (file: AuthFileItem): boolean | undefined 
 };
 
 /**
+ * 归一 core 顶层 `auto_quarantined`(boolean) 字段——账号是否被 core 自动隔离
+ * （终态认证失败等不可重试错误触发，core sdk/cliproxy/auth/
+ * conductor_auto_quarantine.go markAutoQuarantine）。core 侧明确要求这是判定
+ * 隔离态的唯一权威字段，不要依赖 `status` 字符串（清隔离锁与 status 落库非
+ * 原子，可能短暂不一致）。只认真正的 boolean true，其余（undefined/false/
+ * 非 boolean）一律视为未隔离；与农场页 FarmAccountsPanel 的
+ * `Boolean(account.auto_quarantined)` 判定口径保持一致。
+ */
+export const isAuthFileAutoQuarantined = (file: AuthFileItem): boolean =>
+  file.auto_quarantined === true;
+
+/**
  * 健康态 `status` 值白名单（用于「core 下发了 status 但未下发 unavailable」的兼容判断）。
  * 仅作为结构化 status 字段的判定，不再用 status_message 自由文本做关键字匹配。
  */
@@ -223,13 +235,18 @@ export const hasAuthFileStatusMessage = (file: AuthFileItem): boolean =>
   getAuthFileStatusMessage(file).length > 0;
 
 /**
- * 是否处于「告警 / 不可用」态。判定优先级（T047 改造）：
+ * 是否处于「告警 / 不可用」态。判定优先级（T047 改造 + 隔离对齐加固）：
+ *  0. `auto_quarantined===true`：core 权威隔离位，独立于以下 unavailable/status
+ *     短路判断——unavailable===false（例如 proxy_url 等健康标记本身齐全）不能
+ *     掩盖隔离态，否则会出现「已隔离但显健康/启用」的假绿。
  *  1. core 顶层结构化 `unavailable`(boolean)：显式 true=告警，显式 false=健康。
  *  2. core 顶层结构化 `status`：非健康白名单值即告警。
- *  3. 两者都缺时，回退旧 status_message 文本白名单（兼容历史 payload）。
+ *  3. 以上都缺时，回退旧 status_message 文本白名单（兼容历史 payload）。
  * status_message 退化为纯展示文案，不再作为判定真源。
  */
 export const hasAuthFileStatusWarning = (file: AuthFileItem): boolean => {
+  if (isAuthFileAutoQuarantined(file)) return true;
+
   const unavailable = getAuthFileUnavailable(file);
   if (unavailable !== undefined) return unavailable;
 
