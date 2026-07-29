@@ -327,6 +327,21 @@ for (const viewport of viewports) {
     );
     expect(hasRootOverflow, `${viewport.name} root must not overflow horizontally`).toBe(false);
 
+    // `.dashboard`（<FarmDashboard> 根容器）用 overflow-x: clip 视觉裁切超宽
+    // 子元素，不会产生 root 级横向滚动条——只查 document 级 overflow 会漏过
+    // KPI 行被裁切的回归（真实事故：768px 视口 farm-first-screen
+    // scrollWidth=736 > clientWidth=728，第 6 张 KPI 卡被裁掉，但上面的
+    // document 级检查仍是 false）。这里额外在元素级核对 farm-first-screen 本身。
+    const firstScreenGeometry = await page.evaluate(() => {
+      const el = document.querySelector('[data-testid="farm-first-screen"]');
+      return el ? { scrollWidth: el.scrollWidth, clientWidth: el.clientWidth } : null;
+    });
+    expect(firstScreenGeometry, `${viewport.name} farm-first-screen must be measurable`).not.toBeNull();
+    expect(
+      firstScreenGeometry.scrollWidth,
+      `${viewport.name} farm-first-screen overflow: scrollWidth=${firstScreenGeometry.scrollWidth} clientWidth=${firstScreenGeometry.clientWidth}`
+    ).toBeLessThanOrEqual(firstScreenGeometry.clientWidth);
+
     await expect(page.locator('[data-testid="farm-first-screen"]')).toBeVisible();
     await expect(page.locator('[data-testid="farm-overview-bar"]')).toBeVisible();
     for (const kpi of ['running', 'degraded', 'down', 'alerts', 'bound', 'probe-cost']) {
@@ -376,6 +391,83 @@ for (const viewport of viewports) {
       await expect(page.locator(`[data-testid="farm-${section}-drawer"]`)).toBeVisible();
       await expectSingleDialog(page);
       await closeSectionWithButton(page, section);
+    }
+  });
+}
+
+// 中间宽度扫描（回归 BUG-2 复核发现的第二个漏洞）：768/390/1440 三点覆盖不了
+// 481–767px 这段区间——首次修复把 kpiRow 的 3 列规则下界移到 768px，只堵住了
+// 768 这一个点，767 往下到 481 仍落回未覆盖的基础 6 列（被 .dashboard
+// overflow-x: clip 静默裁切，越窄越严重）；FarmDashboard.module.scss 的
+// operationsGrid 同样用 `@include tablet`（769 起）排除 768，同款边界缺陷。
+// 这里在这段此前完全没测过的区间里取 4 个点（含两端 481/767 和标准
+// 768，以及中点 600），只做几何断言（不跑完整抽屉导航流程，避免把每个
+// viewport 的执行时间从秒级拉到跟上面完整 IA 流程一样重）。
+const midRangeSweepWidths = [481, 600, 767, 768];
+
+for (const width of midRangeSweepWidths) {
+  test(`farm first-screen KPI/operations grids have no self horizontal overflow at ${width}px (mid-range gap regression)`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 1000 });
+    await setupMockedFarmApi(page);
+    await configureFarm(page);
+
+    const geometry = await page.evaluate(() => {
+      const firstScreen = document.querySelector('[data-testid="farm-first-screen"]');
+      const opsGrid = document.querySelector('[data-testid="farm-operations-grid"]');
+      const tiles = Array.from(document.querySelectorAll('[data-testid^="farm-overview-kpi-"]'));
+      const opsButtons = opsGrid ? Array.from(opsGrid.querySelectorAll('button')) : [];
+      const toRect = (el) => {
+        const r = el.getBoundingClientRect();
+        return { left: r.left, right: r.right, width: r.width };
+      };
+      return {
+        innerWidth: window.innerWidth,
+        firstScreen: firstScreen
+          ? { scrollWidth: firstScreen.scrollWidth, clientWidth: firstScreen.clientWidth }
+          : null,
+        opsGrid: opsGrid ? { scrollWidth: opsGrid.scrollWidth, clientWidth: opsGrid.clientWidth } : null,
+        tileRects: tiles.map(toRect),
+        opsButtonRects: opsButtons.map(toRect),
+      };
+    });
+
+    // 1) farm-first-screen（含 kpiRow）自身不能有 scrollWidth > clientWidth。
+    expect(geometry.firstScreen, `${width}px farm-first-screen must be measurable`).not.toBeNull();
+    expect(
+      geometry.firstScreen.scrollWidth,
+      `${width}px farm-first-screen overflow: scrollWidth=${geometry.firstScreen.scrollWidth} clientWidth=${geometry.firstScreen.clientWidth}`
+    ).toBeLessThanOrEqual(geometry.firstScreen.clientWidth);
+
+    // 2) 全部 6 张 KPI 卡都必须完整落在视口宽度内，不被推出屏幕（真实几何
+    // 裁切断言，不只是 scrollWidth 数字）。
+    expect(geometry.tileRects.length, `${width}px must render all 6 KPI tiles`).toBe(6);
+    for (const rect of geometry.tileRects) {
+      expect(rect.width, `${width}px KPI tile must have non-zero rendered width`).toBeGreaterThan(0);
+      expect(
+        rect.right,
+        `${width}px KPI tile right edge (${rect.right}) must not exceed viewport (${geometry.innerWidth})`
+      ).toBeLessThanOrEqual(geometry.innerWidth + 1);
+      expect(rect.left, `${width}px KPI tile left edge (${rect.left}) must not be negative`).toBeGreaterThanOrEqual(
+        -1
+      );
+    }
+
+    // 3) farm-operations-grid（FarmDashboard.module.scss 同款边界缺陷）同样
+    // 不能自身溢出，且全部 4 张操作卡按钮完整可见、不被推出屏幕。
+    expect(geometry.opsGrid, `${width}px farm-operations-grid must be measurable`).not.toBeNull();
+    expect(
+      geometry.opsGrid.scrollWidth,
+      `${width}px farm-operations-grid overflow: scrollWidth=${geometry.opsGrid.scrollWidth} clientWidth=${geometry.opsGrid.clientWidth}`
+    ).toBeLessThanOrEqual(geometry.opsGrid.clientWidth);
+    expect(geometry.opsButtonRects.length, `${width}px must render all 4 operation cards`).toBe(4);
+    for (const rect of geometry.opsButtonRects) {
+      expect(rect.width, `${width}px operation card must have non-zero rendered width`).toBeGreaterThan(0);
+      expect(
+        rect.right,
+        `${width}px operation card right edge (${rect.right}) must not exceed viewport (${geometry.innerWidth})`
+      ).toBeLessThanOrEqual(geometry.innerWidth + 1);
     }
   });
 }
