@@ -232,6 +232,7 @@
     "health_status_healthy": "健康",
     "health_status_warning": "警告",
     "health_status_disabled": "已停用",
+    "health_status_quarantined": "已隔离",
     "health_status_unknown": "未知",
     "health_status_no_message": "暂无状态说明",
     "cyber_policy_marker": "内容被网络安全策略命中 {{count}} 次",

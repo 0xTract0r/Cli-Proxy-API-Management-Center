@@ -232,6 +232,7 @@
     "health_status_healthy": "Healthy",
     "health_status_warning": "Warning",
     "health_status_disabled": "Disabled",
+    "health_status_quarantined": "Quarantined",
     "health_status_unknown": "Unknown",
     "health_status_no_message": "No status message",
     "cyber_policy_marker": "Cyber policy flagged {{count}} times",

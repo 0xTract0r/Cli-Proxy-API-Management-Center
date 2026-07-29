@@ -194,6 +194,20 @@ export interface AuthFileItem {
   unavailable?: boolean;
   status?: string;
   statusMessage?: string;
+  /**
+   * 账号是否被 core 自动隔离（终态认证失败等不可重试错误触发，见
+   * core sdk/cliproxy/auth/conductor_auto_quarantine.go markAutoQuarantine）。
+   * core 侧明确要求：这是判定隔离态的唯一权威字段，不要依赖 `status` 字符串
+   * （清隔离锁与 status 落库非原子，可能短暂不一致）；与农场页
+   * `FarmAccountEntry.auto_quarantined` 同源同语义。
+   */
+  auto_quarantined?: boolean;
+  /** 隔离原因（仅 auto_quarantined=true 时存在），当前固定值 "terminal_auth_failure"。 */
+  quarantine_reason?: string;
+  /** 隔离发生时间，RFC3339（仅 auto_quarantined=true 时存在）。 */
+  quarantined_at?: string;
+  /** core 判定该账号可重新授权时下发的入口标记（目前仅 anthropic/claude 会返回）。 */
+  reauth_url?: string;
   lastRefresh?: string | number;
   modified?: number;
   note?: string;
