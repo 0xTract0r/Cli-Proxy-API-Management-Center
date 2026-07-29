@@ -21,5 +21,6 @@ npx playwright install chromium >/dev/null
 npx playwright test \
   "${SCRIPT_DIR}/playwright-farm-ui.smoke.spec.mjs" \
   "${SCRIPT_DIR}/playwright-farm-ia.smoke.spec.mjs" \
+  "${SCRIPT_DIR}/playwright-farm-alerts-window.smoke.spec.mjs" \
   --workers=1 \
   --reporter=line
