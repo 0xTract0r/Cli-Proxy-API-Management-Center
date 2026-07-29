@@ -30,7 +30,21 @@ export function FarmAlertsPanel({ mode = 'full', onViewAll }: FarmAlertsPanelPro
   const { t, i18n } = useTranslation();
   const [statusFilter, setStatusFilter] = useState<AlertStatusFilter>('firing');
   const effectiveFilter = mode === 'summary' ? 'firing' : statusFilter;
-  const { alerts, loading, error } = useFarmAlerts({ status: effectiveFilter, window: '24h' });
+  // firing 语义是"当前仍未解决"，不该按告警触发时间年龄过滤——否则会出现
+  // 首屏 KPI（GET /api/farm/overview 的 active_alerts，同样不限年龄，见
+  // dto.go ActiveAlerts 注释）显示 N 条，而本面板因硬编码 window=24h 把
+  // >24h 前触发、至今仍未解决的告警过滤掉，两处数字对不上的矛盾（真实故障：
+  // 容器 down 超 24h 未恢复，摘要/抽屉都显示"无告警"）。GET /api/farm/alerts
+  // 不传 window 时后端语义是"不限时间窗，返回全部历史"（见
+  // services/farm-orchestrator/internal/httpapi/observability.go
+  // handleGetAlerts 顶部注释），配合 status=firing 即为"当前全部未解决"，
+  // 与 KPI 计数口径一致。resolved 视图仍保留 window=24h，避免一次性拉出全部
+  // 历史已解决告警。
+  const alertsQuery =
+    effectiveFilter === 'firing'
+      ? { status: effectiveFilter }
+      : { status: effectiveFilter, window: '24h' };
+  const { alerts, loading, error } = useFarmAlerts(alertsQuery);
   const visibleAlerts = mode === 'summary' ? alerts.slice(0, 3) : alerts;
 
   const statusOptions: Array<{ value: AlertStatusFilter; label: string }> = [

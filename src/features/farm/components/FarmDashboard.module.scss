@@ -108,7 +108,13 @@
   color: var(--muted-foreground);
 }
 
-@include tablet {
+// 同款边界缺陷（见 FarmOverviewBar.module.scss 顶部注释）：共享 `tablet`
+// mixin 是 min-width 769px，精确排除 768px 本身；768 及 481–768 这段区间
+// 会落回上面的基础 repeat(4)。这里 minmax(0,1fr)+min-width:0 大概率不会
+// 硬溢出，但 4 列会把卡片压得比 2 列窄很多、跟设计意图相反，且此前完全没
+// 测过这段区间。改用本组件 scoped 的 481–1024px 媒体查询，与下方
+// ≤480px 的 1 列规则首尾相接，不留空隙；不改共享 mixin。
+@media (min-width: 481px) and (max-width: $breakpoint-tablet) {
   .operationsGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
