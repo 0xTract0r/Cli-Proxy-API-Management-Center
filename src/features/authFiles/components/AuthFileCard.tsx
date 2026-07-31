@@ -736,17 +736,20 @@ export function AuthFileCard(props: AuthFileCardProps) {
                   {t('auth_files.status_toggle_label')}
                 </span>
                 {/*
-                  Path B（如实反映底层状态，绝不改动 disabled 数据/绝不发 disable
-                  请求）：账号被 core 自动隔离时，开关必须显示为「关」且只读——
-                  隔离态账号事实上不可用，开关显「开」会造成假绿。isQuarantined
-                  只影响这里的展示态（checked/disabled），onToggleStatus 仍然只在
-                  用户手动切换时才触发，隔离态下开关只读不可点，不会静默发出
-                  任何 enable/disable 请求。
+                  开关回归 operator 意图（启用/停用），始终可点：checked/disabled
+                  只反映 file.disabled 本身，不再因 isQuarantined 改写展示态或转
+                  只读。隔离状态改由上方「已隔离」徽标（quarantineTooltip）独立
+                  呈现，不再借助本开关的假「关」态表达。依赖 core 侧修复隔离锁
+                  误清问题（隔离锁只应在账号真正恢复/reauth 成功时解除，停用一
+                  个已被隔离的账号不应连带清掉隔离标记）——该修复状态以 core 侧
+                  实现与验收为准，见 openspec/changes/telemetry-device-farm/tasks.md
+                  (task #20 / P8.5)，本改动本身未重新验证该项。hover 仍显示隔离
+                  提示，帮助 operator 理解为什么该账号当前不可用。
                 */}
                 <ToggleSwitch
                   ariaLabel={t('auth_files.status_toggle_label')}
-                  checked={!file.disabled && !isQuarantined}
-                  disabled={disableControls || statusUpdating[file.name] === true || isQuarantined}
+                  checked={!file.disabled}
+                  disabled={disableControls || statusUpdating[file.name] === true}
                   onChange={(value) => onToggleStatus(file, value)}
                   testId="auth-file-status-toggle"
                 />
