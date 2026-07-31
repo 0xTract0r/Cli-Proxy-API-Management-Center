@@ -1445,6 +1445,33 @@
   letter-spacing: 0.03em;
 }
 
+// 异常原因常驻可见区（T18「账号健康显示如实化」④）：隔离原因 / status_message
+// + 最近失败次数，从原先只在 hover tooltip 才看得到，提升为卡片上始终可见的
+// 两行文本，不需要悬浮 StatusMarker 才能看到「为什么」。
+.statusReasonPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 2px;
+}
+
+.statusReasonText {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.statusReasonTextQuarantined {
+  color: var(--warning-text);
+}
+
+.statusReasonFailureCount {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--failure-badge-text);
+}
+
 // 状态监测栏
 .statusBar {
   display: flex;

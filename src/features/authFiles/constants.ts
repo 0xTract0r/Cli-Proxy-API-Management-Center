@@ -19,6 +19,7 @@ import {
   type KeyStatBucket,
   type KeyStats,
 } from '@/utils/usage';
+import { sumRecentRequests, type RecentRequestBucket } from '@/utils/recentRequests';
 
 export type ThemeColors = { bg: string; text: string; border?: string };
 export type TypeColorSet = { light: ThemeColors; dark?: ThemeColors };
@@ -231,9 +232,6 @@ const hasLegacyStatusMessageWarning = (file: AuthFileItem): boolean => {
   );
 };
 
-export const hasAuthFileStatusMessage = (file: AuthFileItem): boolean =>
-  getAuthFileStatusMessage(file).length > 0;
-
 /**
  * 是否处于「告警 / 不可用」态。判定优先级（T047 改造 + 隔离对齐加固）：
  *  0. `auto_quarantined===true`：core 权威隔离位，独立于以下 unavailable/status
@@ -282,6 +280,25 @@ export const isAuthFileMissingProxyUrl = (file: AuthFileItem): boolean => {
   if (!settings) return false;
   return typeof settings.proxy_url === 'string' && settings.proxy_url.trim() === '';
 };
+
+/**
+ * 读取 core 下发的最近请求分桶（`recent_requests`，兼容 camelCase `recentRequests`）。
+ * 与农场页 `FarmAccountEntry.recent_requests`（单个总数）不同，这里是账号管理页
+ * 认证文件视图下发的分桶数组（每桶含 success/failed），用于推导「最近失败次数」。
+ */
+export const getAuthFileRecentRequestBuckets = (file: AuthFileItem): RecentRequestBucket[] => {
+  const raw = file.recent_requests ?? file.recentRequests;
+  return Array.isArray(raw) ? raw : [];
+};
+
+/**
+ * 最近失败次数（T18「账号健康显示如实化」④）：把已经存在于 payload 里、此前
+ * 未在认证文件卡片接线展示的 `recent_requests` 汇总成一个数字，与卡片上常驻可见
+ * 的隔离原因 / status_message 文本并列展示，帮助 operator 一眼看出「为什么」和
+ * 「最近失败了多少次」，不需要逐桶展开状态条才能看到。
+ */
+export const getAuthFileRecentFailureCount = (file: AuthFileItem): number =>
+  sumRecentRequests(getAuthFileRecentRequestBuckets(file)).failure;
 
 export const getTypeLabel = (t: TFunction, type: string): string => {
   const providerKey = normalizeProviderKey(type);

@@ -35,7 +35,6 @@ import {
   getTypeColor,
   getTypeLabel,
   hasAuthFileStatusWarning,
-  hasAuthFileStatusMessage,
   isRuntimeOnlyAuthFile,
   normalizeProviderKey,
   parsePriorityValue,
@@ -244,6 +243,9 @@ export function AuthFilesPage() {
 
   const [filter, setFilter] = useState<'all' | string>('all');
   const [problemOnly, setProblemOnly] = useState(false);
+  // 「仅显示正常账号」（T18 ③）：与 problemOnly 互斥，两者同时只能有一个生效——
+  // 打开其中一个会自动关掉另一个，避免"问题 + 正常"同时为 true 导致列表悖论式为空。
+  const [normalOnly, setNormalOnly] = useState(false);
   const [compactMode, setCompactMode] = useState(false);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -397,6 +399,9 @@ export function AuthFilesPage() {
       if (typeof persisted.problemOnly === 'boolean') {
         setProblemOnly(persisted.problemOnly);
       }
+      if (typeof persisted.normalOnly === 'boolean') {
+        setNormalOnly(persisted.normalOnly);
+      }
       if (
         typeof persistedCompactMode !== 'boolean' &&
         typeof persisted.compactMode === 'boolean'
@@ -448,8 +453,10 @@ export function AuthFilesPage() {
     setFilter('all');
     // 深链目标账号未必是「有问题」的账号（也可能只是需要重新授权但当前
     // 没有报错状态消息）；若用户此前开过「仅问题」过滤（从 localStorage
-    // 恢复），不重置就会把深链目标过滤掉，reauth 入口静默断掉。
+    // 恢复），不重置就会把深链目标过滤掉，reauth 入口静默断掉。同理「仅正常」
+    // 过滤也要重置——深链目标可能恰好处于隔离/问题态，会被「仅正常」过滤掉。
     setProblemOnly(false);
+    setNormalOnly(false);
     setPage(1);
     setSearchParams(
       (prev) => {
@@ -468,6 +475,7 @@ export function AuthFilesPage() {
     writeAuthFilesUiState({
       filter,
       problemOnly,
+      normalOnly,
       compactMode,
       search,
       page,
@@ -480,6 +488,7 @@ export function AuthFilesPage() {
   }, [
     compactMode,
     filter,
+    normalOnly,
     page,
     pageSize,
     pageSizeByMode,
@@ -680,10 +689,20 @@ export function AuthFilesPage() {
     return Array.from(types);
   }, [files]);
 
-  const filesMatchingProblemFilter = useMemo(
-    () => (problemOnly ? files.filter(hasAuthFileStatusMessage) : files),
-    [files, problemOnly]
-  );
+  // 展示态筛选（T18「账号健康显示如实化」②③）：
+  //  - 「仅问题」判定口径从只看 status_message(hasAuthFileStatusMessage) 换成
+  //    hasAuthFileStatusWarning——后者已经把 auto_quarantined 判成最高优先级，
+  //    否则隔离但 status_message 为空的账号会被"仅问题"筛掉，制造假象。
+  //  - 「仅正常」是新增的对称筛选，排除 disabled、隔离、有问题账号，用于在
+  //    大量停用/隔离号中把账号列表清干净。两个筛选互斥，由下面 UI 的 onChange
+  //    互相清空对方，这里只需要按当前状态二选一即可。
+  const filesMatchingDisplayFilter = useMemo(() => {
+    if (problemOnly) return files.filter(hasAuthFileStatusWarning);
+    if (normalOnly) {
+      return files.filter((file) => !file.disabled && !hasAuthFileStatusWarning(file));
+    }
+    return files;
+  }, [files, normalOnly, problemOnly]);
 
   const sortOptions = useMemo(
     () => [
@@ -695,13 +714,13 @@ export function AuthFilesPage() {
   );
 
   const typeCounts = useMemo(() => {
-    const counts: Record<string, number> = { all: filesMatchingProblemFilter.length };
-    filesMatchingProblemFilter.forEach((file) => {
+    const counts: Record<string, number> = { all: filesMatchingDisplayFilter.length };
+    filesMatchingDisplayFilter.forEach((file) => {
       if (!file.type) return;
       counts[file.type] = (counts[file.type] || 0) + 1;
     });
     return counts;
-  }, [filesMatchingProblemFilter]);
+  }, [filesMatchingDisplayFilter]);
 
   const normalizedSearch = search.trim();
   const wildcardSearch = useMemo(() => buildWildcardSearch(normalizedSearch), [normalizedSearch]);
@@ -709,7 +728,7 @@ export function AuthFilesPage() {
   const filtered = useMemo(() => {
     const normalizedTerm = normalizedSearch.toLowerCase();
 
-    return filesMatchingProblemFilter.filter((item) => {
+    return filesMatchingDisplayFilter.filter((item) => {
       const matchType = filter === 'all' || item.type === filter;
       const matchSearch =
         !normalizedSearch ||
@@ -721,7 +740,7 @@ export function AuthFilesPage() {
         });
       return matchType && matchSearch;
     });
-  }, [filesMatchingProblemFilter, filter, normalizedSearch, wildcardSearch]);
+  }, [filesMatchingDisplayFilter, filter, normalizedSearch, wildcardSearch]);
 
   const sorted = useMemo(() => {
     const copy = [...filtered];
@@ -1223,6 +1242,14 @@ export function AuthFilesPage() {
     : filter === 'all'
       ? t('auth_files.delete_all_button')
       : `${t('common.delete')} ${getTypeLabel(t, filter)}`;
+  // 「仅正常」筛选下批量删除没有连贯语义，且 handleDeleteAll 完全不感知 normalOnly——
+  // 一旦触发就会落到「删除全部」分支的 deleteAll()，把被这个筛选隐藏的 disabled/隔离
+  // 账号一并删除（T18 footgun）。在这里直接禁用按钮，而不是往 handleDeleteAll 里加
+  // 一条新的 normalOnly 删除语义（本任务未定义"仅删正常账号"应该是什么行为）。
+  const deleteAllDisabledByNormalOnly = normalOnly;
+  const deleteAllButtonTitle = deleteAllDisabledByNormalOnly
+    ? t('auth_files.delete_all_disabled_normal_only')
+    : undefined;
 
   return (
     <div className={styles.container}>
@@ -1257,8 +1284,14 @@ export function AuthFilesPage() {
                   onResetProblemOnly: () => setProblemOnly(false),
                 })
               }
-              disabled={disableControls || loading || deletingAll}
+              disabled={
+                disableControls || loading || deletingAll || deleteAllDisabledByNormalOnly
+              }
               loading={deletingAll}
+              title={deleteAllButtonTitle}
+              aria-label={
+                deleteAllDisabledByNormalOnly ? t('auth_files.delete_all_disabled_normal_only') : undefined
+              }
             >
               {deleteAllButtonLabel}
             </Button>
@@ -1329,12 +1362,33 @@ export function AuthFilesPage() {
                         checked={problemOnly}
                         onChange={(value) => {
                           setProblemOnly(value);
+                          // 「仅问题」「仅正常」互斥：打开其中一个自动关掉另一个，
+                          // 避免两者同时为 true 导致列表悖论式为空。
+                          if (value) setNormalOnly(false);
                           setPage(1);
                         }}
                         ariaLabel={t('auth_files.problem_filter_only')}
+                        testId="auth-files-problem-only-toggle"
                         label={
                           <span className={styles.filterToggleLabel}>
                             {t('auth_files.problem_filter_only')}
+                          </span>
+                        }
+                      />
+                    </div>
+                    <div className={styles.filterToggleCard}>
+                      <ToggleSwitch
+                        checked={normalOnly}
+                        onChange={(value) => {
+                          setNormalOnly(value);
+                          if (value) setProblemOnly(false);
+                          setPage(1);
+                        }}
+                        ariaLabel={t('auth_files.normal_filter_only')}
+                        testId="auth-files-normal-only-toggle"
+                        label={
+                          <span className={styles.filterToggleLabel}>
+                            {t('auth_files.normal_filter_only')}
                           </span>
                         }
                       />

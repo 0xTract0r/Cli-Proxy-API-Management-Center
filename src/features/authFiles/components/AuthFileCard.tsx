@@ -21,6 +21,7 @@ import { calculateStatusBarData, normalizeAuthIndex, type KeyStats } from '@/uti
 import { formatFileSize } from '@/utils/format';
 import {
   formatModified,
+  getAuthFileRecentFailureCount,
   getAuthFileStatusMessage,
   getTypeColor,
   getTypeLabel,
@@ -231,6 +232,25 @@ export function AuthFileCard(props: AuthFileCardProps) {
   const fileStatusMarkerTitle =
     rawStatusMessage && hasStatusWarning
       ? `${t('auth_files.health_status_warning')}: ${rawStatusMessage}`
+      : '';
+  // 异常原因常驻可见（T18「账号健康显示如实化」④）：此前隔离原因/status_message
+  // 只在 StatusMarker hover tooltip 里才看得到，不打开卡片悬浮就看不到"为什么"。
+  // 隔离优先于普通 status_message（与上面 stateLabel/stateBadgeClass 的隔离优先级
+  // 判定口径一致），避免同时展示两条冲突文案。
+  const statusReasonLine = isQuarantined
+    ? t('auth_files.quarantine_reason_display', {
+        reason: quarantineReasonLabel,
+        defaultValue: 'Quarantine reason: {{reason}}',
+      })
+    : fileStatusMarkerTitle;
+  // 最近失败次数（recent_requests 分桶汇总，数据此前已投影但未接线展示）。
+  const recentFailureCount = getAuthFileRecentFailureCount(file);
+  const recentFailureCountLabel =
+    recentFailureCount > 0
+      ? t('auth_files.recent_failure_count', {
+          failures: recentFailureCount,
+          defaultValue: 'Recent failures: {{failures}}',
+        })
       : '';
   const reauthPollingTitle = reauthState?.error
     ? `${waitingStatusTitle}\n${reauthState.error}`
@@ -536,6 +556,27 @@ export function AuthFileCard(props: AuthFileCardProps) {
               <ProviderStatusBar statusData={statusData} styles={styles} />
             </div>
 
+            {(statusReasonLine || recentFailureCountLabel) && (
+              <div className={styles.statusReasonPanel} data-testid="auth-file-status-reason">
+                {statusReasonLine && (
+                  <span
+                    className={`${styles.statusReasonText} ${isQuarantined ? styles.statusReasonTextQuarantined : ''}`}
+                    data-testid="auth-file-status-reason-text"
+                  >
+                    {statusReasonLine}
+                  </span>
+                )}
+                {recentFailureCountLabel && (
+                  <span
+                    className={styles.statusReasonFailureCount}
+                    data-testid="auth-file-recent-failure-count"
+                  >
+                    {recentFailureCountLabel}
+                  </span>
+                )}
+              </div>
+            )}
+
             {showQuotaLayout && quotaType && (
               <AuthFileQuotaSection
                 file={file}
@@ -687,15 +728,27 @@ export function AuthFileCard(props: AuthFileCardProps) {
               )}
             </div>
             {!isRuntimeOnly && (
-              <div className={styles.statusToggle}>
+              <div
+                className={styles.statusToggle}
+                title={isQuarantined ? quarantineTooltip : undefined}
+              >
                 <span className={styles.statusToggleLabel}>
                   {t('auth_files.status_toggle_label')}
                 </span>
+                {/*
+                  Path B（如实反映底层状态，绝不改动 disabled 数据/绝不发 disable
+                  请求）：账号被 core 自动隔离时，开关必须显示为「关」且只读——
+                  隔离态账号事实上不可用，开关显「开」会造成假绿。isQuarantined
+                  只影响这里的展示态（checked/disabled），onToggleStatus 仍然只在
+                  用户手动切换时才触发，隔离态下开关只读不可点，不会静默发出
+                  任何 enable/disable 请求。
+                */}
                 <ToggleSwitch
                   ariaLabel={t('auth_files.status_toggle_label')}
-                  checked={!file.disabled}
-                  disabled={disableControls || statusUpdating[file.name] === true}
+                  checked={!file.disabled && !isQuarantined}
+                  disabled={disableControls || statusUpdating[file.name] === true || isQuarantined}
                   onChange={(value) => onToggleStatus(file, value)}
+                  testId="auth-file-status-toggle"
                 />
               </div>
             )}

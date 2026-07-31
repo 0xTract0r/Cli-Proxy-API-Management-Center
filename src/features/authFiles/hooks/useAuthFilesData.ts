@@ -11,7 +11,6 @@ import {
   getAuthFileStatusMessage,
   getTypeLabel,
   hasAuthFileStatusWarning,
-  hasAuthFileStatusMessage,
   isRuntimeOnlyAuthFile,
 } from '@/features/authFiles/constants';
 
@@ -318,7 +317,11 @@ export function useAuthFilesData(options: UseAuthFilesDataOptions): UseAuthFiles
               const filesToDelete = files.filter((file) => {
                 if (isRuntimeOnlyAuthFile(file)) return false;
                 if (isFiltered && file.type !== filter) return false;
-                if (isProblemOnly && !hasAuthFileStatusMessage(file)) return false;
+                // 「删除问题账号」的过滤口径必须与「仅问题」展示筛选(problemOnly)完全对齐，
+                // 否则会出现"筛选隐藏的账号被批量删除"的 WYSIWYG 违规。展示筛选用的是
+                // hasAuthFileStatusWarning（见 AuthFilesPage.tsx filesMatchingDisplayFilter），
+                // 这里必须用同一 predicate，而不是范围更窄的 hasAuthFileStatusMessage。
+                if (isProblemOnly && !hasAuthFileStatusWarning(file)) return false;
                 return true;
               });
 
