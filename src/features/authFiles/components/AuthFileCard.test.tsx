@@ -6,9 +6,11 @@
 // `@ts-nocheck` 只是为了不让这个占位文件在没装依赖前拖垮 `tsc`/`npm run build`
 // （tsconfig `include: ["src"]` 会把它一并类型检查，即便没有任何真实代码
 // import 它）；一旦接入测试运行时，请删掉这行并让类型检查正常生效。
-// 这个文件本身不会被任何脚本执行，只作为 Path B（如实反映账号不可用，绝不改
-// disabled 底层数据、绝不发 disable 请求）验收骨架，覆盖：
-//  ① 隔离态启用开关必须显「关」且只读（isQuarantined 优先于 disabled/status）；
+// 这个文件本身不会被任何脚本执行，只作为账号健康显示如实化验收骨架，覆盖：
+//  ① 启用开关只反映 file.disabled 本身的 operator 意图、始终可点，不再因
+//     isQuarantined 改写 checked/disabled 或转只读（2026-07-31 用户实测后
+//     反转作废「隔离态显关+只读」的 Path B 旧实现，见 tasks.md task #20）；
+//     隔离状态改由独立的「已隔离」徽标呈现，不借助开关的假「关」态表达；
 //  ④ 隔离原因 / status_message / 最近失败次数从 hover tooltip 提升为卡片常驻
 //     可见文本。
 import { describe, expect, it, vi } from 'vitest';
@@ -65,8 +67,8 @@ function buildProps(fileOverrides: Partial<AuthFileItem> = {}): AuthFileCardProp
   };
 }
 
-describe('AuthFileCard — Path B 隔离优先级 + 开关显关（T18 ①）', () => {
-  it('quarantined account renders the quarantined badge and forces the enable toggle off + read-only, even when status_message is also present', () => {
+describe('AuthFileCard — 隔离徽标优先级 + 开关反映 disabled 意图（T18 ①，2026-07-31 反转后行为）', () => {
+  it('quarantined-but-not-disabled account renders the quarantined badge, while the enable toggle stays checked + interactive (badge, not the toggle, carries quarantine state)', () => {
     render(
       <AuthFileCard
         {...buildProps({
@@ -82,12 +84,13 @@ describe('AuthFileCard — Path B 隔离优先级 + 开关显关（T18 ①）', 
     const badge = screen.getByTestId('auth-file-quarantined-badge');
     expect(badge).toHaveTextContent(i18n.t('auth_files.health_status_quarantined'));
 
+    // 开关只反映 file.disabled（此处 false），不再因 isQuarantined 改写 checked/disabled。
     const toggle = screen.getByTestId('auth-file-status-toggle');
-    expect(toggle).not.toBeChecked();
-    expect(toggle).toBeDisabled();
+    expect(toggle).toBeChecked();
+    expect(toggle).not.toBeDisabled();
   });
 
-  it('quarantine wins over disabled=true as well: badge stays "Quarantined" (not "Disabled"), toggle stays off + read-only', () => {
+  it('quarantine badge wins over disabled=true as well: badge stays "Quarantined" (not "Disabled"); toggle reflects disabled=true (unchecked) but remains interactive, not read-only', () => {
     render(
       <AuthFileCard
         {...buildProps({
@@ -102,9 +105,10 @@ describe('AuthFileCard — Path B 隔离优先级 + 开关显关（T18 ①）', 
     expect(badge).toHaveTextContent(i18n.t('auth_files.health_status_quarantined'));
     expect(badge).not.toHaveTextContent(i18n.t('auth_files.health_status_disabled'));
 
+    // checked 由 disabled=true 决定（关），但 isQuarantined 不再强制只读。
     const toggle = screen.getByTestId('auth-file-status-toggle');
     expect(toggle).not.toBeChecked();
-    expect(toggle).toBeDisabled();
+    expect(toggle).not.toBeDisabled();
   });
 
   it('healthy (non-quarantined, non-disabled) account keeps the toggle checked and interactive, with no quarantined badge', () => {
@@ -116,12 +120,12 @@ describe('AuthFileCard — Path B 隔离优先级 + 开关显关（T18 ①）', 
     expect(screen.queryByTestId('auth-file-quarantined-badge')).not.toBeInTheDocument();
   });
 
-  it('manually disabled (but not quarantined) account shows the toggle off but still interactive — quarantine, not plain disabled, is what forces read-only', () => {
+  it('manually disabled (not quarantined) account shows the toggle off but still interactive — the toggle always reflects disabled intent and stays clickable; quarantine is surfaced independently via the badge, not by making the toggle read-only', () => {
     render(<AuthFileCard {...buildProps({ disabled: true, auto_quarantined: false })} />);
 
     const toggle = screen.getByTestId('auth-file-status-toggle');
     expect(toggle).not.toBeChecked();
-    // disableControls=false、statusUpdating 为空、isQuarantined=false ⇒ 不应被强制只读。
+    // disableControls=false、statusUpdating 为空 ⇒ 不应被强制只读。
     expect(toggle).not.toBeDisabled();
   });
 });
