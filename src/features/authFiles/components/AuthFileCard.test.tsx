@@ -202,3 +202,43 @@ describe('AuthFileCard — 异常原因常驻可见 + 最近失败次数（T18 �
     expect(screen.queryByTestId('auth-file-status-reason')).not.toBeInTheDocument();
   });
 });
+
+describe('AuthFileCard — reauth 纵深防御徽标（死 token 账号绝不显绿）', () => {
+  it('renders the "需重新认证" badge (warning, not green) when reauth_url is present even with unavailable=false and a healthy status_message', () => {
+    render(
+      <AuthFileCard
+        {...buildProps({
+          auto_quarantined: false,
+          unavailable: false,
+          status_message: 'ok',
+          reauth_url: 'https://claude.ai/oauth/reauthorize?x=1',
+        })}
+      />
+    );
+
+    const badge = screen.getByTestId('auth-file-reauth-required-badge');
+    expect(badge).toHaveTextContent(i18n.t('auth_files.health_status_reauth_required'));
+    // 不应误判为隔离态，也不应退化成绿色健康态。
+    expect(screen.queryByTestId('auth-file-quarantined-badge')).not.toBeInTheDocument();
+    expect(badge).not.toHaveTextContent(i18n.t('auth_files.health_status_healthy'));
+  });
+
+  it('renders the "需重新认证" badge when the top-level reauth_required flag is truthy', () => {
+    render(
+      <AuthFileCard
+        {...buildProps({
+          auto_quarantined: false,
+          reauth_required: true,
+        })}
+      />
+    );
+
+    expect(screen.getByTestId('auth-file-reauth-required-badge')).toBeInTheDocument();
+  });
+
+  it('shows no reauth-required badge for a healthy account without any reauth signal', () => {
+    render(<AuthFileCard {...buildProps({ auto_quarantined: false })} />);
+
+    expect(screen.queryByTestId('auth-file-reauth-required-badge')).not.toBeInTheDocument();
+  });
+});
