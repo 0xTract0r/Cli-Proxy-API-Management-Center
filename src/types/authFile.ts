@@ -208,6 +208,12 @@ export interface AuthFileItem {
   quarantined_at?: string;
   /** core 判定该账号可重新授权时下发的入口标记（目前仅 anthropic/claude 会返回）。 */
   reauth_url?: string;
+  /**
+   * 需重新认证标记（纵深防御信号）：core 顶层或 metadata 可能下发此布尔；即便
+   * reauth_url 缺失、unavailable 尚未置 true，只要为真也应判为异常（见
+   * constants.ts isAuthFileReauthRequired）。
+   */
+  reauth_required?: boolean;
   lastRefresh?: string | number;
   modified?: number;
   note?: string;

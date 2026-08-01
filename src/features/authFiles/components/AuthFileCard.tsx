@@ -27,6 +27,7 @@ import {
   getTypeLabel,
   hasAuthFileStatusWarning,
   isAuthFileAutoQuarantined,
+  isAuthFileReauthRequired,
   isAuthFileMissingProxyUrl,
   isRuntimeOnlyAuthFile,
   parsePriorityValue,
@@ -205,6 +206,10 @@ export function AuthFileCard(props: AuthFileCardProps) {
   // status/unavailable 判断，避免"已隔离但显健康/启用"假绿——判定口径与农场页
   // FarmAccountsPanel 的 isAutoQuarantined 一致。
   const isQuarantined = isAuthFileAutoQuarantined(file);
+  // 「需重新认证」纵深防御信号（reauth_url / reauth_required）：即便账号未被隔离、
+  // unavailable 尚未置 true，只要带 reauth 信号也必须显式呈现「需重新认证」而非假绿。
+  // 隔离态优先级更高（隔离账号本就带 reauth_url，先命中 isQuarantined 显示「已隔离」）。
+  const isReauthRequired = isAuthFileReauthRequired(file);
   // 隔离原因/时间 tooltip：复用农场页 farm.accountHealth.* 的既有 i18n 键
   // （reason 枚举文案 + tooltip 拼句），同一份隔离说明不在两个 feature 各自
   // 重复维护一份文案。
@@ -301,22 +306,28 @@ export function AuthFileCard(props: AuthFileCardProps) {
     ? t('auth_files.type_virtual') || '虚拟认证文件'
     : isQuarantined
       ? t('auth_files.health_status_quarantined', { defaultValue: 'Quarantined' })
-      : file.disabled
-        ? t('auth_files.health_status_disabled')
-        : hasStatusWarning
-          ? t('auth_files.health_status_warning')
-          : rawStatusMessage
-            ? t('auth_files.health_status_healthy')
-            : t('auth_files.status_toggle_label');
+      : isReauthRequired
+        ? t('auth_files.health_status_reauth_required', {
+            defaultValue: 'Re-authentication required',
+          })
+        : file.disabled
+          ? t('auth_files.health_status_disabled')
+          : hasStatusWarning
+            ? t('auth_files.health_status_warning')
+            : rawStatusMessage
+              ? t('auth_files.health_status_healthy')
+              : t('auth_files.status_toggle_label');
   const stateBadgeClass = isRuntimeOnly
     ? styles.stateBadgeVirtual
     : isQuarantined
       ? styles.stateBadgeWarning
-      : file.disabled
-        ? styles.stateBadgeDisabled
-        : hasStatusWarning
-          ? styles.stateBadgeWarning
-          : styles.stateBadgeActive;
+      : isReauthRequired
+        ? styles.stateBadgeWarning
+        : file.disabled
+          ? styles.stateBadgeDisabled
+          : hasStatusWarning
+            ? styles.stateBadgeWarning
+            : styles.stateBadgeActive;
   const modelsButtonTitle = t('auth_files.models_button', { defaultValue: '模型' });
   const refreshStatusButtonTitle = t('auth_files.status_refresh_button', {
     defaultValue: 'Refresh status',
@@ -380,7 +391,13 @@ export function AuthFileCard(props: AuthFileCardProps) {
                 <span
                   className={`${styles.stateBadge} ${stateBadgeClass}`}
                   title={quarantineTooltip || fileStatusMarkerTitle || undefined}
-                  data-testid={isQuarantined ? 'auth-file-quarantined-badge' : undefined}
+                  data-testid={
+                    isQuarantined
+                      ? 'auth-file-quarantined-badge'
+                      : isReauthRequired
+                        ? 'auth-file-reauth-required-badge'
+                        : undefined
+                  }
                 >
                   {stateLabel}
                 </span>

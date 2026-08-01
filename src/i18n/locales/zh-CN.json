@@ -234,6 +234,7 @@
     "health_status_warning": "警告",
     "health_status_disabled": "已停用",
     "health_status_quarantined": "已隔离",
+    "health_status_reauth_required": "需重新认证",
     "health_status_unknown": "未知",
     "health_status_no_message": "暂无状态说明",
     "quarantine_reason_display": "隔离原因：{{reason}}",
