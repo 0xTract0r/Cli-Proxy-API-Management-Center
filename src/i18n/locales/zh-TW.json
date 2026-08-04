@@ -1121,9 +1121,7 @@
           "stabilize_device_desc": "固定 OS/Arch，並按憑證/API Key 穩定軟體指紋",
           "beta_features": "Beta Features",
           "online_update": "請求標頭線上更新",
-          "online_update_desc": "允許核心從公開 registry 線上刷新版本敏感的托管請求標頭標記（全域，預設開）",
-          "normalize_account_env": "帳號環境正規化",
-          "normalize_account_env_desc": "把請求正文中的真實 cwd/home 路徑改寫為每帳號規範路徑（全域，預設關；關掉即回滾）"
+          "online_update_desc": "允許核心從公開 registry 線上刷新版本敏感的托管請求標頭標記（全域，預設開）"
         },
         "network": {
           "title": "網路設定",
