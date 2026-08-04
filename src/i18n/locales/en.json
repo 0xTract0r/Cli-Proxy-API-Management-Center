@@ -2035,6 +2035,19 @@
       "onboardAction": "Onboard to farm",
       "onboardActionShort": "Onboard",
       "onboarding": "Onboarding…",
+      "actionsColumn": "Actions",
+      "cadenceColumn": "Request cadence",
+      "cadenceScopeBadge": "Scope: keepalive probe arrivals",
+      "cadenceLast": "Last",
+      "cadenceAvgInterval": "Avg interval",
+      "cadenceNextWindow": "Next",
+      "cadenceJitterBadge": "Random jitter · not exact",
+      "cadenceDefaultRangeNote": "Config range is the default (600/1800/5400s), not the per-container effective value",
+      "cadenceOutcomeLabel": "Recent requests",
+      "cadenceSuccess": "Success",
+      "cadenceFailed": "Failed",
+      "cadenceNotBound": "Not onboarded to farm",
+      "cadenceNoEstimate": "No next probe in this state",
       "reauthConfirmTitle": "Re-authenticate this account?",
       "reauthConfirmMessage": "The current account stays unchanged until the new authorization completes. You can cancel at any time.",
       "reauthConfirmAction": "Continue",
@@ -2089,7 +2102,8 @@
       "resolvedAt": "Resolved at",
       "severity_info": "Info",
       "severity_warning": "Warning",
-      "severity_critical": "Critical"
+      "severity_critical": "Critical",
+      "telemetryCategory": "Telemetry"
     },
     "detail": {
       "healthSection": "Health",
@@ -2141,7 +2155,12 @@
       "account_state_unknown": "Account auth state not yet collected",
       "account_state_stale": "Account auth state snapshot stale",
       "account_state_not_wired": "Account auth state collector not wired",
-      "docker_missing_orphaned": "Docker container missing (orphaned)"
+      "docker_missing_orphaned": "Docker container missing (orphaned)",
+      "telemetry_devid_drift": "device_id drift (self-reported value differs from pinned)",
+      "telemetry_devid_collision": "device_id collision (multiple containers self-report the same device_id)",
+      "telemetry_host_leak": "outbound host leak (self-reported target deviates from expected)",
+      "telemetry_silence": "telemetry silence (no self-reported beacon for a long time)",
+      "telemetry_entrypoint_mismatch": "entrypoint mismatch (entrypoint deviates from expected)"
     },
     "bind_modal": {
       "title": "Bind Account",
@@ -2174,6 +2193,29 @@
       "onboardNoProxy": "No residential proxy available for this environment yet. Configure a proxy first.",
       "onboardCapacityFull": "Container pool is full.",
       "reauthFailed": "Failed to re-authenticate"
+    },
+    "telemetry": {
+      "section": "Telemetry content (self-reported beacons)",
+      "disclaimer": "Self-reported / synthetic beacons only prove the reporting pipeline is connected and what the container declares — they are NOT anti-correlation proof. The on-wire (real outbound capture) column below is not wired yet and is marked \"capture pipeline pending\"; it does not mean a real outbound value has been captured.",
+      "scopeBadge": "Scope: self-reported / declared, not on-wire capture",
+      "fieldColumn": "Fingerprint field",
+      "declaredColumn": "Declared",
+      "onWireColumn": "On-wire",
+      "field_device_id": "device_id",
+      "field_entrypoint": "entrypoint",
+      "field_api_base_url_host": "api_base_url_host",
+      "onWirePending": "Capture pipeline pending · not yet proven",
+      "freshness": "Telemetry freshness",
+      "stale": "Stale",
+      "fresh": "Recent",
+      "noBeacons": "No beacon reported in the window.",
+      "channelDistribution": "Channel distribution",
+      "timeline": "Beacon timeline (self-reported, newest first)",
+      "timelineEmpty": "No beacons (empty is a normal response — the container hasn't reported yet or collection isn't wired).",
+      "source_declared": "Declared",
+      "source_self-report": "Self-report",
+      "source_unknown": "Unknown",
+      "deviceIdFullNote": "device_id here is the full self-reported value (not the list page's masked first 16 chars), for ops self-consistency checks only; drift / collision / host-leak anomalies surface in the alerts panel."
     }
   }
 }

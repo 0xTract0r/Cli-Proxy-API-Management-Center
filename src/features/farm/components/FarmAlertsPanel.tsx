@@ -4,7 +4,7 @@ import { AsyncPanel } from '@/components/ui/AsyncPanel';
 import { Button } from '@/components/ui/Button';
 import { HealthPill, type HealthPillStatus } from '@/components/ui/HealthPill';
 import { Select } from '@/components/ui/Select';
-import type { FarmAlertEntry } from '@/types/farm';
+import { isFarmTelemetryAlertReason, type FarmAlertEntry } from '@/types/farm';
 import { formatDateTimeUtc8 } from '@/utils/datetime';
 import { useFarmAlerts } from '../hooks/useFarmAlerts';
 import styles from './FarmAlertsPanel.module.scss';
@@ -130,6 +130,19 @@ export function FarmAlertsPanel({ mode = 'full', onViewAll }: FarmAlertsPanelPro
                   <div className={styles.itemHead}>
                     <span className={styles.containerId}>{alert.container_id}</span>
                     <span className={styles.reason}>
+                      {/* 遥测自洽类告警（drift/collision/host_leak/entrypoint_
+                          mismatch/silence）标一个中性「遥测」分类标签，与容器
+                          运行态告警在同一 feed 里可区分；严重度仍由后端
+                          eventView.severity 决定，前端不重推。 */}
+                      {isFarmTelemetryAlertReason(alert.reason) ? (
+                        <span
+                          className="status-badge muted"
+                          data-testid={`farm-alert-telemetry-tag-${alert.id}`}
+                          style={{ marginRight: 6 }}
+                        >
+                          {t('farm.alerts.telemetryCategory', { defaultValue: '遥测' })}
+                        </span>
+                      ) : null}
                       {t(`farm.healthReason.${alert.reason}`, { defaultValue: alert.reason })}
                     </span>
                   </div>

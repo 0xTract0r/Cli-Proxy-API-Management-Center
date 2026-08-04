@@ -490,3 +490,74 @@ export interface FarmProbeCadenceView {
   // 和「账号累计用量」两个容易被混淆的数字显式分开标注。
   note: string;
 }
+
+// ---------------------------------------------------------------------------
+// 用户⑤「每容器遥测内容抓取」：GET /api/farm/containers/{id}/beacons
+// （services/farm-orchestrator/internal/httpapi/telemetry_beacon.go）
+// ---------------------------------------------------------------------------
+
+// **诚实边界（写进类型也写进 UI）**：beacon 是容器「自报 / 声明」的遥测内容
+// （source ∈ declared/self-report，存储层把未知值归一到 unknown），只证明
+// 「上报管道连通 + 容器声明了什么」，**不构成反关联证明**——它不是从真实出站
+// 流量里抓到的 on-wire 值。真正的 on-wire 抓取管道尚未落地，前端展示时 on-wire
+// 一列必须显式灰置标注「待抓取管道，尚未证明」，不得让界面暗示已抓到真实出站值。
+//
+// GET /api/farm/containers/{id}/beacons?limit=<默认50，上限500> 响应体是**裸 JSON
+// 数组**（不是包裹对象），按 captured_at 降序；空容器返回 []（非 null）；
+// 404=未知容器；400=非法 limit。字段名照抄后端 telemetry_beacon.go 的
+// beaconRowView。device_id 在这个只读接口是**全量不脱敏**（与容器列表
+// device_id_masked 的只暴露前 16 位不同——beacon 读取是运维核对自洽性用的
+// 内部视图）。
+export interface FarmContainerBeaconView {
+  // 服务端记录的采集时间（RFC3339）。
+  captured_at: string;
+  // 服务端自算的通道分类（ClassifyChannel，不信任客户端上报的 source 分类）。
+  channel: string;
+  // 出站目标 host（自报值）。
+  host: string;
+  // 出站请求路径（自报值）。
+  path: string;
+  // 原始请求体字节数（服务端按存储的 body 计长）。
+  body_bytes: number;
+  // 自报 device_id（**全量**，不脱敏；见结构体顶部注释）。
+  device_id: string;
+  // 自报 API base URL 的 host 部分（ParseBeacon 抽取）。
+  api_base_url_host: string;
+  // 自报入口标识（entrypoint，ParseBeacon 抽取）。
+  entrypoint: string;
+  // 上报来源分类：declared / self-report / unknown（存储层归一后的值），
+  // 前端据此提示这些值是「声明/自报」而非「抓包实测」。
+  source: string;
+}
+
+// GET /api/farm/containers/{id}/beacons 响应体：裸数组（captured_at 降序）。
+export type FarmContainerBeaconsResponse = FarmContainerBeaconView[];
+
+// beacon 自洽卡的三个比对字段（declared 列现在能填，on-wire 列一律灰置待抓取）。
+export const FARM_TELEMETRY_FINGERPRINT_FIELDS = [
+  'device_id',
+  'entrypoint',
+  'api_base_url_host',
+] as const;
+export type FarmTelemetryFingerprintField = (typeof FARM_TELEMETRY_FINGERPRINT_FIELDS)[number];
+
+// beacon 遥测自洽评估器产出、经既有 GET /api/farm/alerts 点亮的新 reason 码
+// （services/farm-orchestrator/internal/farmrunner/beaconanomaly.go）。severity
+// 由后端 eventView.severity 决定（drift/host_leak/entrypoint_mismatch=warning，
+// collision=critical，silence=info 且默认不写成 firing 告警），前端不重推严重度，
+// 只用这个集合把「遥测自洽类」告警与「容器运行态」告警在 UI 上区分标注。
+export const FARM_TELEMETRY_ALERT_REASONS = [
+  'telemetry_devid_drift',
+  'telemetry_devid_collision',
+  'telemetry_host_leak',
+  'telemetry_silence',
+  'telemetry_entrypoint_mismatch',
+] as const;
+export type FarmTelemetryAlertReason = (typeof FARM_TELEMETRY_ALERT_REASONS)[number];
+
+const FARM_TELEMETRY_ALERT_REASON_SET: ReadonlySet<string> = new Set(FARM_TELEMETRY_ALERT_REASONS);
+
+/** 判定某个 alert.reason 是否属于「遥测自洽类」（供 UI 分类标注，不改严重度）。 */
+export function isFarmTelemetryAlertReason(reason: string | undefined): boolean {
+  return typeof reason === 'string' && FARM_TELEMETRY_ALERT_REASON_SET.has(reason);
+}

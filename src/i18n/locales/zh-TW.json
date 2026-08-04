@@ -1780,6 +1780,19 @@
       "onboardAction": "接入農場",
       "onboardActionShort": "接入",
       "onboarding": "接入中…",
+      "actionsColumn": "操作",
+      "cadenceColumn": "請求節奏",
+      "cadenceScopeBadge": "口徑：探針保活到達",
+      "cadenceLast": "上次",
+      "cadenceAvgInterval": "平均間隔",
+      "cadenceNextWindow": "下次",
+      "cadenceJitterBadge": "隨機抖動·非精確",
+      "cadenceDefaultRangeNote": "設定區間為預設值（600/1800/5400s），非每容器實際生效值",
+      "cadenceOutcomeLabel": "近期請求",
+      "cadenceSuccess": "成功",
+      "cadenceFailed": "失敗",
+      "cadenceNotBound": "未接入農場",
+      "cadenceNoEstimate": "該狀態無下次探針",
       "reauthConfirmTitle": "確認重新授權該帳號？",
       "reauthConfirmMessage": "目前帳號資訊在新授權成功前保持不變，可隨時取消。",
       "reauthConfirmAction": "繼續",
@@ -1834,7 +1847,8 @@
       "resolvedAt": "恢復於",
       "severity_info": "提示",
       "severity_warning": "警告",
-      "severity_critical": "緊急"
+      "severity_critical": "緊急",
+      "telemetryCategory": "遙測"
     },
     "detail": {
       "healthSection": "健康狀態",
@@ -1886,7 +1900,12 @@
       "account_state_unknown": "帳號認證態尚未擷取",
       "account_state_stale": "帳號認證態快照已陳舊",
       "account_state_not_wired": "帳號認證態擷取未裝配",
-      "docker_missing_orphaned": "Docker 容器缺失（幽靈態）"
+      "docker_missing_orphaned": "Docker 容器缺失（幽靈態）",
+      "telemetry_devid_drift": "device_id 漂移（自報值與釘值不一致）",
+      "telemetry_devid_collision": "device_id 串號（多容器自報同一 device_id）",
+      "telemetry_host_leak": "出站 host 洩漏（自報目標偏離預期）",
+      "telemetry_silence": "遙測靜默（久未收到自報 beacon）",
+      "telemetry_entrypoint_mismatch": "入口標識不一致（entrypoint 偏離預期）"
     },
     "bind_modal": {
       "title": "綁定帳號",
@@ -1919,6 +1938,29 @@
       "onboardNoProxy": "該環境暫無可用住宅代理，請先設定代理",
       "onboardCapacityFull": "容器池已滿",
       "reauthFailed": "重新授權失敗"
+    },
+    "telemetry": {
+      "section": "遙測內容（自報 beacon）",
+      "disclaimer": "自報 / 合成 beacon 只證明上報管道連通與容器聲明了什麼，不構成反關聯證明；下方 on-wire（真實出站抓取）列尚未接入，標註為「待抓取管道」，不代表已抓到真實出站值。",
+      "scopeBadge": "口徑：自報 / 聲明，非出站實測",
+      "fieldColumn": "指紋欄位",
+      "declaredColumn": "自報 (declared)",
+      "onWireColumn": "出站實測 (on-wire)",
+      "field_device_id": "device_id",
+      "field_entrypoint": "entrypoint",
+      "field_api_base_url_host": "api_base_url_host",
+      "onWirePending": "待抓取管道 · 尚未證明",
+      "freshness": "遙測新鮮度",
+      "stale": "偏舊",
+      "fresh": "較新",
+      "noBeacons": "視窗內暫無 beacon 上報。",
+      "channelDistribution": "通道分佈",
+      "timeline": "beacon 時間線（自報，最新在前）",
+      "timelineEmpty": "暫無 beacon（空是正常返回，代表該容器尚未上報或未裝配採集）。",
+      "source_declared": "聲明",
+      "source_self-report": "自報",
+      "source_unknown": "未知",
+      "deviceIdFullNote": "此處 device_id 為自報全量值（非列表頁脫敏前 16 位），僅供維運核對自洽性用；漂移/串號/host 洩漏等自洽異常經告警面板呈現。"
     }
   }
 }
