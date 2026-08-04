@@ -891,7 +891,6 @@ function getNextDirtyFields(
       'claudeHeaderTimeout',
       'claudeHeaderStabilizeDeviceProfile',
       'managedHeaderOnlineUpdate',
-      'normalizeAccountEnv',
       'codexHeaderUserAgent',
       'codexHeaderBetaFeatures',
     ] as Array<keyof VisualConfigValues>
@@ -1270,11 +1269,6 @@ export function useVisualConfig() {
           ['online-update', 'online_update'],
           DEFAULT_VISUAL_VALUES.managedHeaderOnlineUpdate
         ),
-        normalizeAccountEnv: readBooleanConfigValue(
-          parsed,
-          ['normalize-account-env', 'normalize_account_env'],
-          DEFAULT_VISUAL_VALUES.normalizeAccountEnv
-        ),
         codexHeaderUserAgent:
           typeof codexHeaderDefaults?.['user-agent'] === 'string'
             ? codexHeaderDefaults['user-agent']
@@ -1527,10 +1521,6 @@ export function useVisualConfig() {
           doc.setIn(['managed-header-profile', 'online-update'], values.managedHeaderOnlineUpdate);
           deleteIfMapEmpty(doc, ['managed-header-profile']);
         }
-
-        // normalize-account-env（全局，⑦；core 默认 false）。
-        // 默认 false，setBooleanInDoc 仅在已有 key 或值为 true 时写入，回滚=关开关零迁移。
-        setBooleanInDoc(doc, ['normalize-account-env'], values.normalizeAccountEnv);
 
         if (
           docHas(doc, ['quota-exceeded']) ||

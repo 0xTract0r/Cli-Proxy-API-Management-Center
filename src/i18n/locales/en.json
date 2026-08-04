@@ -1325,9 +1325,7 @@
           "stabilize_device_desc": "Pin OS/Arch and stabilize the software fingerprint per credential/API key",
           "beta_features": "Beta Features",
           "online_update": "Online Header Update",
-          "online_update_desc": "Allow core to refresh version-sensitive managed header markers from public registries (global, default on)",
-          "normalize_account_env": "Normalize Account Env",
-          "normalize_account_env_desc": "Rewrite real cwd/home paths in request body to a per-account canonical path (global, default off; rollback by turning off)"
+          "online_update_desc": "Allow core to refresh version-sensitive managed header markers from public registries (global, default on)"
         },
         "network": {
           "title": "Network Configuration",

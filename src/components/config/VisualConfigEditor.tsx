@@ -876,15 +876,6 @@ export function VisualConfigEditor({
                         onChange({ managedHeaderOnlineUpdate })
                       }
                     />
-                    <ToggleRow
-                      title={t('config_management.visual.sections.headers.normalize_account_env')}
-                      description={t(
-                        'config_management.visual.sections.headers.normalize_account_env_desc'
-                      )}
-                      checked={values.normalizeAccountEnv}
-                      disabled={disabled}
-                      onChange={(normalizeAccountEnv) => onChange({ normalizeAccountEnv })}
-                    />
                   </SectionGrid>
                   <Divider />
                   <div className={styles.subsectionHeader}>
