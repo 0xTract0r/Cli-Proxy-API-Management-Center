@@ -14,7 +14,7 @@ import { Select } from '@/components/ui/Select';
 import { Button } from '@/components/ui/Button';
 import { AsyncPanel } from '@/components/ui/AsyncPanel';
 import { HealthPill, type HealthPillStatus } from '@/components/ui/HealthPill';
-import { IconInfo } from '@/components/ui/icons';
+import { IconBot, IconInfo, IconShield } from '@/components/ui/icons';
 import { useFarmAccounts } from '../hooks/useFarmAccounts';
 import { useFarmAccountState } from '../hooks/useFarmAccountState';
 import { useFarmContainers } from '../hooks/useFarmContainers';
@@ -33,6 +33,7 @@ import {
   type FarmEnv,
 } from '@/types/farm';
 import { formatDateTimeUtc8 } from '@/utils/datetime';
+import { formatDurationMs } from '@/utils/usage/latency';
 import styles from './FarmAccountsPanel.module.scss';
 
 // 容器注册表快照「陈旧」的前端展示阈值：本列只用它给「容器运行态」pill 的
@@ -136,6 +137,10 @@ export function FarmAccountsPanel({ containers: sharedContainers }: FarmAccounts
   const containerHealthColumnLabel = t('farm.accountHealth.containerHealthColumn', {
     defaultValue: '容器运行态',
   });
+  // 用户B「请求节奏可见」新增列；用户③「接入农场」按钮从容器运行态格移出后，
+  // 末列由「重新授权」升级为承载多种操作的「操作」列（onboard + 重新授权）。
+  const cadenceColumnLabel = t('farm.accountHealth.cadenceColumn', { defaultValue: '请求节奏' });
+  const actionsColumnLabel = t('farm.accountHealth.actionsColumn', { defaultValue: '操作' });
 
   return (
     <div className={styles.panel} data-testid="farm-accounts-panel">
@@ -189,15 +194,28 @@ export function FarmAccountsPanel({ containers: sharedContainers }: FarmAccounts
           <TableHeader>
             <TableRow>
               <TableHead>{t('farm.accounts.column_name')}</TableHead>
-              <TableHead>{accountHealthColumnLabel}</TableHead>
-              <TableHead>{containerHealthColumnLabel}</TableHead>
+              <TableHead>
+                {/* 用户①：维度图标 + 列头，明确区分「账号认证态」不是「容器运行态」
+                    的重复。图标为纯装饰（aria-hidden），列语义由可见文字承载。 */}
+                <span className={styles.columnHeadWithIcon}>
+                  <IconShield size={14} aria-hidden="true" />
+                  {accountHealthColumnLabel}
+                </span>
+              </TableHead>
+              <TableHead>
+                <span className={styles.columnHeadWithIcon}>
+                  <IconBot size={14} aria-hidden="true" />
+                  {containerHealthColumnLabel}
+                </span>
+              </TableHead>
+              <TableHead>{cadenceColumnLabel}</TableHead>
               <TableHead>
                 {t('farm.accountHealth.deviceIdSourceColumn', {
                   defaultValue: 'Device ID source',
                 })}
               </TableHead>
               <TableHead>{t('farm.accountHealth.lastRefresh')}</TableHead>
-              <TableHead>{t('farm.accountHealth.reauthUrl')}</TableHead>
+              <TableHead>{actionsColumnLabel}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -316,6 +334,28 @@ export function FarmAccountsPanel({ containers: sharedContainers }: FarmAccounts
               // TableCell 的 data-degraded-hint 属性单独标记，不覆盖主 testid。
               const containerHealthTestId = `farm-container-health-${account.name}`;
 
+              // ---------------------------------------------------------
+              // 用户B「请求节奏可见」：把探针保活节奏从容器详情抽屉最深处上浮
+              // 到账号面板每行。数据全部取自已 join 的容器视图
+              // （last_keepalive_at + next_keepalive_estimate，见 types/farm.ts），
+              // 不额外按容器逐个拉 probe-cadence——避免账号列表页每行一次网络
+              // 扇出；更精确的 per-interval 均值仍保留在容器详情抽屉
+              // （GET .../probe-cadence 的 next_expected_window）。这里的
+              // avg_observed_seconds_24h 是分桶近似均值，对面板摘要够用。
+              // scope 固定标注「探针保活到达」，与账号 CPA 累计用量口径分开
+              // （对齐 FarmProbeCadenceView.scope 注释），不把两个时钟混成一个数字。
+              // ---------------------------------------------------------
+              const cadenceEstimate = joinedContainer?.next_keepalive_estimate;
+              const lastKeepaliveAt = joinedContainer?.last_keepalive_at;
+              const cadenceAvgObservedSeconds = cadenceEstimate?.avg_observed_seconds_24h;
+              const successCount = account.success ?? 0;
+              const failedCount = account.failed ?? 0;
+              const recentRequestsCount = account.recent_requests ?? 0;
+              // 探针到达/请求成败只对已接入农场（有容器绑定）的账号有意义；未接入
+              // 账号没有农场探针，不在「探针保活到达」口径下展示成败，避免口径混淆。
+              const hasRequestOutcome =
+                successCount > 0 || failedCount > 0 || recentRequestsCount > 0;
+
               // 「已认证但未接入农场」按钮门控（design.md 决策5 / P0-10）：
               // farm_bound=false 即未接入；disabled 账号是 operator 主动
               // 关闭，不提供一键接入入口（避免把停用账号又拉回农场）。
@@ -368,32 +408,41 @@ export function FarmAccountsPanel({ containers: sharedContainers }: FarmAccounts
                         reason={authReasonLabel}
                         data-testid={`farm-account-health-pill-${account.name}`}
                       />
-                      {authReasonLabel ? (
-                        <span
-                          className={`status-badge error ${styles.reasonBadge}`}
-                          data-testid={`farm-account-auth-reason-${account.name}`}
+                      {/* 用户②：健康态单格默认只留 1 个 pill；仅异常（有 dead
+                          reason）或陈旧时才展开这 1 行 muted 副信息，健康且新鲜的
+                          行不再堆叠「截至<时间>」as-of 与陈旧噪声。 */}
+                      {authReasonLabel || authStale ? (
+                        <div
+                          className={styles.secondaryLine}
+                          data-testid={`farm-account-auth-secondary-${account.name}`}
                         >
-                          {authReasonLabel}
-                        </span>
-                      ) : null}
-                      <div className={styles.asOfRow} data-testid={`farm-account-auth-asof-${account.name}`}>
-                        <span className={styles.asOfLabel}>
-                          {t('farm.accountHealth.asOf', { defaultValue: '截至' })}
-                        </span>
-                        <span className={styles.mono}>
-                          {authAsOf
-                            ? formatDateTimeUtc8(authAsOf, i18n.language)
-                            : t('farm.accountHealth.neverObserved', { defaultValue: '从未采集' })}
-                        </span>
-                        {authStale ? (
+                          {authReasonLabel ? (
+                            <span
+                              className={`status-badge error ${styles.reasonBadge}`}
+                              data-testid={`farm-account-auth-reason-${account.name}`}
+                            >
+                              {authReasonLabel}
+                            </span>
+                          ) : null}
+                          {authStale ? (
+                            <span
+                              className={`status-badge warning ${styles.staleBadge}`}
+                              data-testid={`farm-account-auth-stale-${account.name}`}
+                            >
+                              {t('farm.accountHealth.staleBadge', { defaultValue: '陈旧' })}
+                            </span>
+                          ) : null}
                           <span
-                            className={`status-badge warning ${styles.staleBadge}`}
-                            data-testid={`farm-account-auth-stale-${account.name}`}
+                            className={styles.asOfInline}
+                            data-testid={`farm-account-auth-asof-${account.name}`}
                           >
-                            {t('farm.accountHealth.staleBadge', { defaultValue: '陈旧' })}
+                            {t('farm.accountHealth.asOf', { defaultValue: '截至' })}{' '}
+                            {authAsOf
+                              ? formatDateTimeUtc8(authAsOf, i18n.language)
+                              : t('farm.accountHealth.neverObserved', { defaultValue: '从未采集' })}
                           </span>
-                        ) : null}
-                      </div>
+                        </div>
+                      ) : null}
                     </div>
                   </TableCell>
                   <TableCell
@@ -402,64 +451,162 @@ export function FarmAccountsPanel({ containers: sharedContainers }: FarmAccounts
                     data-degraded-hint={showDegradedHint ? 'true' : undefined}
                   >
                     <div className={styles.planeCell}>
-                      <div className={styles.containerHealthCell}>
-                        <HealthPill
-                          status={containerHealthStatus}
-                          label={containerHealthLabel}
-                          dimension={containerHealthColumnLabel}
-                          reason={containerReasonLabel}
-                          data-testid={containerHealthTestId}
-                        />
-                        {canOnboard ? (
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            loading={isOnboarding}
-                            onClick={() => onboard(account.name, env)}
-                            className={styles.onboardButton}
-                            // 可见文案改用紧凑版（见下方 onboardActionShort），但无障碍名称与
-                            // 悬浮提示仍用完整语义文案，避免视觉紧凑化丢失屏幕阅读器/鼠标
-                            // 悬浮场景下的上下文（真实 6 列表 + 长邮箱账号名下本列可用宽度
-                            // 有限，见 .containerHealthCell 注释的几何推导）。
-                            aria-label={t('farm.accountHealth.onboardAction', { defaultValue: 'Onboard to farm' })}
-                            title={t('farm.accountHealth.onboardAction', { defaultValue: 'Onboard to farm' })}
-                            data-testid={`farm-account-onboard-${account.name}`}
-                          >
-                            {isOnboarding
-                              ? t('farm.accountHealth.onboarding', { defaultValue: 'Onboarding…' })
-                              : t('farm.accountHealth.onboardActionShort', { defaultValue: 'Onboard' })}
-                          </Button>
-                        ) : null}
-                      </div>
-                      {showContainerReasonBadge ? (
-                        <span
-                          className={`status-badge ${containerReasonBadgeVariant} ${styles.reasonBadge}`}
-                          data-testid={`farm-container-health-reason-${account.name}`}
+                      {/* 用户③：「接入农场」按钮已从本格移出并入末尾「操作」列，
+                          容器运行态格回归"只展示状态"，不再内嵌操作按钮。 */}
+                      <HealthPill
+                        status={containerHealthStatus}
+                        label={containerHealthLabel}
+                        dimension={containerHealthColumnLabel}
+                        reason={containerReasonLabel}
+                        data-testid={containerHealthTestId}
+                      />
+                      {/* 用户②：与账号认证态格一致——默认只留 1 个 pill，仅非 ok
+                          reason 或陈旧时才展开这 1 行 muted 副信息。 */}
+                      {showContainerReasonBadge || containerStale ? (
+                        <div
+                          className={styles.secondaryLine}
+                          data-testid={`farm-container-health-secondary-${account.name}`}
                         >
-                          {containerReasonLabel}
-                        </span>
-                      ) : null}
-                      <div
-                        className={styles.asOfRow}
-                        data-testid={`farm-container-health-asof-${account.name}`}
-                      >
-                        <span className={styles.asOfLabel}>
-                          {t('farm.accountHealth.asOf', { defaultValue: '截至' })}
-                        </span>
-                        <span className={styles.mono}>
-                          {containerAsOf
-                            ? formatDateTimeUtc8(containerAsOf, i18n.language)
-                            : '—'}
-                        </span>
-                        {containerStale ? (
+                          {showContainerReasonBadge ? (
+                            <span
+                              className={`status-badge ${containerReasonBadgeVariant} ${styles.reasonBadge}`}
+                              data-testid={`farm-container-health-reason-${account.name}`}
+                            >
+                              {containerReasonLabel}
+                            </span>
+                          ) : null}
+                          {containerStale ? (
+                            <span
+                              className={`status-badge warning ${styles.staleBadge}`}
+                              data-testid={`farm-container-health-stale-${account.name}`}
+                            >
+                              {t('farm.accountHealth.staleBadge', { defaultValue: '陈旧' })}
+                            </span>
+                          ) : null}
                           <span
-                            className={`status-badge warning ${styles.staleBadge}`}
-                            data-testid={`farm-container-health-stale-${account.name}`}
+                            className={styles.asOfInline}
+                            data-testid={`farm-container-health-asof-${account.name}`}
                           >
-                            {t('farm.accountHealth.staleBadge', { defaultValue: '陈旧' })}
+                            {t('farm.accountHealth.asOf', { defaultValue: '截至' })}{' '}
+                            {containerAsOf
+                              ? formatDateTimeUtc8(containerAsOf, i18n.language)
+                              : '—'}
                           </span>
-                        ) : null}
-                      </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  </TableCell>
+                  {/* 用户B「请求节奏可见」：把探针保活节奏上浮到账号每行，
+                      scope 标注「探针保活到达」，与账号 CPA 累计用量口径分开。 */}
+                  <TableCell
+                    data-testid={`farm-account-cadence-cell-${account.name}`}
+                    data-label={cadenceColumnLabel}
+                  >
+                    <div className={styles.cadenceCell}>
+                      <span className={styles.scopeBadge}>
+                        {t('farm.accountHealth.cadenceScopeBadge', {
+                          defaultValue: '口径：探针保活到达',
+                        })}
+                      </span>
+                      {account.farm_bound && joinedContainer ? (
+                        <>
+                          <div className={styles.cadenceRow}>
+                            <span className={styles.cadenceLabel}>
+                              {t('farm.accountHealth.cadenceLast', { defaultValue: '上次' })}
+                            </span>
+                            <span className={styles.mono}>
+                              {lastKeepaliveAt
+                                ? formatDateTimeUtc8(lastKeepaliveAt, i18n.language)
+                                : t('farm.containers.never')}
+                            </span>
+                          </div>
+                          {cadenceEstimate ? (
+                            <>
+                              <div className={styles.cadenceRow}>
+                                <span className={styles.cadenceLabel}>
+                                  {t('farm.accountHealth.cadenceAvgInterval', {
+                                    defaultValue: '平均间隔',
+                                  })}
+                                </span>
+                                <span className={styles.mono}>
+                                  {typeof cadenceAvgObservedSeconds === 'number'
+                                    ? formatDurationMs(cadenceAvgObservedSeconds * 1000, {
+                                        maxUnits: 1,
+                                      })
+                                    : '—'}
+                                </span>
+                              </div>
+                              <div className={styles.cadenceRow}>
+                                <span className={styles.cadenceLabel}>
+                                  {t('farm.accountHealth.cadenceNextWindow', {
+                                    defaultValue: '下次',
+                                  })}
+                                </span>
+                                {/* 数据缺口（本片不做）：per-容器真实生效间隔现都用
+                                    默认 600/1800/5400，min~max 是「默认配置区间」，
+                                    经 title 注明非每容器实际生效值。 */}
+                                <span
+                                  className={styles.mono}
+                                  title={t('farm.accountHealth.cadenceDefaultRangeNote', {
+                                    defaultValue:
+                                      '配置区间为默认值（600/1800/5400s），非每容器实际生效值',
+                                  })}
+                                >
+                                  {formatDurationMs(cadenceEstimate.min_seconds * 1000, {
+                                    maxUnits: 1,
+                                  })}{' '}
+                                  ~{' '}
+                                  {formatDurationMs(cadenceEstimate.max_seconds * 1000, {
+                                    maxUnits: 1,
+                                  })}
+                                </span>
+                                {/* 用户B 强制标注：keepalive 是指数分布随机，精确
+                                    唤醒时刻机制上不存在。 */}
+                                <span
+                                  className={styles.jitterBadge}
+                                  data-testid={`farm-account-cadence-jitter-${account.name}`}
+                                >
+                                  {t('farm.accountHealth.cadenceJitterBadge', {
+                                    defaultValue: '随机抖动·非精确',
+                                  })}
+                                </span>
+                              </div>
+                            </>
+                          ) : (
+                            <p className={styles.cadenceHint}>
+                              {t('farm.accountHealth.cadenceNoEstimate', {
+                                defaultValue: '该状态无下次探针',
+                              })}
+                            </p>
+                          )}
+                          {hasRequestOutcome ? (
+                            <div
+                              className={styles.cadenceOutcome}
+                              data-testid={`farm-account-cadence-outcome-${account.name}`}
+                            >
+                              <span className={styles.cadenceLabel}>
+                                {t('farm.accountHealth.cadenceOutcomeLabel', {
+                                  defaultValue: '近期请求',
+                                })}
+                              </span>
+                              <span className={styles.cadenceOutcomeSuccess}>
+                                {t('farm.accountHealth.cadenceSuccess', { defaultValue: '成功' })}{' '}
+                                {successCount}
+                              </span>
+                              <span className={styles.cadenceOutcomeFailed}>
+                                {t('farm.accountHealth.cadenceFailed', { defaultValue: '失败' })}{' '}
+                                {failedCount}
+                              </span>
+                            </div>
+                          ) : null}
+                        </>
+                      ) : (
+                        <span className={styles.cadenceMuted}>
+                          {t('farm.accountHealth.cadenceNotBound', {
+                            defaultValue: '未接入农场',
+                          })}
+                        </span>
+                      )}
                     </div>
                   </TableCell>
                   <TableCell
@@ -498,8 +645,30 @@ export function FarmAccountsPanel({ containers: sharedContainers }: FarmAccounts
                         : t('farm.containers.never')}
                     </span>
                   </TableCell>
-                  <TableCell data-label={t('farm.accountHealth.reauthUrl')}>
-                    {reauthNeeded ? (
+                  <TableCell data-label={actionsColumnLabel}>
+                    {/* 用户③：末列升级为「操作」列，承载 onboard + 重新授权两类
+                        动作，纵向堆叠；容器运行态格因此只剩状态展示。 */}
+                    <div className={styles.actionsCell}>
+                      {canOnboard ? (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          loading={isOnboarding}
+                          onClick={() => onboard(account.name, env)}
+                          className={styles.onboardButton}
+                          // 可见文案用紧凑版（onboardActionShort），但无障碍名称与悬浮
+                          // 提示仍用完整语义文案，避免视觉紧凑化丢失屏幕阅读器/鼠标
+                          // 悬浮上下文。
+                          aria-label={t('farm.accountHealth.onboardAction', { defaultValue: 'Onboard to farm' })}
+                          title={t('farm.accountHealth.onboardAction', { defaultValue: 'Onboard to farm' })}
+                          data-testid={`farm-account-onboard-${account.name}`}
+                        >
+                          {isOnboarding
+                            ? t('farm.accountHealth.onboarding', { defaultValue: 'Onboarding…' })
+                            : t('farm.accountHealth.onboardActionShort', { defaultValue: 'Onboard' })}
+                        </Button>
+                      ) : null}
+                      {reauthNeeded ? (
                       <div className={styles.reauthCell}>
                         {/* 隔离态引导重新认证（T3）：紧邻 badge 上方提示"已被自动隔离，
                             请重新认证"，帮助 operator 一眼理解为何这个账号出现在需要
@@ -551,9 +720,11 @@ export function FarmAccountsPanel({ containers: sharedContainers }: FarmAccounts
                             'This account was auto-quarantined, but no re-authentication entry is available.',
                         })}
                       </span>
-                    ) : (
-                      <span className={styles.mono}>—</span>
-                    )}
+                      ) : !canOnboard ? (
+                        // 三类动作都不适用时才占位 —；canOnboard 时按钮已渲染，不再补 —。
+                        <span className={styles.mono}>—</span>
+                      ) : null}
+                    </div>
                   </TableCell>
                 </TableRow>
               );

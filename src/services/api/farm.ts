@@ -34,6 +34,8 @@ import type {
   FarmAccountStateListResponse,
   FarmAlertsResponse,
   FarmBindingResponse,
+  FarmCapacityResponse,
+  FarmContainerBeaconsResponse,
   FarmContainerDetailView,
   FarmContainerEventsResponse,
   FarmContainerView,
@@ -72,6 +74,12 @@ export interface FarmAlertsQuery {
 // "24h"/"7d" 语法，默认 24h、上限 30d；limit 默认 200、上限 1000）。
 export interface FarmProbeCadenceQuery {
   window?: string;
+  limit?: number;
+}
+
+// GET .../beacons 查询参数（用户⑤「每容器遥测内容抓取」，telemetry_beacon.go
+// handleListContainerBeacons：limit 默认 50、上限 500，非法 limit 返回 400）。
+export interface FarmContainerBeaconsQuery {
   limit?: number;
 }
 
@@ -140,6 +148,14 @@ export const farmApi = {
   // 容器 + 整机资源快照（mem/cpu），host.note 固定携带"整机含非农场进程"口径。
   getResources: () => farmClient.get<FarmResourceResponse>('/api/farm/resources'),
 
+  // 容量就绪度 + 「认证即自动供」状态（用户③「容量正名」独立只读端点，
+  // handlers.go handleGetCapacity）：容量摘要扁平字段（active_containers/
+  // max_active_containers、mem_available_bytes vs mem_available_threshold_bytes、
+  // host_metrics_available、has_headroom）+ 顶层 auto_provision_enabled 灰度
+  // 开关 + per-account provisioning 列表。auth-gated，与其它 /api/farm/* 同鉴权；
+  // 自动供给关闭时 provisioning 恒为空数组（非 null），前端可直接判空。
+  getCapacity: () => farmClient.get<FarmCapacityResponse>('/api/farm/capacity'),
+
   // ---------------------------------------------------------------------
   // P0-9：概览 + 下钻 + 告警消费的只读监测 API（P0-4 已交付，P0-5 见下方注释）
   // ---------------------------------------------------------------------
@@ -192,6 +208,18 @@ export const farmApi = {
   getContainerProbeCadence: (containerId: string, query?: FarmProbeCadenceQuery) =>
     farmClient.get<FarmProbeCadenceView>(
       `/api/farm/containers/${encodeURIComponent(containerId)}/probe-cadence`,
+      { params: query }
+    ),
+
+  // 每容器遥测内容 beacon（用户⑤，telemetry_beacon.go）：返回值是**裸 JSON
+  // 数组**（captured_at 降序），不是包裹对象——调用方直接拿到
+  // FarmContainerBeaconView[]。空容器返回 []（非 null）；未知容器 404；非法
+  // limit 400，均走 farmClient 既有错误处理由调用方就地呈现。诚实边界见
+  // types/farm.ts FarmContainerBeaconView 顶部注释：这些是「自报/声明」值，
+  // 只证明上报管道连通，不构成反关联 on-wire 证明。
+  getContainerBeacons: (containerId: string, query?: FarmContainerBeaconsQuery) =>
+    farmClient.get<FarmContainerBeaconsResponse>(
+      `/api/farm/containers/${encodeURIComponent(containerId)}/beacons`,
       { params: query }
     ),
 };

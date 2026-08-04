@@ -11,6 +11,7 @@ import { formatFileSize } from '@/utils/format';
 import { formatDurationMs } from '@/utils/usage/latency';
 import { formatUsd } from '@/utils/usage';
 import { useFarmContainerDetail } from '../hooks/useFarmContainerDetail';
+import { FarmTelemetryPanel } from './FarmTelemetryPanel';
 import {
   deviceAlignmentToBadgeVariant,
   healthReasonToFarmHealthVariant,
@@ -517,6 +518,12 @@ export function FarmContainerDetail({ container, onClose, onBack }: FarmContaine
                     })}
                   </p>
                 </section>
+
+                {/* 用户⑤：每容器遥测内容（自报 beacon）——declared vs on-wire
+                    自洽卡（on-wire 待抓取灰置）+ 时间线 + 通道分布 + 新鲜度。
+                    紧邻 device_id 对齐卡，两者共同回答「这台容器对外声称的身份
+                    是否自洽」。detail 继承 FarmContainerView，非空分支内直接传。 */}
+                <FarmTelemetryPanel container={detail} />
 
                 {/* 探针 token 趋势 */}
                 <section className={styles.section} data-testid="farm-detail-probe-tokens">
