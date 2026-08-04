@@ -34,6 +34,7 @@ import type {
   FarmAccountStateListResponse,
   FarmAlertsResponse,
   FarmBindingResponse,
+  FarmCapacityResponse,
   FarmContainerBeaconsResponse,
   FarmContainerDetailView,
   FarmContainerEventsResponse,
@@ -146,6 +147,14 @@ export const farmApi = {
 
   // 容器 + 整机资源快照（mem/cpu），host.note 固定携带"整机含非农场进程"口径。
   getResources: () => farmClient.get<FarmResourceResponse>('/api/farm/resources'),
+
+  // 容量就绪度 + 「认证即自动供」状态（用户③「容量正名」独立只读端点，
+  // handlers.go handleGetCapacity）：容量摘要扁平字段（active_containers/
+  // max_active_containers、mem_available_bytes vs mem_available_threshold_bytes、
+  // host_metrics_available、has_headroom）+ 顶层 auto_provision_enabled 灰度
+  // 开关 + per-account provisioning 列表。auth-gated，与其它 /api/farm/* 同鉴权；
+  // 自动供给关闭时 provisioning 恒为空数组（非 null），前端可直接判空。
+  getCapacity: () => farmClient.get<FarmCapacityResponse>('/api/farm/capacity'),
 
   // ---------------------------------------------------------------------
   // P0-9：概览 + 下钻 + 告警消费的只读监测 API（P0-4 已交付，P0-5 见下方注释）

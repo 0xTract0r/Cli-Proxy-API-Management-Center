@@ -3,15 +3,13 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { Input } from '@/components/ui/Input';
 import {
   IconBot,
   IconChartLine,
   IconModelCluster,
   IconSettings,
 } from '@/components/ui/icons';
-import { farmApi } from '@/services/api/farm';
-import { useFarmStore, useNotificationStore } from '@/stores';
+import { useFarmStore } from '@/stores';
 import type { FarmContainerView } from '@/types/farm';
 import { useFarmBindings } from '../hooks/useFarmBindings';
 import { useFarmContainers } from '../hooks/useFarmContainers';
@@ -19,6 +17,7 @@ import { useFarmRetire } from '../hooks/useFarmRetire';
 import { FarmAccountsPanel } from './FarmAccountsPanel';
 import { FarmAlertsPanel } from './FarmAlertsPanel';
 import { FarmBindModal } from './FarmBindModal';
+import { FarmCapacityPanel } from './FarmCapacityPanel';
 import { FarmConfigPanel } from './FarmConfigPanel';
 import { FarmContainerDetail } from './FarmContainerDetail';
 import {
@@ -40,7 +39,6 @@ const DRAWER_TRANSITION_MS = 370;
  */
 export function FarmDashboard() {
   const { t } = useTranslation();
-  const { showNotification } = useNotificationStore();
   const isConfigured = useFarmStore((state) => state.isConfigured);
   const { containers, setContainers, loading, error, reload } = useFarmContainers();
   const { bindingPending, unbindingContainerId, bind, unbind } = useFarmBindings({
@@ -56,8 +54,6 @@ export function FarmDashboard() {
   const [lastContainerId, setLastContainerId] = useState<string | null>(null);
   const [bindModalOpen, setBindModalOpen] = useState(false);
   const [preselectedContainerId, setPreselectedContainerId] = useState<string | null>(null);
-  const [newContainerSuffix, setNewContainerSuffix] = useState('');
-  const [creatingContainer, setCreatingContainer] = useState(false);
   const [focusRestoreTarget, setFocusRestoreTarget] = useState<'container-row' | 'containers-trigger' | null>(
     null
   );
@@ -199,23 +195,6 @@ export function FarmDashboard() {
     }, DRAWER_TRANSITION_MS);
   }, [clearTransitionTimer]);
 
-  const handleCreateContainer = useCallback(async () => {
-    const id = newContainerSuffix.trim();
-    if (!id) return;
-    setCreatingContainer(true);
-    try {
-      await farmApi.createContainer({ id });
-      setNewContainerSuffix('');
-      showNotification(t('farm.containers.create_success', { id }), 'success');
-      await reload();
-    } catch (caught: unknown) {
-      const message = caught instanceof Error ? caught.message : t('farm.error.create_failed');
-      showNotification(`${t('farm.error.create_failed')}: ${message}`, 'error');
-    } finally {
-      setCreatingContainer(false);
-    }
-  }, [newContainerSuffix, reload, showNotification, t]);
-
   return (
     <div className={styles.dashboard} data-testid="farm-page">
       <section className={styles.connectionBar} aria-label={t('farm.ia.connectionStatus')}>
@@ -263,6 +242,10 @@ export function FarmDashboard() {
               <FarmAlertsPanel mode="summary" onViewAll={() => openDrawer('alerts')} />
             )}
           </div>
+
+          {/* 容量就绪度 + 「认证即自动供」状态（用户 2026-08-04 决策：容器供给改为
+              全自动「认证即自动供」，裸「新建容器」入口移除，统一走「接入农场」）。 */}
+          <FarmCapacityPanel />
 
           <section aria-labelledby="farm-operations-title">
             <div className={styles.sectionHeading}>
@@ -350,28 +333,7 @@ export function FarmDashboard() {
       >
         <div data-testid="farm-containers-drawer">
           {activeDrawer === 'containers' ? (
-            <Card
-              extra={
-                <div className={styles.createContainerBar}>
-                  <Input
-                    value={newContainerSuffix}
-                    onChange={(event) => setNewContainerSuffix(event.target.value)}
-                    placeholder={t('farm.containers.create_placeholder')}
-                    data-testid="farm-create-container-input"
-                  />
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={handleCreateContainer}
-                    loading={creatingContainer}
-                    disabled={!newContainerSuffix.trim()}
-                    data-testid="farm-create-container-button"
-                  >
-                    {t('farm.containers.create_button')}
-                  </Button>
-                </div>
-              }
-            >
+            <Card>
               <p className={styles.drawerDescription}>{t('farm.containers.desc')}</p>
               <FarmContainerTable
                 containers={containers}

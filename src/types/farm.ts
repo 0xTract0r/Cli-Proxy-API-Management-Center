@@ -319,6 +319,66 @@ export interface FarmErrorResponse {
 }
 
 // ---------------------------------------------------------------------------
+// GET /api/farm/capacity（用户③「容量正名」独立只读端点 + 「认证即自动供」扩展）。
+// 字段名照抄 services/farm-orchestrator/internal/httpapi/handlers.go 的
+// capacitySummaryView / capacityResponse / accountProvisioningView：容量摘要经
+// 内嵌 capacitySummaryView 扁平化提升为顶层字段（不破坏既有消费方），再叠加
+// 「认证即自动供」的顶层灰度开关与 per-account 供给状态列表。
+// ---------------------------------------------------------------------------
+
+// 自动供给 pending 原因机器码（provisioning[].pending_reason 取值，机器可读，
+// 供前端按精确匹配分支，不解析中文文案）：
+//   - no_proxy：候选账号未配置可用住宅代理，fail-closed 不建容器（防真实 IP
+//     泄露）；proxy 就绪后下一轮自动接入。
+//   - capacity_exhausted：proxy 就绪，但 checkStartCapacity 两条护栏（活跃容器
+//     数上限 / 宿主内存水位）当前不满足，暂缓供给；容量释放后下一轮自动接入。
+// null（无 pending）由 pending_reason 字段的 JSON null 表达（后端刻意用 *string，
+// 让「无 pending」序列化成 null 而非省略字段，前端无需区分「字段缺失」与「明确
+// 无 pending」）。
+export const FARM_PROVISION_PENDING_REASONS = ['no_proxy', 'capacity_exhausted'] as const;
+export type FarmProvisionPendingReason = (typeof FARM_PROVISION_PENDING_REASONS)[number];
+
+// GET /api/farm/capacity 里单个账号的自动供给状态（handlers.go
+// accountProvisioningView）。
+export interface FarmAccountProvisioningView {
+  // 与 FarmAccountEntry.name（auth 文件名）同源（后端 accountIDForProvision
+  // 优先取 e.Name），前端据此把供给状态 join 回账号列表。
+  account_id: string;
+  env: string; // "test" | "prod"
+  // 是自动供给候选（已认证 claude、未 farm-bound、未 disabled/auto_quarantined）。
+  eligible: boolean;
+  // 候选账号本轮未能供给的原因；null=无 pending（已成功接入 / 已绑 / 不合格 /
+  // 退避中）。
+  pending_reason: FarmProvisionPendingReason | null;
+  // 本编排器进程运行期间曾由自动供给成功接入过。
+  auto_provisioned: boolean;
+}
+
+// GET /api/farm/capacity 响应体（handlers.go capacityResponse）。
+export interface FarmCapacityResponse {
+  // 当前 docker 层真正在跑（starting/running/degraded）的容器数；注册表读取
+  // 失败时为 0（诚实空态，不伪造）。
+  active_containers: number;
+  // 活跃容器数上限（0 = 不限）。
+  max_active_containers: number;
+  // 宿主当前可用内存与生效阈值（字节）。host_metrics_available=false 时这两个
+  // 字段不可信（宿主指标读取失败或 hostReader 未装配），前端不得当真实数值展示。
+  mem_available_bytes: number;
+  mem_available_threshold_bytes: number;
+  // 本次是否真的拿到宿主内存快照（诚实边界，false 时上面两个内存字段无意义）。
+  host_metrics_available: boolean;
+  // 是否有余量：true 表示下一次真正起容器大概率通过两条护栏（非强保证，只是
+  // 查询那一刻的快照）。
+  has_headroom: boolean;
+  // 反映 FARM_AUTO_PROVISION_ENABLED 灰度开关（默认 false）。关闭时 provisioning
+  // 恒为空数组。
+  auto_provision_enabled: boolean;
+  // 每个 claude-managed 账号最近一轮自动供给判定；开关关闭或尚未跑过一轮
+  // reconcile 时为空数组（后端显式回 [] 而非 null，前端可直接判空）。
+  provisioning: FarmAccountProvisioningView[];
+}
+
+// ---------------------------------------------------------------------------
 // P0-9 前端·概览 + 下钻 + 告警（design.md 决策6，字段名照抄
 // services/farm-orchestrator/internal/httpapi/dto.go 的 P0-4 只读监测 API 段）
 // ---------------------------------------------------------------------------
